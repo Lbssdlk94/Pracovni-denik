@@ -1,0 +1,1 @@
+ALTER TABLE `customers` ADD `irrigation_origin` text DEFAULT 'unknown' NOT NULL;

@@ -1,0 +1,17 @@
+# Mapa zakázek a vytížení
+
+V Zakázkách zvolte **Mapa**, případně den výjezdu a filtry stavu, druhu a kolegy. Bez vybraného dne se používají všechny dny. Tlačítko **Dohledat chybějící polohy** převede uložené adresy zakázek na špendlíky. Používá se adresa realizace a město přímo z existující zakázky; zákaznické kontakty ani GPS telefonu se geokodéru neposílají. Podklad poskytuje OpenStreetMap, adresy dohledává Photon. Mapa vyžaduje internet. Průběžná synchronizace při dohledávání a potvrzování bodů nepřerušuje hledání; změny seznamu se překreslí po dokončení a zpráva o výsledku zůstane zobrazená.
+
+Pokud je výsledek nejednoznačný nebo příliš obecný, aplikace zobrazí všechny nalezené body oranžově s otazníkem. Klepnutím na bod otevřete adresu a **Potvrdit toto místo**; případně vyberte adresu v seznamu a zvolte **Uložit místo**. Do porovnání vzdáleností se až do potvrzení nepoužije nejistá poloha. Pokud má více zakázek shodné souřadnice, špendlík ukazuje jejich počet se znakem × a v bublině jsou všechny zakázky. Již určená adresa je ve výběru předvolená. Mapu, výsledky hledání a uložené polohy vidí a mění pouze vlastník a správce. Pracovník ani čtenář tuto záložku nemají a mapové API jim vrací 403. Při nenalezené adrese upřesněte adresu v zakázce. Při výpadku poskytovatele lze hledání opakovat. Hledání lze také zastavit. Prázdné výsledky se uchovávají 24 hodin, nalezené výsledky a potvrzená místa zůstávají uložená. Změna adresy/města automaticky zneplatní starou polohu.
+
+Vyberte dvě zakázky v polích **Odkud / Kam** nebo klepněte na dva špendlíky. Aplikace zakreslí spojnici a vzdálenost **vzdušnou čarou**. Nejde o kilometry ani čas jízdy po silnici. **Navigovat** otevře Apple Mapy nebo Google Mapy pro navigaci k vybrané zakázce.
+
+V Nastavení funkcí týmu lze **Mapu zakázek** vypnout nezávisle na mapě šachet. Vyžaduje zapnuté Zakázky a GPS a polohu. Polohy jsou součástí serverem autorizovaných dat zakázky: správce a vlastník vidí vše, pracovník/čtenář nedostávají mapová data ani u přidělených zakázek. Seznam ani mapa se nezobrazují offline. Migrace `0031_equal_sharon_carter.sql` přidává samostatnou tabulku `job_geocodes`, klíčovanou ID zakázky. Potvrzení polohy používá vlastní verzi a serverovou kontrolu přiřazení, aby nešlo přepsat souběžnou změnu nebo zobrazit cizí zakázku.
+
+Vytížení kolegů na počítači nyní zahrnuje i dokončené zakázky. Při otevření se výchozí filtr změní z Aktuální zakázky na Všechny stavy; výslovné filtry Hotovo/Naplánováno atd. zůstávají k dispozici. Každý den ukazuje počet dokončených návštěv. Hodiny jsou součtem uložených intervalů od–do, nikoliv skutečnou docházkou. Bez úplného času se návštěva započítá jako návštěva bez času, nikoliv jako odhadnuté hodiny. Nepotvrzené servisní návrhy se stále nepočítají. Společná zakázka se počítá každému přiřazenému kolegovi.
+
+## Ověření
+
+- `npm run check`, `npm test`, `npm run build`, `npm run test:subscriptions-worker`.
+- `QA_JOB_MAP=1 QA_EMAIL_SETTINGS=1 python /tmp/zavlahy-browser-regression.py job-map-browser.cjs` v místním testovacím prostředí; stejné s `QA_BROWSER=webkit` a nainstalovaným WebKitem.
+- Mapový browser test používá syntetické adresy, deterministický lokální Photon a náhradní mapové dlaždice. Ověřuje skutečné backendové požadavky, migrace, uložené volby po reloadu a zákaz přístupu z účtu pracovníka, dvě polohy a výpočet vzdálenosti, denní filtry, chyby poskytovatele, offline skrytí a dokončené páteční zakázky ve vytížení. Produkční Photon/OSM vyžaduje dostupnost externích služeb; nejsou součástí offline cache.

@@ -1,0 +1,23 @@
+node_modules/
+.qa/
+.build/
+.env
+.env.*
+!.env.example
+.dev.vars
+*.tar.gz
+
+apps/work-diary/dist/
+
+# Local dependencies, compiled output, runtime state and deployment identities
+node_modules/
+dist/
+.wrangler/
+**/.dev.vars*
+**/.openai/installation.json
+*.sqlite
+*.sqlite3
+*.db
+backups/
+uploads/
+.github-export-local.json

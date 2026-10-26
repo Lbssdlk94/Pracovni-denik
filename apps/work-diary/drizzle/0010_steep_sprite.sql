@@ -1,0 +1,1 @@
+ALTER TABLE `gardens` ADD `blowout` text DEFAULT '[]' NOT NULL;

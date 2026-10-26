@@ -1,0 +1,7 @@
+export const PROTOCOL_LABELS={ready:'Protokol hotový',draft:'Protokol rozpracovaný',missing:'Protokol chybí'};
+export const INCOMPLETE_REASONS=['Chyběl materiál','Zákazník nebyl přítomen','Závadu nelze opravit při této návštěvě','Nutná další návštěva','Nepříznivé podmínky'];
+export const jobWorkRank=status=>status==='in_progress'?0:status==='incomplete'?2:status==='done'?3:1;
+export function compareWorkJobs(a,b){return jobWorkRank(a.status)-jobWorkRank(b.status)||(a.dueDate||'9999-99-99').localeCompare(b.dueDate||'9999-99-99')||(a.plannedStart||a.startTime||'24:00').localeCompare(b.plannedStart||b.startTime||'24:00')||a.id.localeCompare(b.id);}
+export function hasProtocolContent(report){return !!report&&(['work','material','defects','notes','recommendations'].some(k=>String(report[k]||'').trim())||(report.photoIds||[]).length>0||(report.materialItems||[]).length>0);}
+export const protocolStatus=report=>!hasProtocolContent(report)?'missing':report.documentState==='ready'?'ready':'draft';
+export const protocolBadge=(job,esc)=>job.status==='done'?`<span class="protocol-badge protocol-${esc(job.protocolStatus||'missing')}" data-protocol-state="${esc(job.protocolStatus||'missing')}" title="${esc(PROTOCOL_LABELS[job.protocolStatus]||PROTOCOL_LABELS.missing)}"><span class="protocol-symbol" aria-hidden="true">${job.protocolStatus==='ready'?'✓':job.protocolStatus==='draft'?'…':'!'}</span><span class="protocol-text">${esc(PROTOCOL_LABELS[job.protocolStatus]||PROTOCOL_LABELS.missing)}</span></span>`:'';

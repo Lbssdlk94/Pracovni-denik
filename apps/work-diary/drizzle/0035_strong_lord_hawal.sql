@@ -1,0 +1,1 @@
+ALTER TABLE `jobs` ADD `legacy_time_meaning` text DEFAULT 'unknown' NOT NULL;

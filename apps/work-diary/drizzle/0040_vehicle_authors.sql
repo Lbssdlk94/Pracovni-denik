@@ -1,0 +1,1 @@
+ALTER TABLE `vehicle_entries` ADD `created_by_name` text DEFAULT '' NOT NULL;

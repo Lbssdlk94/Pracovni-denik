@@ -1,0 +1,3 @@
+export const jobRankSql="CASE WHEN j.status='in_progress' THEN 0 WHEN j.status='incomplete' THEN 2 WHEN j.status='done' THEN 3 ELSE 1 END";
+export const protocolStateSql="CASE WHEN pr.job_id IS NULL OR (trim(pr.work||pr.material||pr.defects||pr.notes||pr.recommendations)='' AND pr.photo_ids='[]' AND pr.material_items='[]') THEN 'missing' WHEN pr.document_state='ready' THEN 'ready' ELSE 'draft' END";
+export async function jobAttempts(env,id){return (await env.DB.prepare('SELECT id,job_id AS jobId,garden_id AS gardenId,reason,ended_at AS endedAt,actor_id AS actorId,actor_name AS actorName,snapshot FROM job_attempts WHERE job_id=? ORDER BY ended_at DESC,id DESC').bind(id).all()).results.map(a=>({...a,snapshot:JSON.parse(a.snapshot)}));}

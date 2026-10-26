@@ -1,0 +1,36 @@
+import {interfaceIcon as icon} from './interface-icons.js?v=approved-b-v2';
+import {navigationIcon} from './navigation-icons.js?v=workspace-controls-v1';
+import {pragueToday,jobDayLabel,jobTimeLabel,scheduledJobTitle} from './job-schedule.js?v=workspace-roles-v1';
+import {shortJobAddress} from './job-mobile-model.js?v=workspace-roles-v1';
+import {compareWorkJobs} from './job-workflow-model.js?v=workspace-roles-v1';
+
+export function overviewVisits(jobs){return jobs.filter(j=>!['done','incomplete'].includes(j.status)).slice().sort(compareWorkJobs);}
+export function createOverviewUI({db,esc,getSession,enabled,getGardenCount,onToday,onProtocols,onJob,toast}){
+ let rows=null,nearest=null,partial=false,error='',loading=false,epoch=0,actor='',flight=null;
+ const key=()=>getSession()?.user.id+'|'+getSession()?.user.role;
+ const online=()=>navigator.onLine;
+ function clear(){epoch++;rows=null;nearest=null;partial=false;error='';loading=false;actor='';flight=null;}
+ function tile(title,sub,art,attrs,first=false){return `<button type="button" class="overview-link ${first?'overview-link-first':''}" ${attrs}><span class="overview-tile-icon">${art}</span><span><strong>${esc(title)}</strong><small>${esc(sub)}</small></span>${icon('chevron')}</button>`;}
+ function markup(){
+  if(actor&&actor!==key())clear();
+  const active=overviewVisits(rows||[]),done=(rows||[]).filter(j=>j.status==='done').length,today=pragueToday(),next=active[0]||nearest;
+  const count=rows?`${active.length}${partial?'+':''} ${active.length>=1&&active.length<=4?'aktivní':'aktivních'} · ${done}${partial?'+':''} ${done===1?'dokončená':done>=2&&done<=4?'dokončené':'dokončených'}`:'Dnešní plán podle času';
+  return `<section id="overview" aria-label="Pracovní přehled"><div class="overview-brand"><img src="./work-diary-mark.svg?v=green-icon-v1" alt="" width="62" height="62"><div><h1>Pracovní deník</h1><p>Vše pro dnešní práci.</p></div></div>${enabled('attendance')&&!getSession()?.attendance?.active?`<div class="overview-attendance"><span>Začínáte pracovní den?</span><button type="button" class="btn soft" data-page="attendance">Zaznamenat příchod</button></div>`:''}<div class="overview-links">${enabled('jobs')?tile('Dnešní návštěvy',online()?count:'Plán návštěv vyžaduje připojení',icon('calendar'),'data-overview-today',true)+tile('Zakázky','Přehled a plánování práce',navigationIcon('jobs'),'data-page="jobs"'):''}${enabled('customers')?tile('Zákazníci','Kontakty a jejich zahrady',navigationIcon('customers'),'data-page="customers"'):''}${enabled('jobs')?tile('Servisní protokoly','Protokoly a servisní historie',icon('record'),'data-overview-protocols'):''}</div>${enabled('jobs')?`<div class="overview-next-heading"><h2>${active.length?'Další návštěva':'Nejbližší návštěva'}</h2><button type="button" class="text-link" data-overview-today>Zobrazit vše</button></div><div id="overview-visits" aria-live="polite">${!online()?'<p class="mini-empty">Jste offline. Zahrady a uložené pracovní zápisy zůstávají dostupné; aktuální plán návštěv načtete po připojení.</p>':error?'<p class="mini-empty" role="alert">'+esc(error)+'</p><button type="button" class="btn small" data-overview-retry>Zkusit znovu</button>':loading&&!rows?'<p class="mini-empty" role="status">Načítám dnešní návštěvy…</p>':next?`<button type="button" class="overview-visit" data-overview-job="${esc(next.id)}"><span class="overview-visit-time">${esc(next.plannedStart||next.startTime||'—')}</span><span class="overview-visit-line"></span><span class="overview-visit-content"><strong>${esc(next.customerName||next.customerContact?.name||next.title)}</strong><span>${esc([next.gardenName,shortJobAddress(next.address||'')].filter(Boolean).join(' · '))}</span><small>${esc(scheduledJobTitle(next))}${next.dueDate!==today?' · '+esc(jobDayLabel(next.dueDate)):''}</small></span>${icon('chevron')}</button>${!active.length&&rows?'<p class="mini-empty">Na dnešek nemáte další aktivní návštěvu.</p>':''}`:rows?'<p class="mini-empty">Na dnešek ani další dny zatím není naplánovaná aktivní návštěva.</p>':''}</div>`:''}<div class="overview-more-links">${enabled('gardens')?tile(getSession()?.license?.labels?.sites||'Zahrady',`${getGardenCount()} uložených míst`,navigationIcon('home'),'data-page="home"'):''}${enabled('vehicles')?tile('Vozidla','Vybrané auto a tankování',navigationIcon('vehicles'),'data-page="vehicles"'):''}</div><p class="overview-date">${esc(jobDayLabel(today))}</p></section>`;
+ }
+ function paint(){const root=document.querySelector('#overview');if(!root)return;const holder=document.createElement('div');holder.innerHTML=markup();root.replaceWith(holder.firstElementChild);bind(false);}
+ async function refresh(){
+  if(flight)return flight;if(!enabled('jobs')||!online()){rows=null;nearest=null;paint();return;}
+  actor=key();const who=actor,ticket=epoch,day=pragueToday();loading=true;error='';paint();
+  const task=(async()=>{try{
+   const params=new URLSearchParams({state:'all',order:'schedule',month:day.slice(0,7),day});const all=[];let cursor=null;
+   do{if(cursor)params.set('cursor',cursor);const result=await db.request('/api/jobs?'+params);if(ticket!==epoch||who!==key())return;all.push(...result.jobs.filter(j=>!all.some(a=>a.id===j.id)));cursor=result.nextCursor;}while(cursor&&all.length<500);
+   let next=null;if(!overviewVisits(all).length){const result=await db.request('/api/jobs?'+new URLSearchParams({state:'active',order:'schedule',after:day}));if(ticket!==epoch||who!==key())return;next=overviewVisits(result.jobs)[0]||null;}
+   if(ticket!==epoch||who!==key())return;rows=all;partial=!!cursor;nearest=next;
+  }catch(e){if(ticket!==epoch||who!==key())return;rows=null;nearest=null;error=e.message||'Přehled se nepodařilo načíst.';}
+  finally{if(ticket===epoch&&who===key()){loading=false;paint();}}})();flight=task;try{await task;}finally{if(flight===task)flight=null;}
+ }
+ function bind(load=true){const root=document.querySelector('#overview');if(!root)return;for(const b of root.querySelectorAll('[data-overview-today]'))b.onclick=()=>onToday();root.querySelector('[data-overview-protocols]')?.addEventListener('click',onProtocols);root.querySelector('[data-overview-job]')?.addEventListener('click',e=>onJob(e.currentTarget.dataset.overviewJob).catch(err=>toast(err.message,true)));root.querySelector('[data-overview-retry]')?.addEventListener('click',refresh);if(load)refresh();}
+ window.addEventListener('offline',()=>{epoch++;rows=null;nearest=null;loading=false;flight=null;paint();});window.addEventListener('online',()=>{if(document.querySelector('#overview'))refresh();});
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible'){epoch++;rows=null;nearest=null;flight=null;loading=false;paint();}else if(document.querySelector('#overview'))refresh();});
+ return {markup,bind,clear,refresh};
+}

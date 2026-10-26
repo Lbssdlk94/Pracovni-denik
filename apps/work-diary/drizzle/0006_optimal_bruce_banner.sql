@@ -1,0 +1,1 @@
+ALTER TABLE `gardens` ADD `plan_markers` text DEFAULT '[]' NOT NULL;

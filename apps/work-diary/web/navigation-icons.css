@@ -1,0 +1,6 @@
+/* User-supplied navigation palette; keep action icons and app colors scoped out. */
+.sidebar .nav button{color:#687769;min-width:44px;min-height:44px}
+.sidebar .nav button.active{color:#263e34;background:#e9eee5}
+.sidebar .nav button:hover:not(.active){color:#687769}
+svg.nav-icon{width:24px;height:24px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;overflow:visible}
+@media(max-width:760px){.sidebar .nav svg.nav-icon{width:26px;height:26px}.sidebar .nav>button{min-height:50px}.sidebar .nav .nav-overflow>button{min-height:48px}}

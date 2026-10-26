@@ -1,0 +1,4 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {jobWeekDays} from '../web/job-week-ui.js';import {sortJobTable} from '../web/job-table-ui.js';
+test('Week is Monday-based across month/year and leap-day boundaries',()=>{assert.deepEqual(jobWeekDays('2026-11-01'),['2026-10-26','2026-10-27','2026-10-28','2026-10-29','2026-10-30','2026-10-31','2026-11-01']);assert.equal(jobWeekDays('2027-01-01')[0],'2026-12-28');assert.equal(jobWeekDays('2024-02-29')[3],'2024-02-29');});
+test('Table sorting keeps missing dates last in both directions and leaves source intact',()=>{const jobs=[{id:'none'},{id:'b',dueDate:'2026-11-01'},{id:'a',dueDate:'2026-10-31'}];assert.deepEqual(sortJobTable(jobs).map(j=>j.id),['a','b','none']);assert.deepEqual(sortJobTable(jobs,'date',-1).map(j=>j.id),['b','a','none']);assert.equal(jobs[0].id,'none');});

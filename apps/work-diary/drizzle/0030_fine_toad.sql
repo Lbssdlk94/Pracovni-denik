@@ -1,0 +1,1 @@
+ALTER TABLE `material_items` ADD `deleted` integer DEFAULT 0 NOT NULL;

@@ -1,0 +1,17 @@
+import {workInterval,planMinute} from './planning-model.js?v=workspace-roles-v1';
+export function moveTimelineDay(day,offset){
+ const value=new Date(day+'T12:00:00Z');if(!Number.isFinite(value.getTime()))return day;value.setUTCDate(value.getUTCDate()+offset);const year=value.getUTCFullYear();return year<1000||year>9999?day:value.toISOString().slice(0,10);
+}
+export function timelineMinute(value){if(typeof value!=='string'||!/^([01]\d|2[0-3]):[0-5]\d$/.test(value))return null;return Number(value.slice(0,2))*60+Number(value.slice(3));}
+// One row per visible assignee. Shared jobs appear in each assigned row;
+// overlapping visits use separate tracks and never cover each other.
+export function buildJobTimeline(jobs,people=[],user=null,{includeEmpty=false,fullDay=false}={}){
+ const unique=[...new Map(jobs.map(j=>[j.id,j])).values()].filter(j=>!user||j.assignedTo===user.id||(j.assignedTos||[]).includes(user.id)),timed=[],untimed=[],names=new Map(people.map(p=>[p.id,p.name]));if(user)names.set(user.id,user.name||user.email);
+ for(const job of unique){const work=workInterval(job),planned=planMinute(job.plannedStart),legacyStart=planMinute(job.startTime),legacyEnd=planMinute(job.endTime),legacy=planned===null&&!work&&legacyStart!==null&&legacyEnd!==null&&legacyEnd>legacyStart,start=work?.start??planned??(legacy?legacyStart:null),end=work?.end??(planned!==null?Math.min(1440,planned+30):legacy?legacyEnd:null);if(start===null||end===null||end<=start){untimed.push(job);continue;}timed.push({job,start,end,known:!!work,legacy,missingDuration:planned!==null&&!work});}
+ const from=fullDay?0:Math.min(6,...timed.map(j=>Math.floor(j.start/60)))*60,to=fullDay?1440:Math.max(20,...timed.map(j=>Math.ceil(j.end/60)))*60,groups=new Map();
+ for(const event of timed){const ids=user?[user.id]:[...new Set([event.job.assignedTo,...(event.job.assignedTos||[])].filter(Boolean))];if(!ids.length)ids.push('unknown');for(const id of ids){if(!groups.has(id))groups.set(id,{id,name:names.get(id)||(id==='unknown'?'Bez přiřazeného kolegy':'Původní nebo nedostupný kolega'),events:[],tracks:0});groups.get(id).events.push({...event,overlap:false});}}
+ if(includeEmpty)for(const p of user?[user]:people)if(!groups.has(p.id))groups.set(p.id,{id:p.id,name:p.name||p.email,events:[],tracks:0});
+ const rows=[...groups.values()].sort((a,b)=>a.name.localeCompare(b.name,'cs')||a.id.localeCompare(b.id));
+ for(const row of rows){row.events.sort((a,b)=>a.start-b.start||a.end-b.end||a.job.id.localeCompare(b.job.id));const ends=[],active=[];for(const event of row.events){for(let i=active.length-1;i>=0;i--)if(active[i].end<=event.start)active.splice(i,1);const conflicting=event.known&&!['done','incomplete'].includes(event.job.status)?active.filter(previous=>previous.known&&!['done','incomplete'].includes(previous.job.status)):[];if(conflicting.length){event.overlap=true;for(const previous of conflicting)previous.overlap=true;}active.push(event);let track=ends.findIndex(end=>end<=event.start);if(track===-1)track=ends.length;ends[track]=event.end;event.track=track;event.left=(event.start-from)/(to-from)*100;event.width=(event.end-event.start)/(to-from)*100;}row.tracks=ends.length;}
+ return {rows,untimed,from,to,hours:(to-from)/60,timedCount:timed.length,legacyCount:timed.filter(e=>e.legacy).length,missingDurationCount:timed.filter(e=>e.missingDuration).length,overlapCount:new Set(rows.flatMap(r=>r.events.filter(e=>e.overlap).map(e=>e.job.id))).size};
+}

@@ -1,0 +1,214 @@
+/* Shared visual components. No data, workflow, visibility or permission rules. */
+body { background:var(--pd-background); color:var(--pd-text); }
+button,input,select,textarea { font-family:var(--pd-font); }
+h1,h2,h3,h4 { color:var(--pd-text); letter-spacing:-.025em; }
+h1 { font-weight:700; }
+h2,h3 { font-weight:650; }
+.eyebrow { color:var(--pd-forest); font-size:10px; letter-spacing:.13em; }
+.page-title h1 { color:var(--pd-forest); font-weight:700; }
+.page-title p,.section-head p,.mini-empty { color:var(--pd-muted); }
+::selection { background:#D4E2DA; color:var(--pd-forest); }
+
+/* Buttons and icons: the same hierarchy in lists, sheets and work reports. */
+.btn { border-color:var(--pd-gray); border-radius:var(--pd-radius-control); background:var(--pd-surface); color:var(--pd-forest); font-weight:600; box-shadow:0 1px 2px rgb(25 63 59 / 2%); transition:background .14s,border-color .14s,box-shadow .14s; }
+.btn.primary,.btn.accent { color:#fff; background:var(--pd-forest); border-color:var(--pd-forest); }
+.btn.ghost { color:var(--pd-muted); background:transparent; box-shadow:none; }
+.btn.danger { color:var(--pd-danger); border-color:#E5C4BD; background:var(--pd-surface); }
+.btn:disabled { cursor:not-allowed; opacity:.55; box-shadow:none; }
+.round-button { border-color:var(--pd-gray); border-radius:var(--pd-radius-control); color:var(--pd-forest); min-width:44px; min-height:44px; background:#fff; }
+.text-link { color:var(--pd-forest); text-underline-offset:3px; }
+.btn:focus-visible,.round-button:focus-visible,.text-link:focus-visible,a:focus-visible,button:focus-visible,summary:focus-visible { outline:2px solid var(--pd-forest); outline-offset:3px; }
+:where(.field) input:focus-visible,:where(.field) select:focus-visible,:where(.field) textarea:focus-visible { outline:2px solid var(--pd-forest); outline-offset:1px; }
+@media(hover:hover) {
+ .btn:hover:not(:disabled) { background:var(--pd-sage-soft); border-color:var(--pd-sage-line); }
+ .btn.primary:hover:not(:disabled),.btn.accent:hover:not(:disabled) { background:var(--pd-forest-hover); border-color:var(--pd-forest-hover); }
+ .btn.danger:hover:not(:disabled) { background:var(--pd-danger-soft); border-color:#D6A79D; }
+ .text-link:hover { text-decoration:underline; }
+}
+
+/* Cards are existing components, shared across jobs, gardens and work records. */
+:where(.storage-card,.panel,.job-card,.customer-card,.garden-card,.record-card,.material-group,.garden-history-card,.defect-card,.subscription-card) {
+ background:var(--pd-surface); border:1px solid var(--pd-gray); border-radius:var(--pd-radius-card); box-shadow:var(--pd-shadow-card);
+}
+.storage-card,.panel,.job-card,.customer-card,.garden-card,.record-card,.material-group { border-color:var(--pd-gray); border-radius:var(--pd-radius-card); box-shadow:var(--pd-shadow-card); }
+.storage-card { background:var(--pd-surface); }
+.storage-card h2,.panel h2 { color:var(--pd-forest); }
+.storage-card p { color:var(--pd-muted); }
+.panel { padding:20px; }
+.garden-card strong,.customer-card h2 { color:var(--pd-forest); }
+.garden-card:hover,.record-card:hover { border-color:var(--pd-sage); box-shadow:var(--pd-shadow-raised); }
+.note-box,.jobs-daily-empty { border:1px solid var(--pd-gray); border-radius:16px; background:var(--pd-sage-soft); color:var(--pd-muted); }
+.empty { background:var(--pd-surface); border:1px dashed var(--pd-sage-line); border-radius:var(--pd-radius-card); }
+.empty-icon { background:var(--pd-sage-soft); color:var(--pd-forest); border-radius:14px; }
+.count { background:var(--pd-sage-soft); color:var(--pd-forest); border-radius:var(--pd-radius-pill); padding:4px 9px; font-variant-numeric:tabular-nums; }
+
+/* Inputs keep native date, select, checkbox and file semantics. */
+.field { font-size:12px; font-weight:600; color:var(--pd-text); line-height:1.5; }
+.field input,.field textarea,.field select { border-color:var(--pd-gray); background:#fff; border-radius:var(--pd-radius-control); color:var(--pd-text); font-size:14px; min-height:44px; padding:11px 12px; }
+.field textarea { line-height:1.6; }
+.field input::placeholder,.field textarea::placeholder { color:#6B7973; opacity:1; }
+.field input:focus,.field textarea:focus,.field select:focus { border-color:var(--pd-forest); box-shadow:0 0 0 3px rgb(157 183 167 / 23%); }
+.field input:disabled,.field select:disabled,.field textarea:disabled { background:#F0F3F1; color:#64726C; }
+input[type=checkbox],input[type=radio] { accent-color:var(--pd-forest); }
+.field input[type=checkbox],.field input[type=radio] { min-height:0; padding:0; }
+.search { background:#fff; border-color:var(--pd-gray); border-radius:var(--pd-radius-control); }
+.search input { color:var(--pd-text); font-size:14px; }
+fieldset { border-color:var(--pd-gray); }
+legend { color:var(--pd-forest); }
+.form-message[role=alert],.form-error { color:var(--pd-danger); }
+
+/* Navigation retains all existing destinations and role-dependent visibility. */
+.sidebar { background:#F0F4F1; border-color:var(--pd-gray); }
+.brand { color:var(--pd-forest); font-weight:700; }
+.brand small { color:var(--pd-muted); }
+.sidebar .nav button { border-radius:12px; color:var(--pd-muted); font-size:14px; }
+.sidebar .nav button.active { background:var(--pd-forest); color:#fff; font-weight:650; box-shadow:0 3px 9px rgb(25 63 59 / 10%); }
+.sidebar .nav button.active svg { color:inherit; }
+.sidebar .nav button:hover:not(.active) { background:#E5EDE7; color:var(--pd-forest); }
+.nav-overflow { background:var(--pd-surface); border-color:var(--pd-gray); border-radius:18px; }
+.topbar { border-color:var(--pd-gray); }
+.crumb { color:var(--pd-muted); }
+.crumb strong { color:var(--pd-forest); font-weight:600; }
+.top-status { color:var(--pd-muted); }
+.top-status .dot { background:#4C765D; }
+.notification-bell { color:var(--pd-forest); background:var(--pd-surface); border-color:var(--pd-gray); box-shadow:0 2px 7px rgb(25 63 59 / 3%); }
+.notification-badge { background:var(--pd-forest); box-shadow:0 0 0 2px var(--pd-background); }
+
+/* Day overview, jobs, state chips and compact, balanced actions. */
+.jobs-view-switch { border-color:var(--pd-gray); background:#E9EEEB; border-radius:14px; }
+.jobs-view-switch button { border-radius:10px; color:var(--pd-muted); font-weight:600; }
+.jobs-view-switch button[aria-pressed=true] { background:var(--pd-forest); color:#fff; box-shadow:0 2px 6px rgb(25 63 59 / 10%); }
+.jobs-quick button { border-color:var(--pd-gray); border-radius:var(--pd-radius-control); color:var(--pd-muted); background:#fff; }
+.jobs-quick button[aria-pressed=true] { color:var(--pd-forest); border-color:var(--pd-sage-line); background:var(--pd-sage-soft); }
+.job-card { background:#fff; }
+.job-card-compact h2 { color:var(--pd-forest); font-weight:700; }
+.job-card-compact .job-work-title { color:var(--pd-muted); font-weight:500; }
+.job-visit-meta { font-variant-numeric:tabular-nums; }
+.job-visit-meta strong { color:var(--pd-forest); }
+.job-card-compact .job-place { color:var(--pd-muted); }
+.job-kind { color:var(--pd-muted); background:#F0F3F1; border-radius:var(--pd-radius-pill); }
+.job-state,.role-pill { background:var(--pd-sage-soft); color:var(--pd-forest); border-radius:var(--pd-radius-pill); font-weight:650; }
+.job-state-planned { background:#EDF2EF; color:#35554A; }
+.job-state-in_progress { background:var(--pd-warning-soft); color:var(--pd-warning); }
+.job-state-on_way { background:var(--pd-information-soft); color:var(--pd-information); }
+.job-state-done { background:#E2EEE6; color:#28543B; }
+.job-state-incomplete { background:#FCE4DC; color:var(--pd-danger); border-color:#E4BAAE; }
+.job-card-done { background:#F1F6F2; border-color:#CEDDD2; }
+.job-card-incomplete { background:var(--pd-danger-soft); border:2px solid #C87764; border-left:5px solid var(--pd-danger); }
+.job-card-incomplete .job-reason { color:#7A352A; background:#FFE6DD; border-color:var(--pd-danger); }
+.job-reason { border-radius:12px; }
+.job-protocol-badge { border-radius:var(--pd-radius-pill); }
+#jobs-filter-panel>summary { color:var(--pd-forest); }
+.jobs-calendar { background:#fff; border-color:var(--pd-gray); border-radius:var(--pd-radius-card); box-shadow:var(--pd-shadow-card); }
+.jobs-calendar-day { border-radius:10px; }
+.jobs-calendar-day[aria-selected=true] { background:var(--pd-forest); color:#fff; }
+
+/* Dialogs and job detail. Sticky controls and keyboard insets stay untouched. */
+dialog#modal { background:var(--pd-surface); color:var(--pd-text); border:1px solid var(--pd-gray); border-radius:var(--pd-radius-dialog); box-shadow:var(--pd-shadow-dialog); }
+dialog::backdrop { background:rgb(17 40 35 / 38%); backdrop-filter:blur(4px); }
+#modal .modal-head { background:var(--pd-surface); border-bottom:1px solid var(--pd-gray); margin-bottom:18px; }
+#modal .modal-head h2 { color:var(--pd-forest); font-weight:700; }
+.dialog-toolbar>[data-close] { color:var(--pd-forest); background:#F1F5F2; border-color:var(--pd-gray); }
+.job-detail-summary { background:#F0F5F1; border:1px solid #D8E3DB; border-radius:18px; padding:18px; }
+.job-detail-summary>h3 { color:var(--pd-forest); }
+.job-detail-content>section h2,.job-extra>summary,.job-customer-picker legend { color:var(--pd-forest); }
+.job-extra,.service-report-details,.job-customer-picker,.explicit-planning { border-color:var(--pd-gray); border-radius:14px; }
+.job-detail-actions .btn { box-shadow:none; }
+.job-danger { border-color:#E4C4BA; }
+.job-danger h3 { color:var(--pd-danger); }
+#toast { background:var(--pd-forest); color:#fff; border-radius:14px; box-shadow:var(--pd-shadow-raised); }
+#toast.error { background:#863D33; }
+
+/* Existing documentation, material and work-record components. */
+.material-group { background:#fff; }
+.material-group-head { background:var(--pd-sage-soft); color:var(--pd-forest); border-bottom:0; }
+.material-group-head h2 { color:var(--pd-forest); font-weight:650; }
+.material-item-row { background:#fff; border-color:var(--pd-gray); }
+.material-item-row h3 { color:var(--pd-text); font-weight:600; }
+.material-item-price strong { color:var(--pd-forest); font-variant-numeric:tabular-nums; }
+.material-item-row small,.material-item-price small { color:var(--pd-muted); }
+.material-category-tabs button,.photo-phase-tabs button { border-color:var(--pd-gray); border-radius:12px; color:var(--pd-muted); background:#fff; }
+.photo-phase-tabs button[aria-selected=true] { background:var(--pd-sage-soft); border-color:var(--pd-sage-line); color:var(--pd-forest); }
+.service-report-details>summary { color:var(--pd-forest); font-weight:650; }
+.service-photo-card,.material-protocol-line { border-color:var(--pd-gray); border-radius:14px; }
+.protocol-export { color:var(--pd-text); }
+.attendance-counter,.attendance-total { border:1px solid var(--pd-sage-line); background:var(--pd-sage-soft); border-radius:var(--pd-radius-card); }
+.attendance-counter>strong,.attendance-total>strong { color:var(--pd-forest); font-variant-numeric:tabular-nums; }
+.attendance-day-row,.customer-compact { border-color:var(--pd-gray); border-radius:14px; background:#fff; }
+.attendance-disclosure>summary { color:var(--pd-forest); }
+.fleet-warning { color:var(--pd-warning); background:var(--pd-warning-soft); }
+.fleet-selection,.fleet-more { border-radius:var(--pd-radius-card); }
+.fleet-more>summary { color:var(--pd-forest); }
+.notifications-center { color:var(--pd-text); background:var(--pd-background); border-color:var(--pd-gray); box-shadow:var(--pd-shadow-dialog); }
+.notification-header { background:var(--pd-background); color:var(--pd-forest); }
+.notification-item { border-color:var(--pd-gray); }
+.notification-item.unread { border-left-color:var(--pd-forest); background:var(--pd-sage-soft); }
+.notification-item>strong { color:var(--pd-forest); }
+.notification-kind { color:var(--pd-muted); }
+.device-permissions { border-color:var(--pd-sage-line); background:var(--pd-sage-soft); }
+
+/* Desktop: retain the existing scheduler geometry, sticky dates and side editor. */
+@media(min-width:761px) {
+ .sidebar .brand-full { color:var(--pd-forest); }
+ .sidebar .brand-full img { border-radius:12px; border:1px solid var(--pd-gray); }
+ .jobs-filters { border-color:var(--pd-gray); border-radius:16px; background:#fff; }
+ .job-side-panel { border-color:var(--pd-gray); background:var(--pd-surface); border-radius:18px; box-shadow:var(--pd-shadow-raised); }
+ .job-side-panel>header { background:var(--pd-surface); border-bottom:1px solid var(--pd-gray); }
+ .job-side-panel h2,.job-side-panel>h3 { color:var(--pd-forest); }
+ .planning-backlog { background:#EFF3F0; border-color:var(--pd-gray); border-radius:16px; }
+ .backlog-item { border-color:var(--pd-gray); border-radius:12px; background:#fff; box-shadow:0 2px 5px rgb(25 63 59 / 2%); }
+ .backlog-item>strong { color:var(--pd-forest); }
+ .jobs-timeline-person { color:var(--pd-forest); }
+ .jobs-timeline-event { border-radius:9px; }
+ .jobs-timeline-event.timeline-state-planned,.week-event.timeline-state-planned { background:#E5EEE8; border-color:#A5BFAE; color:var(--pd-forest); }
+ .jobs-timeline-event.timeline-state-incomplete { background:#FFEAE3; border-color:var(--pd-danger); }
+ .jobs-timeline-scroll,.jobs-week-scroll { border-color:var(--pd-gray); border-radius:14px; }
+ .jobs-table-wrap { border-color:var(--pd-gray); border-radius:16px; background:#fff; }
+}
+
+/* Mobile: keep the same compact workspace and safe-area/keyboard behaviour. */
+@media(max-width:760px) {
+ .topbar { background:rgb(247 248 246 / 96%); backdrop-filter:blur(10px); border-color:transparent; }
+ .mobile-brand .brand { font-weight:700; }
+ .sidebar { background:rgb(255 255 255 / 97%); border-top:1px solid var(--pd-gray); box-shadow:0 -4px 20px rgb(25 63 59 / 4%); }
+ .sidebar .nav>button { color:var(--pd-muted); border-radius:14px; font-size:11px; }
+ .sidebar .nav>button.active { background:var(--pd-sage-soft); color:var(--pd-forest); box-shadow:none; }
+ .nav-overflow { box-shadow:var(--pd-shadow-dialog); }
+ .btn.small,.text-link { min-height:44px; }
+ .field input,.field select,.field textarea { font-size:16px; }
+ .field input[type=checkbox],.field input[type=radio] { font-size:inherit; }
+ .page-title h1 { font-size:27px; letter-spacing:-.035em; }
+ .storage-card,.customer-card,.job-card,.garden-card { border-radius:18px; }
+ #jobs .job-card-compact { padding:15px; }
+ #jobs .job-card-compact h2 { font-size:18px; line-height:1.35; }
+ #jobs .jobs-view-switch { padding:4px; border-radius:14px; }
+ #jobs .jobs-view-switch button { font-size:12px; border-radius:10px; }
+ #jobs .jobs-searchbar input { border-radius:var(--pd-radius-control); }
+ #jobs .job-card-compact .actions .btn { border-radius:11px; font-size:12px; }
+ dialog#modal .modal-head { background:var(--pd-surface); }
+ .job-detail-summary { padding:16px; border-radius:16px; }
+ .job-detail-summary>h3 { font-size:18px; }
+ .material-group-head { padding:14px 16px; }
+ .material-item-row { padding:14px 16px; }
+ .notification-header { background:var(--pd-background); }
+ .notifications-center { border-radius:24px 24px 0 0; }
+}
+@media(prefers-reduced-motion:reduce) {
+ .btn,.record-card,.garden-card { transition:none; }
+}
+@media(forced-colors:active) {
+ .btn,.sidebar .nav button.active,.job-state,.job-card-incomplete,.notification-item.unread { border:1px solid ButtonText; }
+}
+@media(min-width:1024px) {
+ /* Keep the first worker rows above the fold after the shared type scale. */
+ .manager-planning .jobs-timeline-toolbar { padding-top:4px; padding-bottom:5px; }
+ .desktop-signout .signout { font-size:13px; padding:8px 10px; }
+}
+/* Category and record chips use the same component palette as job filters. */
+.material-category-chip { background:#fff; color:var(--pd-forest); border-color:var(--pd-gray); border-radius:var(--pd-radius-pill); }
+.material-category-chip.active,.material-category-chip[aria-pressed=true] { color:#fff; background:var(--pd-forest); border-color:var(--pd-forest); }
+.composer-result { background:#fff; border-color:var(--pd-gray); border-radius:12px; }
+.composer-result:hover { background:var(--pd-sage-soft); border-color:var(--pd-sage-line); }
+.protocol-badge { border-radius:var(--pd-radius-pill); }
+.protocol-ready { color:#28543B; background:#E2EEE6; }
+.protocol-draft,.protocol-missing { color:var(--pd-warning); background:var(--pd-warning-soft); }

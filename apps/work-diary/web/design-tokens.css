@@ -1,0 +1,50 @@
+/* Pracovní deník · identity B. Shared by all existing company installations.
+   System fonts intentionally work offline and use SF on Apple devices. */
+:root {
+  color-scheme: light;
+  --pd-background: #F7F8F6;
+  --pd-surface: #FFFFFF;
+  --pd-forest: #193F3B;
+  --pd-forest-hover: #12332F;
+  --pd-sage: #9DB7A7;
+  --pd-sage-soft: #EBF1ED;
+  --pd-sage-line: #C6D5CC;
+  --pd-gray: #DCE2DF;
+  --pd-text: #1D2523;
+  --pd-muted: #596963;
+  --pd-danger: #963D32;
+  --pd-danger-soft: #FFF0EC;
+  --pd-warning: #78551C;
+  --pd-warning-soft: #FFF5DF;
+  --pd-information: #285C7B;
+  --pd-information-soft: #EBF3F8;
+  --pd-radius-control: 16px;
+  --pd-radius-card: 24px;
+  --pd-radius-dialog: 28px;
+  --pd-radius-pill: 999px;
+  --pd-space-1: 4px;
+  --pd-space-2: 8px;
+  --pd-space-3: 12px;
+  --pd-space-4: 16px;
+  --pd-space-5: 20px;
+  --pd-space-6: 24px;
+  --pd-shadow-card: 0 4px 16px rgb(25 63 59 / 3%);
+  --pd-shadow-raised: 0 8px 28px rgb(25 63 59 / 9%);
+  --pd-shadow-dialog: 0 24px 80px rgb(15 39 35 / 20%);
+  --pd-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* Compatibility aliases for existing functional components. */
+  --paper: var(--pd-background);
+  --white: var(--pd-surface);
+  --ink: var(--pd-text);
+  --muted: var(--pd-muted);
+  --line: var(--pd-gray);
+  --soft: #EFF3F0;
+  --green: var(--pd-sage-soft);
+  --orange: var(--pd-forest);
+  --shadow: var(--pd-shadow-raised);
+  font-family: var(--pd-font);
+  background: var(--pd-background);
+  color: var(--pd-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

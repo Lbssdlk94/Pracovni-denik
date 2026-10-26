@@ -1,0 +1,18 @@
+ÚKOL PRO CODEX – IKONA APLIKACE PRACOVNÍ DENÍK
+
+Přiložený PNG obrázek použij jako finální vizuální předlohu ikony aplikace Pracovní deník. Jde o univerzální pracovní deník pro různé profese, například závlahy, zahradnictví, elektro a truhlářství.
+
+Požadavky:
+- Zachovej tmavě námořnické pozadí bez výrazných světlých odlesků na okrajích.
+- Uprostřed je zápisník s koženým zapínáním, světlou stránkou a modrými zaškrtávacími políčky.
+- Vpravo ponech čtyři barevné záložky pro různá řemesla.
+- Nepřidávej kladivo, klíč, text ani další dekorace.
+- Ikona má působit čistě a přirozeně mezi moderními ikonami iOS/macOS.
+
+Implementace:
+1. Použij přiložený PNG jako zdrojový asset; nevytvářej místo něj emoji ani náhradní symbol.
+2. Připrav správné velikosti a umístění podle skutečné struktury projektu (např. iOS AppIcon v Assets.xcassets, macOS ikona, případně PWA manifest a apple-touch-icon).
+3. Zachovej poměr stran, neprotahuj obrázek a nedoplňuj další zaoblení, pokud ho provádí operační systém.
+4. Pokud obrázek obsahuje bílé okolí mimo samotnou zaoblenou ikonu, před použitím v produkčních assetech ho odstraň / připrav vhodný výřez. Zkontroluj náhled na světlém i tmavém pozadí.
+5. Neměň funkčnost aplikace; uprav pouze ikonové assety a příslušné odkazy/konfiguraci.
+6. Na konci vypiš změněné soubory a způsob ověření.

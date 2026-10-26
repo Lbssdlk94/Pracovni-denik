@@ -1,0 +1,1 @@
+ALTER TABLE `platform_companies` ADD `feature_overrides` text DEFAULT '{}' NOT NULL;

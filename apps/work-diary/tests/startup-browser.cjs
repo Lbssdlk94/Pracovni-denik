@@ -1,0 +1,25 @@
+const {chromium}=require('playwright'),assert=require('node:assert/strict'),fs=require('node:fs/promises');
+(async()=>{const b=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});try{
+ const base='http://127.0.0.1:5187',oc=await b.newContext(),o=await oc.newPage(),gc=await b.newContext({viewport:{width:390,height:844},serviceWorkers:'block'}),g=await gc.newPage(),errors=[];for(const p of [o,g])p.on('pageerror',e=>errors.push(e.message));
+ await o.goto(base+'/__qa/login?user=owner');await o.locator('[data-action="new-garden"]').waitFor();
+ const bytes=(await fs.readFile('web/logo-dr-zavlaha.jpg')).toString('base64');
+ const link=await o.evaluate(async image=>{
+  const send=async(path,method,value)=>{const r=await fetch(path,{method,headers:{'content-type':'application/json','x-zavlahy-request':'1'},body:JSON.stringify(value)});if(!r.ok)throw new Error('Fixture failed: '+path+' '+r.status);return r.json();};
+  await send('/api/gardens','POST',{id:'startup-garden',name:'Zahrada bez čekání',address:'',notes:''});
+  const form=new FormData();form.set('record',JSON.stringify({name:'Pomalu načítaná šachta',gardenId:'startup-garden',location:'',notes:'',markers:[],version:0}));form.set('image',new Blob([Uint8Array.from(atob(image),c=>c.charCodeAt(0))],{type:'image/jpeg'}),'photo.jpg');
+  const r=await fetch('/api/shafts/startup-shaft',{method:'PUT',headers:{'x-zavlahy-request':'1'},body:form});if(!r.ok)throw new Error('Photo fixture failed');
+  return (await send('/api/invitations','POST',{email:'startup-guest@example.com',role:'worker',mode:'link'})).url;
+ },bytes);
+ // A never-ending photograph used to leave a new colleague on the opening screen.
+ await g.addInitScript(()=>{const original=window.fetch.bind(window);window.__stallPhoto=true;window.fetch=(path,options={})=>{if(String(path).includes('/photo')&&window.__stallPhoto)return new Promise((resolve,reject)=>{const abort=()=>reject(new DOMException('Aborted','AbortError'));if(options.signal?.aborted)abort();else options.signal?.addEventListener('abort',abort,{once:true});});return original(path,options);};});
+ await g.goto(link);await g.locator('#access-open').click();await g.locator('.garden-card').filter({hasText:'Zahrada bez čekání'}).waitFor({timeout:5000});assert.equal(await g.locator('.loading').count(),0);await g.locator('.garden-card').filter({hasText:'Zahrada bez čekání'}).click();await g.getByText('Načítám šachty a jejich fotografie…',{exact:true}).waitFor();
+ await g.locator('#records .note-box [data-action="sync"]').waitFor({timeout:25000});assert.equal(await g.getByText('První šachta čeká na svůj popis',{exact:true}).count(),0);
+ await g.evaluate(()=>{window.__stallPhoto=false;});await g.locator('#records .note-box [data-action="sync"]').click();await g.locator('.record-card').filter({hasText:'Pomalu načítaná šachta'}).waitFor();assert.equal(await g.evaluate(async()=>{const d=await(await fetch('/api/me')).json();return d.user.authMethod;}),'link');assert.equal((await gc.cookies()).some(c=>c.name==='qa-person'),false);
+ // An IndexedDB open that never completes reports a recoverable error without erasing anything.
+ const sc=await b.newContext({serviceWorkers:'block'}),s=await sc.newPage();s.on('pageerror',e=>errors.push(e.message));await sc.addInitScript(()=>{if(sessionStorage.getItem('qa-storage-ready'))return;const open=indexedDB.open.bind(indexedDB);indexedDB.open=()=>({});window.__restoreLocal=()=>{indexedDB.open=open;sessionStorage.setItem('qa-storage-ready','1');};});
+ await s.goto(base+'/__qa/login?user=owner');await s.locator('#startup-retry').waitFor({timeout:16000});assert.ok((await s.locator('body').innerText()).includes('Úložiště v prohlížeči neodpovídá'));await s.evaluate(()=>window.__restoreLocal());await s.locator('#startup-retry').click();await s.locator('.garden-card').filter({hasText:'Zahrada bez čekání'}).waitFor();
+ // A lost access cookie is explained before startup, instead of falling back to ChatGPT.
+ const cc=await b.newContext({serviceWorkers:'block'}),c=await cc.newPage();c.on('pageerror',e=>errors.push(e.message));await c.route('**/api/access-link',async route=>{const r=await route.fetch(),headers=r.headers();delete headers['set-cookie'];await cc.clearCookies();await route.fulfill({response:r,headers});});await c.goto(link);await c.locator('#access-open').click();await c.locator('.access-error').getByText(/Prohlížeč neuložil osobní přístup/).waitFor();assert.equal(await c.locator('.loading').count(),0);assert.equal(await c.locator('#access-open').isEnabled(),true);
+ await fs.mkdir('.qa',{recursive:true});await g.screenshot({path:'.qa/startup-recovery-mobile.png',fullPage:true});assert.deepEqual(errors,[]);
+ console.log('PASS: account-free cold start shows gardens before stalled photos; timeout and retry recover; blocked browser storage recovers; missing cookie is explained.');
+ }finally{await b.close();}})().catch(e=>{console.error(String(e.message||e).replace(/#access=[a-f0-9]{64}/g,'#access=[redacted]'));process.exit(1)});

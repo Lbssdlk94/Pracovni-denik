@@ -1,0 +1,57 @@
+{
+  "source": "8 snímků jiné aplikace, vložených vlastníkem 16. 10. 2026",
+  "currency": "CZK",
+  "categories": [
+    {"name":"Odbočky k postřikovačům","items":[
+      {"name":"Blazing - navrtávací sedlo","priceMinor":9600,"unit":"ks"},
+      {"name":"Koleno postřikovač","priceMinor":2400,"unit":"ks"},
+      {"name":"Přímá spojka 16mm","priceMinor":1800,"unit":"ks"},
+      {"name":"T - kus 16mm","priceMinor":2300,"unit":"ks"},
+      {"name":"Zakončovák - přechod 3/4 - 16mm","priceMinor":1800,"unit":"ks"}
+    ]},
+    {"name":"Instalační a těsnící materiál","items":[
+      {"name":"Drobný instalační materiál","priceMinor":4800,"unit":"ks"}
+    ]},
+    {"name":"Mikrozávlaha/kapka","items":[
+      {"name":"Idra spike","priceMinor":9300,"unit":"ks"},
+      {"name":"Kapka bez kapkovačů","priceMinor":1800,"unit":"m"},
+      {"name":"Kapkovací potrubí / kapka","priceMinor":2200,"unit":"m"},
+      {"name":"Kolík / Zemní úchyt","priceMinor":800,"unit":"ks"},
+      {"name":"Kuláček - kapka","priceMinor":4800,"unit":"ks"}
+    ]},
+    {"name":"Hadicový program","items":[
+      {"name":"Hadicový adaptér","priceMinor":4600,"unit":"ks"},
+      {"name":"Hydrant","priceMinor":57900,"unit":"ks"}
+    ]},
+    {"name":"Postřikovače/trysky","items":[
+      {"name":"Koleno postřikovač","priceMinor":2400,"unit":"ks"},
+      {"name":"MINI PRO - CV","priceMinor":45800,"unit":"ks"},
+      {"name":"PRO S 4\" - CV","priceMinor":10500,"unit":"ks"},
+      {"name":"SUPER PRO - CV","priceMinor":63500,"unit":"ks"},
+      {"name":"Tryska - Rotační (RWAN, RN,...)","priceMinor":24500,"unit":"ks"}
+    ]},
+    {"name":"Hlavní sestava","items":[
+      {"name":"Filtr diskový 1\" - PN 8 - GC","priceMinor":37800,"unit":"ks"}
+    ]},
+    {"name":"Elektro","items":[
+      {"name":"Acidurka","priceMinor":11900,"unit":"ks"},
+      {"name":"Chránička","priceMinor":2400,"unit":"m"},
+      {"name":"Gelový konektor IR","priceMinor":3300,"unit":"ks"},
+      {"name":"Gelový konektor Velký","priceMinor":9500,"unit":"ks"},
+      {"name":"Kabel - ovládací","priceMinor":2800,"unit":"m"}
+    ]},
+    {"name":"Čerpací technika / dopouštění","items":[
+      {"name":"Acidurka","priceMinor":11900,"unit":"ks"},
+      {"name":"Blazing - navrtávací sedlo","priceMinor":9600,"unit":"ks"},
+      {"name":"Brio - tlakový spínač","priceMinor":168100,"unit":"ks"},
+      {"name":"Chránička","priceMinor":2400,"unit":"m"},
+      {"name":"Divertron 900","priceMinor":965800,"unit":"ks"}
+    ]}
+  ],
+  "excludedByOwner": [
+    {"category":"Mikrozávlaha/kapka","name":"Mikrohadička 7 mm"},
+    {"category":"Postřikovače/trysky","name":"Tryska - rozprašovací"},
+    {"category":"Elektro","name":"Kabel 230V - 3x1,5mm"},
+    {"category":"Čerpací technika / dopouštění","name":"Drobný instalační materiál"}
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "zakazky": {
+    "label": "Zakázky",
+    "file": "icons/zakazky.svg",
+    "symbol": "icon-zakazky"
+  },
+  "zahrady": {
+    "label": "Zahrady",
+    "file": "icons/zahrady.svg",
+    "symbol": "icon-zahrady"
+  },
+  "zakaznici": {
+    "label": "Zákazníci",
+    "file": "icons/zakaznici.svg",
+    "symbol": "icon-zakaznici"
+  },
+  "material": {
+    "label": "Materiál",
+    "file": "icons/material.svg",
+    "symbol": "icon-material"
+  },
+  "dochazka": {
+    "label": "Docházka",
+    "file": "icons/dochazka.svg",
+    "symbol": "icon-dochazka"
+  },
+  "predplatne": {
+    "label": "Předplatné",
+    "file": "icons/predplatne.svg",
+    "symbol": "icon-predplatne"
+  },
+  "zavady": {
+    "label": "Závady",
+    "file": "icons/zavady.svg",
+    "symbol": "icon-zavady"
+  },
+  "nas-tym": {
+    "label": "Náš tým",
+    "file": "icons/nas-tym.svg",
+    "symbol": "icon-nas-tym"
+  },
+  "nastaveni": {
+    "label": "Nastavení",
+    "file": "icons/nastaveni.svg",
+    "symbol": "icon-nastaveni"
+  },
+  "vice": {
+    "label": "Více",
+    "file": "icons/vice.svg",
+    "symbol": "icon-vice"
+  }
+}

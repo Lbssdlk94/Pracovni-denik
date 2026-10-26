@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1792500012836,
+      "tag": "0000_loud_the_hand",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792598908588,
+      "tag": "0001_company_feature_overrides",
+      "breakpoints": true
+    }
+  ]
+}
