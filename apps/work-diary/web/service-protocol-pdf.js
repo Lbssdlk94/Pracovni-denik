@@ -60,6 +60,7 @@ export async function createServiceProtocolPDF(entry,{signal,onProgress=()=>{},l
  if(r.materialItems?.length){section('Materiál z katalogu',r.materialItems.map(materialSummary).join('\n'));for(const total of materialTotals(r.materialItems))section('Celkem materiál',materialMoney(total.amount,total.currency));}
  if(r.workCharges){const c=r.workCharges;section('Práce',`${new Intl.NumberFormat('cs-CZ').format(c.hours)} h → ${c.hourUnits} započatých hodin × ${materialMoney(c.hourlyMinor)} = ${materialMoney(c.labourMinor)}`);section('Cesta',`${new Intl.NumberFormat('cs-CZ').format(c.kilometers)} km → ${c.travelUnits} započatých bloků po 30 km × ${materialMoney(c.travelRateMinor)} = ${materialMoney(c.travelMinor)}`);section('Celkem práce a cesta',materialMoney(c.totalMinor));const total=materialTotals(r.materialItems||[]);const czk=total.find(t=>t.currency==='CZK');section('Celkem výkaz (Kč)',materialMoney(c.totalMinor+(czk?.amount||0)));for(const t of total.filter(t=>t.currency!=='CZK'))section('Další měna – samostatně',materialMoney(t.amount,t.currency));}
  text('Servisní výkaz není daňový doklad.',8,[99,111,104]);
+ if(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(r.customerSignature||'')){if(y+42>bottom)newPage();y+=4;text('Podpis zákazníka',12);y+=2;doc.addImage(r.customerSignature,'PNG',left,y,68,22);y+=26;text('Zákazník podpisem potvrzuje provedení práce uvedené v tomto protokolu.',8,[99,111,104]);}
  const ids=[...new Set(r.photoIds||[])],warnings=[];
  if(ids.length){newPage();text('FOTODOKUMENTACE',17);y+=4;}
  for(let i=0;i<ids.length;i++){

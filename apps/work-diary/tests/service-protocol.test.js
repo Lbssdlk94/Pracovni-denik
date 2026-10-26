@@ -42,3 +42,18 @@ test('Protocol photos and history are scoped to the assigned job, even after rea
   assert.equal((await call(e,'/api/jobs/ordinary/service',people.worker)).status,404);assert.equal((await call(e,path,people.worker)).status,404);
  }finally{e.sqlite.close();}
 });
+const signature='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+test('Customer signature is stored with the protocol, kept when an older client omits it, and rejected when it is not a small PNG',async()=>{
+ const e=await setup();try{
+  let {job}=await good(await call(e,'/api/jobs/ordinary/service',people.worker));
+  let saved=await good(await call(e,'/api/jobs/ordinary/service',people.worker,'PUT',{version:job.version,operationId:'sign',report:{date:subToday(),work:'Kontrola',customerSignature:signature,photoIds:[]}}));
+  assert.equal(saved.report.customerSignature,signature);assert.equal(e.sqlite.prepare('SELECT customer_signature s FROM service_reports').get().s,signature);
+  assert.equal((await good(await call(e,'/api/jobs/ordinary/service',people.reader))).report.customerSignature,signature);
+  saved=await good(await call(e,'/api/jobs/ordinary/service',people.worker,'PUT',{version:saved.job.version,operationId:'older-client',report:{date:subToday(),work:'Kontrola filtru',photoIds:[]}}));
+  assert.equal(saved.report.customerSignature,signature);assert.equal(saved.report.work,'Kontrola filtru');
+  saved=await good(await call(e,'/api/jobs/ordinary/service',people.worker,'PUT',{version:saved.job.version,operationId:'clear-sign',report:{date:subToday(),work:'Kontrola filtru',customerSignature:'',photoIds:[]}}));
+  assert.equal(saved.report.customerSignature,'');
+  assert.equal((await call(e,'/api/jobs/ordinary/service',people.worker,'PUT',{version:saved.job.version,operationId:'bad-sign',report:{date:subToday(),customerSignature:'data:image/jpeg;base64,aaaa',photoIds:[]}})).status,400);
+  assert.equal(e.sqlite.prepare('SELECT customer_signature s FROM service_reports').get().s,'');
+ }finally{e.sqlite.close();}
+});
