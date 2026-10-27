@@ -1,0 +1,49 @@
+{
+  "scenario": {
+    "customers": 305,
+    "gardens": 305,
+    "jobs": 305,
+    "reports": 305,
+    "photos": 457,
+    "photoBytes": 379988768
+  },
+  "checks": [
+    "Actual owner button creates records; pause leaves resumable partial batch",
+    "305 customers + 305 gardens + 305 planned jobs + 305 finalized internal reports + 457 JPEG objects saved through normal authenticated APIs",
+    "Second full run creates no duplicate rows or photo objects and leaves existing sentinel unchanged",
+    "Stored JPEG hash matches uploaded fixture; unassigned worker denied photo read; reader denied customer write",
+    "All rows and photo links survive actual runtime restart with persisted D1/R2",
+    "Overview, garden and job lists do not download all attached photographs",
+    "Actual PDF preview contains two decoded JPEG photographs without missing-image warnings",
+    "390/430px import panel has no horizontal overflow; import absent from worker settings"
+  ],
+  "timings": [
+    {
+      "label": "resume browser import 305 + 457 photos",
+      "ms": 27555
+    },
+    {
+      "label": "complete rerun without duplicates",
+      "ms": 3310
+    },
+    {
+      "label": "desktop 306 gardens",
+      "ms": 97
+    },
+    {
+      "label": "mobile 390 overview with reports and photos",
+      "ms": 553
+    },
+    {
+      "label": "mobile 430 overview with reports and photos",
+      "ms": 480
+    }
+  ],
+  "errors": [],
+  "pdf": {
+    "size": 1496354,
+    "signature": "%PDF-",
+    "images": 2
+  },
+  "status": "passed"
+}
