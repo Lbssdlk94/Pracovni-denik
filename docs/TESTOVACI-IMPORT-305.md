@@ -38,3 +38,13 @@ Prošlo sestavení určené k nasazení Dr. Závlahy, s výchozím kontrolním z
 Strojový výsledek: `docs/test-results/import-305-2026-10-27.json`. Nasazení tlačítka je oddělené od vytvoření živých testovacích záznamů; ty vzniknou až kliknutím přihlášeného vlastníka.
 
 Rozšíření přiřazení: ověřeno 153 lichých zakázek vlastníka a 152 sudých vybraného kolegy, správné pokračování po pozastavení, přístup kolegy pouze k jeho návštěvě a odmítnutí změny druhého kolegy u již vytvořené dávky.
+
+## Oprava zastavení u smazaného Test2
+
+V živé databázi existoval Test2 jako smazaná zakázka, přestože zákazník a zahrada zůstali aktivní. PUT správně vracel 409; import následným GET získal 404 a tím skryl původní příčinu.
+
+Backend nyní vrací pro smazaný identifikátor jednoznačný kód `job_deleted` při zachování oprávnění a samotného smazání. Pouze tento kód dovolí pevnému testovacímu importu vytvořit náhradní zakázku s příponou `-r1` (nejvýše deset náhrad). Fotografie a idempotentní operace mají vlastní ID příslušného pokusu. Zákazník a zahrada používají původní ID. Import při dalším spuštění vybere existující aktivní náhradu podle ID; více aktivních kopií odmítne. Smazané záznamy ani jejich případné soubory se neobnovují a nepřepisují.
+
+Jiné chyby 409, například kolize plánu, se za smazání nepovažují. Pokud po nich GET vrátí 404, zobrazí se původní příčina a žádná náhradní zakázka nevznikne.
+
+Ověření: šest samostatných regresních testů `tests/volume-import.test.js` a celý izolovaný objemový test s předem smazaným Test2. Ověřeno nezměněné smazání původního Test2, zachování zákazníka a zahrady, jedna aktivní náhrada, rozdělení 153/152, úplný opakovaný import bez duplicit, soubory, PDF a 390/430 px. Výsledek: `docs/test-results/import-305-deleted-job-2026-10-27.json`.

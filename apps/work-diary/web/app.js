@@ -1,4 +1,4 @@
-import {createVolumeTestUI} from './volume-test-ui.js?v=live-volume-v2';
+import {createVolumeTestUI} from './volume-test-ui.js?v=live-volume-v3';
 import {createOverviewUI} from './overview-ui.js?v=green-icon-v1';
 import {interfaceIcon} from './interface-icons.js?v=approved-b-v2';
 import {createVehiclesUI} from './vehicles-ui.js?v=fleet-photo-v1';

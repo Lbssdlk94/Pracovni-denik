@@ -88,7 +88,7 @@ export async function handleJobs(request,env,m,h){
  if(!statusOnly&&!departure&&['PUT','DELETE'].includes(method)){
   checkManager();const b=await body(request,16000);checkKeys(b,method==='DELETE'?['version']:['version','title','jobType','customerId','customerAddressId','customerName','city','description','address','gardenId','assignedTo','assignedTos','dueDate','startTime','endTime','status','incompleteReason','defectIds','plannedStart','estimatedMinutes','arrivalWindowStart','arrivalWindowEnd','legacyTimeMeaning','allowOverlaps','previewRevision']);
   const version=expectedVersion(b.version),old=await one(env.DB,'SELECT * FROM jobs WHERE id=?',id);
-  if(old?.deleted)fail(409,'Tato zakázka už byla smazána.');if((old?.version||0)!==version)fail(409,'Zakázku mezitím změnil správce nebo kolega. Obnovte seznam.');
+  if(old?.deleted)fail(409,'Tato zakázka už byla smazána.',{code:'job_deleted'});if((old?.version||0)!==version)fail(409,'Zakázku mezitím změnil správce nebo kolega. Obnovte seznam.');
   if(method==='DELETE'){
    if(!old)fail(404,'Zakázka nebyla nalezena.');const result=await execute(env.DB,'UPDATE jobs SET deleted=1,version=version+1,updated_at=?,updated_by=? WHERE id=? AND version=? AND deleted=0 AND '+managerGate,Date.now(),m.user_id,id,version,m.user_id);if(!result.meta.changes)fail(409,'Zakázku se nepodařilo smazat. Obnovte seznam a ověřte oprávnění.');return json({ok:true});
   }

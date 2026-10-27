@@ -1,0 +1,62 @@
+{
+  "scenario": {
+    "customers": 305,
+    "gardens": 305,
+    "jobs": 305,
+    "reports": 305,
+    "photos": 457,
+    "photoBytes": 379988768
+  },
+  "checks": [
+    "Actual owner button creates records; pause leaves resumable partial batch",
+    "305 customers + 305 gardens + 305 planned jobs + 305 finalized internal reports + 457 JPEG objects saved through normal authenticated APIs",
+    "Odd jobs assigned to owner (153), even jobs to chosen colleague (152), including pause/resume",
+    "Changing colleague on an existing batch stops before writes instead of mixing assignments",
+    "Second full run creates no duplicate rows or photo objects and leaves existing sentinel unchanged",
+    "Deleted original Test2 is unchanged; one replacement reuses the original customer and garden, retains colleague assignment, and is reused on rerun",
+    "Stored JPEG hash matches uploaded fixture; unassigned worker denied photo read; reader denied customer write",
+    "All rows and photo links survive actual runtime restart with persisted D1/R2",
+    "Overview, garden and job lists do not download all attached photographs",
+    "Actual PDF preview contains two decoded JPEG photographs without missing-image warnings",
+    "390/430px import panel has no horizontal overflow; import absent from worker settings"
+  ],
+  "timings": [
+    {
+      "label": "resume browser import 305 + 457 photos",
+      "ms": 26020
+    },
+    {
+      "label": "complete rerun without duplicates",
+      "ms": 3864
+    },
+    {
+      "label": "desktop 306 gardens",
+      "ms": 94
+    },
+    {
+      "label": "mobile 390 overview with reports and photos",
+      "ms": 687
+    },
+    {
+      "label": "mobile 430 overview with reports and photos",
+      "ms": 475
+    }
+  ],
+  "errors": [],
+  "assignmentCounts": [
+    {
+      "id": "qa-owner",
+      "n": 153
+    },
+    {
+      "id": "qa-worker",
+      "n": 152
+    }
+  ],
+  "pdf": {
+    "size": 1496554,
+    "signature": "%PDF-",
+    "images": 2
+  },
+  "status": "passed"
+}

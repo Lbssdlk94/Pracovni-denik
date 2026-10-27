@@ -3,7 +3,33 @@ export const VOLUME_BATCH='volume-20261027';
 export const VOLUME_COUNT=305;
 const marker='TESTOVACI DATA · '+VOLUME_BATCH;
 const sizes=[831304,831849];
-export const volumeIds=n=>({customer:`${VOLUME_BATCH}-customer-${n}`,job:`${VOLUME_BATCH}-job-${n}`,photos:Array.from({length:n%2?1:2},(_,i)=>`${VOLUME_BATCH}-photo-${n}-${i+1}`)});
+const MAX_REPLACEMENTS=10;
+export const volumeIds=(n,attempt=0)=>({attempt,customer:`${VOLUME_BATCH}-customer-${n}`,job:`${VOLUME_BATCH}-job-${n}${attempt?'-r'+attempt:''}`,photos:Array.from({length:n%2?1:2},(_,i)=>`${VOLUME_BATCH}-photo-${n}${attempt?'-r'+attempt:''}-${i+1}`)});
+export function selectVolumeIds(n,jobs){
+ const active=Array.from({length:MAX_REPLACEMENTS+1},(_,i)=>volumeIds(n,i)).filter(ids=>jobs.has(ids.job));
+ ensure(active.length<=1,'Test'+n+' už má více aktivních testovacích zakázek. Import nic nesloučí ani nepřepíše.');
+ return active[0]||volumeIds(n);
+}
+export async function createVolumeJob({n,ids,api,value}){
+ for(let attempt=ids.attempt;attempt<=MAX_REPLACEMENTS;attempt++){
+  const id=volumeIds(n,attempt);
+  try{return {id,job:(await api('/api/jobs/'+id.job,'PUT',value)).job};}
+  catch(error){
+   // Only the server's explicit deletion result authorizes a new fixture ID.
+   // Ordinary planning/permission/version errors must never create another job.
+   if(error.status===409&&error.code==='job_deleted'){
+    ensure(attempt<MAX_REPLACEMENTS,'Test'+n+' má příliš mnoho smazaných pokusů. Import byl zastaven.');
+    continue;
+   }
+   if(error.status===409){
+    try{return {id,job:(await api('/api/jobs/'+id.job)).job};}
+    catch(readError){if(readError.status===404)throw error;throw readError;}
+   }
+   throw error;
+  }
+ }
+}
+
 const ensure=(ok,message)=>{if(!ok)throw new Error(message);};
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const today=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Prague'}).format(new Date());
@@ -19,14 +45,14 @@ export async function runVolumeImport({request,user,assigneeIds=[user?.id],progr
  const team=await api('/api/team');for(const id of assigneeIds)ensure(team.members.some(m=>m.id===id&&['owner','administrator','admin','worker'].includes(m.role)),'Vybraný kolega už není dostupný nebo nemá pracovní oprávnění.');
  for(const f of ['customers','gardens','jobs','photoUploads','protocolPhotos'])ensure(me.features?.[f]!==false,'Import potřebuje povolenou funkci: '+f+'. Nastavení modulů se nezměnilo.');
  const [customers,jobs,gardens]=await Promise.all([list('/api/customers','customers'),list('/api/jobs?state=all&order=schedule','jobs'),api('/api/gardens').then(v=>v.gardens)]);
- const ids=new Set(Array.from({length:VOLUME_COUNT},(_,i)=>[volumeIds(i+1).customer,volumeIds(i+1).job]).flat());
+ const ids=new Set(Array.from({length:VOLUME_COUNT},(_,i)=>[volumeIds(i+1).customer,...Array.from({length:MAX_REPLACEMENTS+1},(_,a)=>volumeIds(i+1,a).job)]).flat());
  const gardenIds=new Set(await Promise.all(Array.from({length:VOLUME_COUNT},(_,i)=>gardenId(volumeIds(i+1).customer))));
  for(const [rows,allowed]of[[customers,ids],[jobs,ids],[gardens,gardenIds]])for(const v of rows)if(/^Test(?:[1-9]|[1-9]\d|[12]\d\d|30[0-5])$/.test(v.name||v.title||''))ensure(allowed.has(v.id),'Název '+(v.name||v.title)+' už používá jiný záznam. Import nic nesloučí ani nepřepíše.');
  const cMap=new Map(customers.map(v=>[v.id,v])),jMap=new Map(jobs.map(v=>[v.id,v])),gMap=new Map(gardens.map(v=>[v.id,v]));
- for(let n=1;n<=VOLUME_COUNT;n++){const existing=jMap.get(volumeIds(n).job);if(existing)ensure(existing.assignedTo===assigneeIds[(n-1)%2]&&(existing.assignedTos||[existing.assignedTo]).length===1,'Test'+n+' už je přiřazena jinak. Zkontrolujte vybraného kolegu; import přiřazení nepřepíše.');}
+ for(let n=1;n<=VOLUME_COUNT;n++){const existing=jMap.get(selectVolumeIds(n,jMap).job);if(existing)ensure(existing.assignedTo===assigneeIds[(n-1)%2]&&(existing.assignedTos||[existing.assignedTo]).length===1,'Test'+n+' už je přiřazena jinak. Zkontrolujte vybraného kolegu; import přiřazení nepřepíše.');}
  const photos=await Promise.all([loadPhoto(0),loadPhoto(1)]);photos.forEach((b,i)=>ensure(b.size===sizes[i],'Testovací snímek má jinou velikost.'));
  for(let n=1;n<=VOLUME_COUNT;n++){
-  guard();const id=volumeIds(n),name='Test'+n,gid=await gardenId(id.customer),address='Testovací adresa '+n,city='Test – syntetická data',addressId='test-address-'+n,assigneeId=assigneeIds[(n-1)%2];
+  guard();let id=selectVolumeIds(n,jMap);const name='Test'+n,gid=await gardenId(id.customer),address='Testovací adresa '+n,city='Test – syntetická data',addressId='test-address-'+n,assigneeId=assigneeIds[(n-1)%2];
   progress({done:n-1,text:`${name}: zákazník, zahrada, zakázka, výkaz a fotografie…`});
   const existing=cMap.get(id.customer);
   if(existing)ensure(existing.name===name&&existing.email===''&&existing.addresses?.some(a=>a.id===addressId&&a.address===address&&a.city===city),'Testovací zákazník '+name+' byl upraven. Zastavuji bez přepsání.');
@@ -35,7 +61,7 @@ export async function runVolumeImport({request,user,assigneeIds=[user?.id],progr
   ensure(g&&g.name===name&&(!g.customerId||g.customerId===id.customer),'Automaticky vytvořená zahrada není správně propojená. Import zastaven.');
   const day=Math.floor((n-1)/5),slot=(n-1)%5,dueDate=new Date(Date.UTC(2026,10,1+day,12)).toISOString().slice(0,10),plannedStart=String(8+slot*2).padStart(2,'0')+':00';
   let job=jMap.get(id.job);
-  if(!job){try{job=(await api('/api/jobs/'+id.job,'PUT',{version:0,title:name,jobType:'service',customerId:id.customer,customerAddressId:addressId,gardenId:gid,customerName:name,address,city,description:marker,assignedTo:assigneeId,assignedTos:[assigneeId],dueDate,plannedStart,estimatedMinutes:60,status:'planned'})).job;}catch(e){if(e.status!==409)throw e;job=(await api('/api/jobs/'+id.job)).job;}}
+  if(!job){const saved=await createVolumeJob({n,ids:id,api,value:{version:0,title:name,jobType:'service',customerId:id.customer,customerAddressId:addressId,gardenId:gid,customerName:name,address,city,description:marker,assignedTo:assigneeId,assignedTos:[assigneeId],dueDate,plannedStart,estimatedMinutes:60,status:'planned'}});id=saved.id;job=saved.job;}
   ensure(job.title===name&&job.customerId===id.customer&&job.gardenId===gid&&job.description===marker&&job.assignedTo===assigneeId&&job.dueDate===dueDate&&job.plannedStart===plannedStart&&job.estimatedMinutes===60&&job.status==='planned','Zakázka '+name+' už obsahuje jiné údaje nebo termín. Zastavuji bez přepsání.');
   let snapshot=await api('/api/jobs/'+id.job+'/service');
   for(let i=0;i<id.photos.length;i++){
@@ -45,7 +71,7 @@ export async function runVolumeImport({request,user,assigneeIds=[user?.id],progr
   }
   const r=snapshot.report,fields={date:r?.date||today(),work:'Testovací interní výkaz pro '+name+'. Kontrola zavlažování – pouze syntetický zátěžový test.',material:'Testovací materiál; bez skutečné spotřeby a účtování.',defects:'',notes:marker,recommendations:'Testovací doporučení pro další návštěvu.',photoIds:id.photos};
   if(r){ensure(Object.entries(fields).every(([k,v])=>same(r[k],v)),'Výkaz '+name+' byl upraven. Import jej nepřepíše.');ensure(r.documentState==='ready','Existující výkaz není potvrzený. Zkontrolujte jej ručně.');}
-  else await api('/api/jobs/'+id.job+'/service','PUT',{version:snapshot.job.version,operationId:VOLUME_BATCH+'-report-'+n,finalizeReport:true,report:fields});
+  else await api('/api/jobs/'+id.job+'/service','PUT',{version:snapshot.job.version,operationId:VOLUME_BATCH+'-report-'+n+(id.attempt?'-r'+id.attempt:''),finalizeReport:true,report:fields});
   progress({done:n,text:`Uloženo ${n} / ${VOLUME_COUNT}.`});
  }
  return {customers:305,gardens:305,jobs:305,reports:305,photos:457,bytes:379988768};
