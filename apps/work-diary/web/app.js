@@ -1,4 +1,4 @@
-import {createVolumeTestUI} from './volume-test-ui.js?v=live-volume-v1';
+import {createVolumeTestUI} from './volume-test-ui.js?v=live-volume-v2';
 import {createOverviewUI} from './overview-ui.js?v=green-icon-v1';
 import {interfaceIcon} from './interface-icons.js?v=approved-b-v2';
 import {createVehiclesUI} from './vehicles-ui.js?v=fleet-photo-v1';
@@ -62,7 +62,7 @@ const invoiceSettingsUI=createInvoiceSettingsUI({db,esc:v=>esc(v),getSession:()=
 const operationsUI=createOperationsUI({db,esc:v=>esc(v),getSession:()=>sessionInfo,toast});
 const reminderSettingsUI=createReminderSettingsUI({db,esc:v=>esc(v),getSession:()=>sessionInfo,isOnline:()=>mapOnline(),toast});
 const notificationsUI=createNotificationsUI({db,esc:v=>esc(v),getSession:()=>sessionInfo,isOnline:()=>mapOnline(),toast,onOpenTarget:async n=>{if(!leaveDraft())return;for(const d of [...document.querySelectorAll('dialog[open]')].reverse()){const close=d.querySelector('[data-close]')||d.querySelector('[data-photo-viewer-close]')||d.querySelector('header button');if(close){close.click();if(d.open)return;}else return;}if(n.kind.startsWith('job_')){navigate('jobs');await jobsUI.open(n.resourceId);}else if(n.kind==='vehicle_deadline'){navigate('vehicles');await vehiclesUI.open(n.resourceId);}else navigate('attendance');}});
-const volumeTestUI=createVolumeTestUI({db,getSession:()=>sessionInfo,esc:v=>esc(v),toast,onDone:async()=>{gardens=await db.getGardens();}});
+const volumeTestUI=createVolumeTestUI({db,preferredPartnerId:'m0c4m3LocAFfrKYwn0N9we1rWNtaCd3Gg705RfcVu2lDDwZi8sIa5k',getSession:()=>sessionInfo,esc:v=>esc(v),toast,onDone:async()=>{gardens=await db.getGardens();}});
 const devicePermissionsUI=createDevicePermissionsUI({getSession:()=>sessionInfo,notifications:notificationsUI,esc:v=>esc(v)});
 const jobsUI=createJobsUI({onOpenGarden:async(id,tab)=>{if(!gardens.some(g=>g.id===id))throw Error('Zahrada už není dostupná.');activeGarden=id;gardenTabs.set(id,tab);navigate('home');},gardenHistory:()=>enabled('defects')?gardenHistoryUI:null,onOpenDrive:async()=>{await closeDialog(modal);navigate('settings');document.querySelector('#google-drive-settings')?.scrollIntoView({block:'start'});},onOpenWork:(id,options)=>serviceWorkUI.open(id,options),db,esc:v=>esc(v),getSession:()=>sessionInfo,getGardens:()=>gardens,showModal,modal,toast,isOnline:()=>mapOnline()});
 const overviewUI=createOverviewUI({db,esc:v=>esc(v),getSession:()=>sessionInfo,enabled,getGardenCount:()=>gardens.length,toast,onToday:()=>{navigate('jobs');jobsUI.focusOverview('today');},onProtocols:()=>{navigate('jobs');jobsUI.focusOverview('protocols');},onJob:async id=>{navigate('jobs');await jobsUI.open(id);}});
