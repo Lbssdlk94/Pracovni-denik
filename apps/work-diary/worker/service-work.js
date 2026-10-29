@@ -1,3 +1,4 @@
+import {workspaceJobScope} from './workspace-policy.js';
 import {hasProtocolContent} from '../web/job-workflow-model.js';
 import {protocolBilling} from './protocol-billing.js';
 import {resolveWorkCharges} from './work-charges.js';
@@ -15,7 +16,7 @@ function protocolSignature(value,fail){
 }
 import {subOne,subAll,subRead,subHash,subReplay,subOperation} from './subscriptions.js';
 import {subDate,subToday} from '../web/subscription-model.js';
-export const subWorkScope="EXISTS(SELECT 1 FROM members a WHERE a.user_id=? AND (a.role IN ('owner','administrator','admin') OR ((j.assigned_to=a.user_id OR EXISTS(SELECT 1 FROM json_each(j.assigned_users) selected WHERE selected.value=a.user_id)) AND j.service_approval='confirmed')))";
+export const subWorkScope=workspaceJobScope();
 export async function subWorkJob(env,m,id,fail,write=false){const j=await subOne(env.DB,`SELECT j.*,p.subscription_id,p.start_date period_start,p.end_date period_end,s.status subscription_status,s.deleted_at subscription_deleted_at FROM jobs j LEFT JOIN subscription_periods p ON p.id=j.service_period_id LEFT JOIN subscriptions s ON s.id=p.subscription_id WHERE j.id=? AND ${!write&&['owner','administrator','admin'].includes(m.role)?'1=1':'j.deleted=0'} AND ${subWorkScope}`,id,m.user_id);if(!j)fail(404,'Servisní zakázka nebyla nalezena.');if(write&&!['owner','administrator','admin','worker'].includes(m.role))fail(403,'Pro zápis protokolu potřebujete oprávnění pracovníka.');return j;}
 export async function handleServiceWork(request,env,ctx,m,h){
  const {json,body,fail,validId,cleanText,boundedBytes}=h,path=new URL(request.url).pathname,method=request.method,match=path.match(/^\/api\/jobs\/([-\w]{1,100})\/service(?:\/photos\/([-\w]{1,100}))?$/);
@@ -30,9 +31,9 @@ export async function handleServiceWork(request,env,ctx,m,h){
   if(!(mime==='image/jpeg'&&jpeg||mime==='image/png'&&png||['image/heic','image/heif'].includes(mime)&&heic))fail(400,'Nahrajte původní JPG, PNG nebo HEIC fotografii.');
   const sha=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join(''),key='service/'+id+'/'+photoId+'/'+sha;
   if(old&&old.sha256!==sha)fail(409,'Pod stejným ID už je jiná fotografie.');
-  await env.DB.prepare("INSERT OR IGNORE INTO service_photos(id,job_id,object_key,mime_type,size,name,sha256,status,created_at,created_by) VALUES(?,?,?,?,?,?,?,'pending',?,?)").bind(photoId,id,key,mime,bytes.length,name,sha,Date.now(),m.user_id).run();
-  const reserved=await subOne(env.DB,'SELECT * FROM service_photos WHERE id=?',photoId);if(reserved.job_id!==id||reserved.sha256!==sha)fail(409,'Fotografii rezervoval jiný požadavek.');
-  if(reserved.status!=='ready'){await env.BUCKET.put(key,bytes,{httpMetadata:{contentType:mime}});await subWorkJob(env,m,id,fail,true);await env.DB.prepare("UPDATE service_photos SET status='ready' WHERE id=? AND sha256=?").bind(photoId,sha).run();}
+  await env.DB.prepare(`INSERT OR IGNORE INTO service_photos(id,job_id,object_key,mime_type,size,name,sha256,status,created_at,created_by) SELECT ?,?,?,?,?,?,?,'pending',?,? WHERE EXISTS(SELECT 1 FROM members writer WHERE writer.user_id=? AND writer.role IN ('owner','administrator','admin','worker')) AND EXISTS(SELECT 1 FROM jobs j WHERE j.id=? AND ${subWorkScope})`).bind(photoId,id,key,mime,bytes.length,name,sha,Date.now(),m.user_id,m.user_id,id,m.user_id).run();
+  const reserved=await subOne(env.DB,'SELECT * FROM service_photos WHERE id=?',photoId);if(!reserved)fail(409,'Oprávnění k fotografii se změnilo. Obnovte zakázku.');if(reserved.job_id!==id||reserved.sha256!==sha)fail(409,'Fotografii rezervoval jiný požadavek.');
+  if(reserved.status!=='ready'){await env.BUCKET.put(key,bytes,{httpMetadata:{contentType:mime}});await subWorkJob(env,m,id,fail,true);const published=await env.DB.prepare(`UPDATE service_photos SET status='ready' WHERE id=? AND sha256=? AND EXISTS(SELECT 1 FROM members writer WHERE writer.user_id=? AND writer.role IN ('owner','administrator','admin','worker')) AND EXISTS(SELECT 1 FROM jobs j WHERE j.id=? AND ${subWorkScope})`).bind(photoId,sha,m.user_id,id,m.user_id).run();if(!published.meta.changes)fail(409,'Oprávnění k fotografii se změnilo. Fotografie nebyla zpřístupněna.');}
   return json({photo:{id:photoId,name,mimeType:mime,size:bytes.length}});
  }
  const detail=async()=>{

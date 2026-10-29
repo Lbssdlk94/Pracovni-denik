@@ -26,7 +26,7 @@ test('Validation rejects injected links, duplicate contact IDs, stale address se
 });
 test('Assignment and manager role are rechecked in the actual SQL query/mutation',async()=>{
  const env=await setup();await call(env,'/api/jobs/j1',people.owner,'PUT',job());const prepare=env.DB.prepare;
- env.DB.prepare=sql=>{if(sql.startsWith('SELECT c.* FROM customers c'))env.sqlite.exec("UPDATE jobs SET assigned_to='reader-id' WHERE id='j1'");return prepare(sql);};assert.deepEqual(await list(env,people.worker),[]);env.DB.prepare=prepare;
+ env.DB.prepare=sql=>{if(sql.startsWith('SELECT c.*')&&sql.includes('FROM customers c'))env.sqlite.exec("UPDATE jobs SET assigned_to='reader-id' WHERE id='j1'");return prepare(sql);};assert.deepEqual(await list(env,people.worker),[]);env.DB.prepare=prepare;
  env.DB.prepare=sql=>{if(sql.startsWith('UPDATE customers SET name='))env.sqlite.exec("UPDATE members SET role='worker' WHERE user_id='admin-id'");return prepare(sql);};assert.equal((await call(env,'/api/customers/c1',people.admin,'PUT',customer({version:1,name:'Unauthorized'}))).status,409);assert.equal(env.sqlite.prepare("SELECT name FROM customers WHERE id='c1'").get().name,'Řehoř Novák');
 });
 test('Czech names paginate correctly, duplicate names have distinct IDs, and disabling features hides contacts',async()=>{

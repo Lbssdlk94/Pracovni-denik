@@ -1,3 +1,9 @@
+import {workspaceRecoveryPublicInfo} from './workspace-recovery.js';
+import {normalizeDisciplines} from '../web/discipline-model.js';
+import {workspaceIdentityMember,workspaceInvitationStatements} from './workspace-identities.js';
+import {workspaceGardenScope,workspaceDisciplineSql} from './workspace-policy.js';
+import {workspaceResourceAccess,workspaceWriteDiscipline,workspaceFilterResponse,workspaceGardenNotesStatement} from './workspace-resources.js';
+import {handleWorkspace} from './workspace-api.js';
 import {handleVehicles} from './vehicles.js';
 import {tenantPolicy,tenantFeaturePolicy,tenantPlatformGate,tenantHeartbeat,tenantClaimInvitation} from './tenant-platform.js';
 import {TEAM_ROLE_NAMES,assignableTeamRoles,canAssignTeamRole,canEditTeamMember} from '../web/team-roles.js';
@@ -68,6 +74,7 @@ async function redeemAccess(request,env,ctx,preview=false){
  const statements=[];
  if(invite){
  statements.push(env.DB.prepare('INSERT OR IGNORE INTO members(user_id,email,name,role,created_at) SELECT guest_user_id,email,email,role,? FROM invitations WHERE access_token_hash=? AND expires_at>?').bind(now,hash,now));
+ statements.push(...await workspaceInvitationStatements(env,invite.email,invite.guest_user_id));
  statements.push(env.DB.prepare('INSERT INTO access_sessions(id,user_id,token_hash,created_at,expires_at,last_seen_at,agent) SELECT ?,i.guest_user_id,?,?,?,?,? FROM invitations i JOIN members m ON m.user_id=i.guest_user_id AND m.email=i.email WHERE i.access_token_hash=? AND i.expires_at>?').bind(sessionId,sessionHash,now,expires,now,agent,hash,now));
  statements.push(env.DB.prepare('INSERT INTO guest_access(user_id,email,token_hash,created_at,expires_at,single_use) SELECT i.guest_user_id,i.email,NULL,?,NULL,1 FROM invitations i WHERE i.access_token_hash=? AND EXISTS(SELECT 1 FROM access_sessions WHERE id=?) ON CONFLICT(user_id) DO UPDATE SET token_hash=NULL,expires_at=NULL,single_use=1').bind(now,hash,sessionId));
  statements.push(env.DB.prepare('DELETE FROM invitations WHERE access_token_hash=? AND EXISTS(SELECT 1 FROM access_sessions WHERE id=?)').bind(hash,sessionId));
@@ -90,13 +97,14 @@ async function memberFor(request,env){
   if(!env.DB||!env.BUCKET||!env.TEAM_OWNER_EMAIL)fail(503,'Týmové úložiště se připravuje. Zkuste to za chvíli.');
   await assertInstallation(env);await ensureInitialAdministrator(env);
   const cookie=(request.headers.get('cookie')||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(ACCESS_COOKIE+'='));
-  if(cookie!==undefined){const token=cookie.slice(ACCESS_COOKIE.length+1),guest=/^[a-f0-9]{64}$/.test(token)?await sessionMember(env,await accessHash(token))||await linkedMember(env,await accessHash(token)):null;if(!guest)fail(401,'Osobní přístup už není platný. Otevřete nový odkaz od správce.',{code:'link_invalid'});return {...guest,_authMethod:'link'};}
-  const user=userFrom(request);
-  if(user.email===env.TEAM_OWNER_EMAIL.toLowerCase()&&env.PLATFORM_REQUIRE_INVITATION!=='1')await execute(env.DB,"INSERT OR IGNORE INTO members(user_id,email,name,role,created_at) VALUES(?,?,?,'owner',?)",user.id,user.email,user.name,Date.now());
-  let m=await one(env.DB,'SELECT * FROM members WHERE user_id=?',user.id);
+  if(cookie!==undefined){const token=cookie.slice(ACCESS_COOKIE.length+1),guest=/^[a-f0-9]{64}$/.test(token)?await sessionMember(env,await accessHash(token))||await linkedMember(env,await accessHash(token)):null;if(!guest)fail(401,'Osobní přístup už není platný. Otevřete nový odkaz od správce.',{code:'link_invalid'});return {...guest,_authMethod:'link',_sessionHash:await accessHash(token)};}
+  const user=userFrom(request),workspaceIdentity=await workspaceIdentityMember(env,user);
+  if(workspaceIdentity.member)return workspaceIdentity.member;
+  if(!workspaceIdentity.active&&user.email===env.TEAM_OWNER_EMAIL.toLowerCase()&&env.PLATFORM_REQUIRE_INVITATION!=='1')await execute(env.DB,"INSERT OR IGNORE INTO members(user_id,email,name,role,created_at) VALUES(?,?,?,'owner',?)",user.id,user.email,user.name,Date.now());
+  let m=workspaceIdentity.active?null:await one(env.DB,'SELECT * FROM members WHERE user_id=?',user.id);
   if(!m){
     const invited=await one(env.DB,'SELECT * FROM invitations WHERE email=? AND access_token_hash IS NULL',user.email);
-    if(invited){await env.DB.batch([env.DB.prepare('INSERT OR IGNORE INTO members(user_id,email,name,role,created_at) SELECT ?,?,?,role,? FROM invitations WHERE email=? AND access_token_hash IS NULL').bind(user.id,user.email,user.name,Date.now(),user.email),env.DB.prepare('DELETE FROM invitations WHERE email=? AND access_token_hash IS NULL AND EXISTS(SELECT 1 FROM members WHERE user_id=? AND email=?)').bind(user.email,user.id,user.email)]);m=await one(env.DB,'SELECT * FROM members WHERE user_id=?',user.id);}
+    if(invited){await env.DB.batch([env.DB.prepare('INSERT OR IGNORE INTO members(user_id,email,name,role,created_at) SELECT ?,?,?,role,? FROM invitations WHERE email=? AND access_token_hash IS NULL').bind(user.id,user.email,user.name,Date.now(),user.email),...await workspaceInvitationStatements(env,user.email,user.id,user.id),env.DB.prepare('DELETE FROM invitations WHERE email=? AND access_token_hash IS NULL AND EXISTS(SELECT 1 FROM members WHERE user_id=? AND email=?)').bind(user.email,user.id,user.email)]);m=await one(env.DB,'SELECT * FROM members WHERE user_id=?',user.id);}
   }
   if(!m)fail(403,'Váš účet zatím není členem týmu. Požádejte správce o pozvánku.',{email:user.email});
   return m;
@@ -138,7 +146,7 @@ async function addressFromPosition(request,env){
    return json({address,precision:street&&number?'address':street?'street':'area'});
   }
   fail(404,'Adresu této polohy se nepodařilo najít. Zadejte ji ručně.');
- }catch(error){if(error instanceof HttpError)throw error;fail(503,'Adresu se nepodařilo dohledat. Zkontrolujte připojení nebo ji zadejte ručně.');}finally{clearTimeout(timer);}
+ }catch(error){if(String(error?.message).includes('workspace_'))return json({error:'Změna neodpovídá aktuálnímu oboru nebo oprávnění. Obnovte údaje.',code:'workspace_conflict'},409);if(error instanceof HttpError)throw error;fail(503,'Adresu se nepodařilo dohledat. Zkontrolujte připojení nebo ji zadejte ručně.');}finally{clearTimeout(timer);}
 }
 async function resolveGardenAddress(request,env,old){
  const b=await body(request,2000),address=cleanText(b.address,160,true),normalized=normalizeAddress(address);
@@ -148,7 +156,7 @@ async function resolveGardenAddress(request,env,old){
  await checkGeocodeRate(env);
  const url=new URL('https://photon.komoot.io/api/');url.searchParams.set('q',address);url.searchParams.set('limit','5');
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);let candidates;
- try{const response=await fetch(url,{headers:{accept:'application/json','User-Agent':'ZavlahovyDenik/1.0 (+https://zavlahovy-denik.purplecedar.chatgpt.site)'},signal:controller.signal});if(!response.ok)fail(503,'Služba pro vyhledání adresy je nyní nedostupná. Zkuste to později.');candidates=parseAddressCandidates(JSON.parse(new TextDecoder().decode(await boundedBytes(response,300000))));}catch(error){if(error instanceof HttpError)throw error;fail(503,'Adresu se nepodařilo vyhledat. Zkontrolujte připojení a zkuste to znovu.');}finally{clearTimeout(timer);}
+ try{const response=await fetch(url,{headers:{accept:'application/json','User-Agent':'ZavlahovyDenik/1.0 (+https://zavlahovy-denik.purplecedar.chatgpt.site)'},signal:controller.signal});if(!response.ok)fail(503,'Služba pro vyhledání adresy je nyní nedostupná. Zkuste to později.');candidates=parseAddressCandidates(JSON.parse(new TextDecoder().decode(await boundedBytes(response,300000))));}catch(error){if(String(error?.message).includes('workspace_'))return json({error:'Změna neodpovídá aktuálnímu oboru nebo oprávnění. Obnovte údaje.',code:'workspace_conflict'},409);if(error instanceof HttpError)throw error;fail(503,'Adresu se nepodařilo vyhledat. Zkontrolujte připojení a zkuste to znovu.');}finally{clearTimeout(timer);}
  const latest=await one(env.DB,'SELECT address,deleted FROM gardens WHERE id=?',old.id);if(!latest||latest.deleted)fail(404,'Zahrada byla smazána.');if(normalizeAddress(latest.address)!==normalized)fail(409,'Adresa zahrady se během vyhledávání změnila. Zkuste to znovu.');
  await execute(env.DB,'INSERT INTO garden_geocodes(garden_id,address,candidates,checked_at) VALUES(?,?,?,?) ON CONFLICT(garden_id) DO UPDATE SET address=excluded.address,candidates=excluded.candidates,checked_at=excluded.checked_at',old.id,normalized,JSON.stringify(candidates),now);
  return json({address:normalized,candidates,checkedAt:now});
@@ -188,9 +196,15 @@ function mutationAllowed(request){
 }
 async function featureSettings(env){const row=await one(env.DB,"SELECT * FROM settings WHERE key='features'");return {...await tenantFeaturePolicy(env,normalizeFeatures(row?JSON.parse(row.value):null)),featuresVersion:row?.version||0};}
 export async function api(request,env,ctx){
+ const scopedEnv={...env};
+ const response=await workspaceRawApi(request,scopedEnv,ctx);
+ try{return await workspaceFilterResponse(response,request,scopedEnv);}catch{return json({error:'Přehled se nepodařilo bezpečně načíst. Zkuste jej obnovit.'},503);}
+}
+async function workspaceRawApi(request,env,ctx){
   try{
     const url=new URL(request.url),path=url.pathname,method=request.method;
     if(!['GET','HEAD'].includes(method))mutationAllowed(request);
+    if(path==='/api/workspace/recovery-key'&&method==='GET'){await assertInstallation(env);return json({recovery:await workspaceRecoveryPublicInfo(env)});}
     if(path==='/api/platform-invitation'){await assertInstallation(env);return await tenantClaimInvitation(request,env,{fail,json,body,userFrom});}
     if(path==='/api/maintenance/approved-job-import'){await tenantPlatformGate(request,env,{fail});
       const response=await handleApprovedImport(request,env,{fail,json,one,cleanText,validId,accessHash,boundedBytes});
@@ -208,6 +222,8 @@ export async function api(request,env,ctx){
     if(path==='/api/access-link'&&method==='POST')return await redeemAccess(request,env,ctx);
     if(path==='/api/access-logout'&&method==='POST'){const c=(request.headers.get('cookie')||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(ACCESS_COOKIE+'='));if(c)await execute(env.DB,'UPDATE access_sessions SET revoked_at=? WHERE token_hash=?',Date.now(),await accessHash(c.slice(ACCESS_COOKIE.length+1)));const response=json({ok:true});response.headers.set('set-cookie',accessCookie(''));return response;}
     const m=await memberFor(request,env),platformPolicy=await tenantPlatformGate(request,env,{fail});
+    await workspaceResourceAccess(request,env,m,fail);env._workspaceScope=m._workspace||null;
+    if(path==='/api/workspace'||path.startsWith('/api/workspace/')){const {features}=await featureSettings(env);const needed=path.includes('/members/')?'teamManagement':path.includes('/customers/')?'customers':path.includes('/gardens/')?'gardens':null;if(needed&&features[needed]===false)fail(403,'Tato funkce je v nastavení firmy vypnutá.');return await handleWorkspace(request,env,m,{fail,json,body,boundedBytes,features});}
     if(!['GET','HEAD'].includes(method)&&!path.startsWith('/api/system-backups')&&await one(env.DB,"SELECT id FROM system_backups WHERE state='restoring' LIMIT 1"))fail(503,'Probíhá obnova prázdné instalace. Zkuste to po jejím dokončení.',{code:'restore_in_progress'});
     if(path.startsWith('/api/privacy/'))return await handlePrivacy(request,env,m,{json,fail,body,validId});
     if(path==='/api/system-backups'||path.startsWith('/api/system-backups/'))return await handleSystemBackups(request,env,m,{json,fail,body,validId,boundedBytes});
@@ -237,7 +253,7 @@ export async function api(request,env,ctx){
     if(path==='/api/jobs/schedule'){const {features}=await featureSettings(env);if(!features.jobs)fail(403,'Zakázky jsou vypnuté.');const response=await handleJobPlanner(request,env,m,{body,fail,json,validId});deliver();return response;}
     if(path==='/api/jobs'||path.startsWith('/api/jobs/')){const {features}=await featureSettings(env);if(!features.jobs)fail(403,'Zakázky jsou v nastavení týmu vypnuté.');const response=await handleJobs(request,env,m,{all,one,execute,body,fail,json,validId,cleanText,expectedVersion,features,checkGeocodeRate,boundedBytes});if(method!=='GET')deliver();return response;}
     if(path==='/api/attendance'||path.startsWith('/api/attendance/')){const {features}=await featureSettings(env);if(features.attendance===false)fail(403,'Docházka je v nastavení týmu vypnutá.');const response=await handleAttendance(request,env,m,{all,one,execute,body,fail,json,validId,cleanText},features);if(method!=='GET')deliver();return response;}
-    if(path==='/api/me'&&method==='GET'){deliver();ctx.waitUntil(tenantHeartbeat(env,m).catch(e=>console.error('Platform heartbeat unavailable',e.name)));const settings=await featureSettings(env);const active=settings.features.attendance?await one(env.DB,'SELECT id FROM attendance_shifts WHERE user_id=? AND deleted_at IS NULL AND end_at IS NULL',m.user_id):null;return json({...settings,installation:await installationInfo(env),verifiedAt:Date.now(),attendance:{active:!!active},user:{id:m.user_id,email:m.email,name:m.name,role:m.role,authMethod:m._authMethod||'chatgpt'},permissions:{write:canWrite(m)&&(!settings.license||settings.license.active),manage:canManage(m),delete:['owner','administrator','admin'].includes(m.role)},roleNames:ROLE_NAMES});}
+    if(path==='/api/me'&&method==='GET'){deliver();ctx.waitUntil(tenantHeartbeat(env,m).catch(e=>console.error('Platform heartbeat unavailable',e.name)));const settings=await featureSettings(env);const active=settings.features.attendance?await one(env.DB,'SELECT id FROM attendance_shifts WHERE user_id=? AND deleted_at IS NULL AND end_at IS NULL',m.user_id):null;return json({...settings,installation:await installationInfo(env),verifiedAt:Date.now(),attendance:{active:!!active},user:{id:m.user_id,email:m.email,name:m.name,role:m.role,authMethod:m._authMethod||'chatgpt'},workspace:m._workspace||null,recovery:await workspaceRecoveryPublicInfo(env),permissions:{write:canWrite(m)&&(!settings.license||settings.license.active),manage:canManage(m),delete:['owner','administrator','admin'].includes(m.role)},roleNames:ROLE_NAMES});}
     if(path==='/api/features'&&method==='GET')return json(await featureSettings(env));
     if(path==='/api/features'&&method==='PUT'){
       if(platformPolicy)fail(403,'Moduly této firmy spravuje pouze Super Admin.',{code:'central_modules_only'});
@@ -249,19 +265,20 @@ export async function api(request,env,ctx){
       if(!result.meta.changes)fail(409,'Nastavení mezitím změnil jiný správce. Načtěte aktuální nastavení a zkuste to znovu.');
       return json({features,featuresVersion:version+1});
     }
-    if(path==='/api/team'&&method==='GET'){checkManage(m);return json({members:(await all(env.DB,'SELECT user_id,email,name,role,created_at,EXISTS(SELECT 1 FROM guest_access a WHERE a.user_id=members.user_id) AS personal_link FROM members ORDER BY created_at')).map(v=>({id:v.user_id,email:v.email,name:v.name,role:v.role,createdAt:v.created_at,personalLink:!!v.personal_link})),invitations:await all(env.DB,'SELECT email,role,created_at,access_token_hash IS NOT NULL AS personal_link FROM invitations ORDER BY created_at')});}
+    if(path==='/api/team'&&method==='GET'){checkManage(m);return json({members:(await all(env.DB,'SELECT user_id,email,name,role,created_at,(SELECT json_group_array(md.discipline) FROM member_disciplines md WHERE md.user_id=members.user_id) AS disciplines,(SELECT version FROM workspace_entity_versions v WHERE v.entity=\'member\' AND v.entity_id=members.user_id) AS membership_version,EXISTS(SELECT 1 FROM guest_access a WHERE a.user_id=members.user_id) AS personal_link FROM members ORDER BY created_at')).map(v=>({id:v.user_id,email:v.email,name:v.name,role:v.role,createdAt:v.created_at,personalLink:!!v.personal_link,...(m._workspace?{disciplines:JSON.parse(v.disciplines||'[]'),membershipVersion:v.membership_version||0}:{})})),invitations:await all(env.DB,'SELECT email,role,created_at,access_token_hash IS NOT NULL AS personal_link FROM invitations ORDER BY created_at')});}
     if(path==='/api/invitations'&&method==='POST'){
       checkManage(m);const b=await body(request,1000),email=validEmail(b.email),role=validRole(b.role),mode=b.mode??'chatgpt';if(!['chatgpt','link'].includes(mode))fail(400,'Vyberte způsob připojení kolegy.');
+      let disciplines=[];if(m._workspace){try{disciplines=normalizeDisciplines(b.disciplines||[m._workspace.selectedDiscipline]);}catch(error){fail(400,error.message);}}const originOrganization=m._workspace?await one(env.DB,'SELECT id FROM workspace_organizations WHERE workspace_id=? AND discipline=?',m._workspace.workspaceId,disciplines.includes(m._workspace.selectedDiscipline)?m._workspace.selectedDiscipline:disciplines[0]):null;
       if(!canAssignTeamRole(m.role,role))fail(403,'Toto oprávnění nemůžete přidělit.');
       const existingInvitation=await one(env.DB,'SELECT * FROM invitations WHERE email=?',email);if(existingInvitation&&!canAssignTeamRole(m.role,existingInvitation.role))fail(403,'Tuto pozvánku nemůžete měnit.');
       if(await one(env.DB,'SELECT 1 FROM members WHERE email=?',email))fail(409,'Tento kolega už je členem týmu.');
       const count=await one(env.DB,'SELECT (SELECT COUNT(*) FROM members)+(SELECT COUNT(*) FROM invitations) AS total');const maxUsers=platformPolicy?.maxUsers||100;if(!existingInvitation&&count.total>=maxUsers)fail(400,'Licence dovoluje nejvýše '+maxUsers+' členů a pozvánek.');
       const token=mode==='link'?accessToken():null,hash=token?await accessHash(token):null,known=mode==='link'?await one(env.DB,'SELECT user_id FROM guest_access WHERE email=?',email):null,guestId=token?(known?.user_id||existingInvitation?.guest_user_id||'guest_'+crypto.randomUUID()):null;
-      const invitedResult=await execute(env.DB,'INSERT INTO invitations(email,role,created_by,created_at,access_token_hash,guest_user_id,expires_at) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND actor.role=?) AND NOT EXISTS(SELECT 1 FROM invitations WHERE email=? AND role<>?) AND ((SELECT COUNT(*) FROM members)+(SELECT COUNT(*) FROM invitations)<? OR EXISTS(SELECT 1 FROM invitations WHERE email=?)) ON CONFLICT(email) DO UPDATE SET role=excluded.role,created_by=excluded.created_by,created_at=excluded.created_at,access_token_hash=excluded.access_token_hash,guest_user_id=excluded.guest_user_id,expires_at=excluded.expires_at',email,role,m.user_id,Date.now(),hash,guestId,Date.now()+(['administrator','admin'].includes(role)?1:7)*86400000,m.user_id,m.role,email,existingInvitation?.role||role,maxUsers,email);if(!invitedResult.meta.changes)fail(409,'Pozvánku nebo oprávnění mezitím někdo změnil. Obnovte tým.');return json({email,role,mode,url:token?accessURL(url.origin,token):url.origin});
+      const invitedResult=await execute(env.DB,'INSERT INTO invitations(disciplines,origin_organization_id,email,role,created_by,created_at,access_token_hash,guest_user_id,expires_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND actor.role=?) AND NOT EXISTS(SELECT 1 FROM invitations WHERE email=? AND role<>?) AND ((SELECT COUNT(*) FROM members)+(SELECT COUNT(*) FROM invitations)<? OR EXISTS(SELECT 1 FROM invitations WHERE email=?)) ON CONFLICT(email) DO UPDATE SET role=excluded.role,created_by=excluded.created_by,created_at=excluded.created_at,access_token_hash=excluded.access_token_hash,guest_user_id=excluded.guest_user_id,expires_at=excluded.expires_at,disciplines=excluded.disciplines,origin_organization_id=excluded.origin_organization_id',JSON.stringify(disciplines),originOrganization?.id||null,email,role,m.user_id,Date.now(),hash,guestId,Date.now()+(['administrator','admin'].includes(role)?1:7)*86400000,m.user_id,m.role,email,existingInvitation?.role||role,maxUsers,email);if(!invitedResult.meta.changes)fail(409,'Pozvánku nebo oprávnění mezitím někdo změnil. Obnovte tým.');return json({email,role,mode,url:token?accessURL(env.WORKSPACE_ENTRY_ORIGIN||url.origin,token):url.origin});
     }
     if(path==='/api/invitations'&&method==='DELETE'){checkManage(m);const b=await body(request,1000),email=validEmail(b.email),old=await one(env.DB,'SELECT role FROM invitations WHERE email=?',email);if(old&&!canAssignTeamRole(m.role,old.role))fail(403,'Tuto pozvánku nemůžete zrušit.');await execute(env.DB,'DELETE FROM invitations WHERE email=? AND role=? AND EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND actor.role=?)',email,old?.role||'',m.user_id,m.role);return json({ok:true});}
     const renew=path.match(/^\/api\/members\/([-a-zA-Z0-9_]{1,100})\/(access-link|device-invite)$/);
-    if(renew&&method==='POST'){checkManage(m);const target=await one(env.DB,'SELECT m.* FROM members m JOIN guest_access a ON a.user_id=m.user_id WHERE m.user_id=?',renew[1]);if(!target)fail(404,'Kolega s osobním odkazem nebyl nalezen.');if(!canEditTeamMember(m,target))fail(403,'Nemůžete obnovit přístup tohoto kolegy.');const token=accessToken();const renewed=await execute(env.DB,'UPDATE guest_access SET token_hash=?,expires_at=?,single_use=1 WHERE user_id=? AND EXISTS(SELECT 1 FROM members target WHERE target.user_id=guest_access.user_id AND target.role=?) AND EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND actor.role=?)',await accessHash(token),Date.now()+(['administrator','admin'].includes(target.role)?1:7)*86400000,target.user_id,target.role,m.user_id,m.role);if(!renewed.meta.changes)fail(409,'Oprávnění mezitím někdo změnil. Obnovte tým.');if(renew[2]==='access-link')await execute(env.DB,'UPDATE access_sessions SET revoked_at=? WHERE user_id=?',Date.now(),target.user_id);return json({email:target.email,role:target.role,mode:'link',url:accessURL(url.origin,token)});}
+    if(renew&&method==='POST'){checkManage(m);const target=await one(env.DB,'SELECT m.* FROM members m JOIN guest_access a ON a.user_id=m.user_id WHERE m.user_id=?',renew[1]);if(!target)fail(404,'Kolega s osobním odkazem nebyl nalezen.');if(!canEditTeamMember(m,target))fail(403,'Nemůžete obnovit přístup tohoto kolegy.');const token=accessToken();const renewed=await execute(env.DB,'UPDATE guest_access SET token_hash=?,expires_at=?,single_use=1 WHERE user_id=? AND EXISTS(SELECT 1 FROM members target WHERE target.user_id=guest_access.user_id AND target.role=?) AND EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND actor.role=?)',await accessHash(token),Date.now()+(['administrator','admin'].includes(target.role)?1:7)*86400000,target.user_id,target.role,m.user_id,m.role);if(!renewed.meta.changes)fail(409,'Oprávnění mezitím někdo změnil. Obnovte tým.');if(renew[2]==='access-link')await execute(env.DB,'UPDATE access_sessions SET revoked_at=? WHERE user_id=?',Date.now(),target.user_id);return json({email:target.email,role:target.role,mode:'link',url:accessURL(env.WORKSPACE_ENTRY_ORIGIN||url.origin,token)});}
     if(path.startsWith('/api/members/')&&['PATCH','DELETE'].includes(method)){
       checkManage(m);const id=decodeURIComponent(path.slice('/api/members/'.length));const target=await one(env.DB,'SELECT * FROM members WHERE user_id=?',id);if(!target)fail(404,'Člen nebyl nalezen.');if(!canEditTeamMember(m,target))fail(403,'Nemůžete měnit oprávnění tohoto kolegy.');
       if(method==='DELETE'){const r=await execute(env.DB,'DELETE FROM members WHERE user_id=? AND role=? AND EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND actor.role=?)',id,target.role,m.user_id,m.role);if(!r.meta.changes)fail(409,'Oprávnění mezitím někdo změnil. Obnovte tým.');await execute(env.DB,'UPDATE guest_access SET token_hash=NULL WHERE user_id=?',id);return json({ok:true});}
@@ -284,28 +301,31 @@ export async function api(request,env,ctx){
       if(!result.meta.changes)fail(409,'Zahradu nebo zákazníka mezitím změnil kolega. Obnovte přehled a ověřte oprávnění.');return json({garden:garden(await one(env.DB,'SELECT * FROM gardens WHERE id=?',id))});
     }
     if(path==='/api/gardens/address-from-position'&&method==='POST'){checkWrite(m);return await addressFromPosition(request,env);}
-    if(path==='/api/gardens'&&method==='GET'){const {features}=await featureSettings(env),rows=await all(env.DB,'SELECT gardens.*,garden_geocodes.address AS geocode_address,garden_geocodes.candidates AS geocode_candidates,garden_geocodes.checked_at AS geocode_checked_at FROM gardens LEFT JOIN garden_geocodes ON garden_geocodes.garden_id=gardens.id WHERE gardens.deleted=0 ORDER BY gardens.name COLLATE NOCASE');return json({gardens:(await gardenAddressLinks(env,m,rows,{all,features})).map(garden)});}
+    if(path==='/api/gardens'&&method==='GET'){const {features}=await featureSettings(env),rows=await all(env.DB,'SELECT gardens.*,garden_geocodes.address AS geocode_address,garden_geocodes.candidates AS geocode_candidates,garden_geocodes.checked_at AS geocode_checked_at FROM gardens LEFT JOIN garden_geocodes ON garden_geocodes.garden_id=gardens.id WHERE gardens.deleted=0 AND '+workspaceGardenScope('gardens')+' ORDER BY gardens.name COLLATE NOCASE',m.user_id);return json({gardens:(await gardenAddressLinks(env,m,rows,{all,features})).map(garden)});}
     if(path==='/api/gardens'&&method==='POST'){
       checkWrite(m);const b=await body(request,10_000),id=validId(b.id),name=cleanText(b.name,100,true),address=cleanText(b.address,500),notes=cleanText(b.notes,2000),pumpType=cleanText(b.pumpType??'',160),now=Date.now(),old=await one(env.DB,'SELECT * FROM gardens WHERE id=?',id),{features}=await featureSettings(env);
-      const replay=row=>row&&!row.deleted&&row.created_by===m.user_id&&row.name===name&&row.address===address&&row.notes===notes&&(row.pump_type||'')===pumpType&&(!b.customerId||row.customer_id===b.customerId);
-      if(old){if(replay(old))return json({garden:garden(old),replayed:true});gardenConflict();}
+      const creationDiscipline=workspaceWriteDiscipline(m,b,null,fail),storedNotes=m._workspace&&creationDiscipline==='garden'?'':notes;
+      const replay=async row=>row&&!row.deleted&&row.created_by===m.user_id&&row.name===name&&row.address===address&&row.notes===storedNotes&&(!m._workspace||creationDiscipline!=='garden'||(await one(env.DB,'SELECT notes FROM garden_discipline_data WHERE garden_id=? AND discipline=?',id,creationDiscipline))?.notes===notes)&&(row.pump_type||'')===pumpType&&(!b.customerId||row.customer_id===b.customerId);
+      if(old){if(await replay(old))return json({garden:garden(old),replayed:true});gardenConflict();}
       const result=await insertGardenWithCustomer(env,m,b,{id,name,address,notes,pumpType,now},features,{fail,validId,cleanText});
-      const saved=await one(env.DB,'SELECT * FROM gardens WHERE id=?',id);if(!result.meta.changes&&!replay(saved))gardenConflict();return json({garden:garden(saved),replayed:!result.meta.changes});
+      const saved=await one(env.DB,'SELECT * FROM gardens WHERE id=?',id);if(!result.meta.changes&&!await replay(saved))gardenConflict();return json({garden:garden(saved),replayed:!result.meta.changes});
     }
 
     const serviceMatch=path.match(/^\/api\/gardens\/([-a-zA-Z0-9_]{1,100})\/services(?:\/([-a-zA-Z0-9_]{1,100}))?$/);
     if(serviceMatch){
       const gardenId=serviceMatch[1],id=serviceMatch[2];if(!await one(env.DB,'SELECT id FROM gardens WHERE id=? AND deleted=0',gardenId))fail(404,'Zahrada nebyla nalezena.');
-      if(!id&&method==='GET')return json({services:(await all(env.DB,serviceSelect+' WHERE service_logs.garden_id=? AND service_logs.deleted=0 ORDER BY service_logs.date DESC,service_logs.created_at DESC',gardenId)).map(serviceLog)});
+      if(!id&&method==='GET')return json({services:(await all(env.DB,serviceSelect+' WHERE service_logs.garden_id=? AND service_logs.deleted=0 AND EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND '+workspaceDisciplineSql('service_logs.discipline')+') ORDER BY service_logs.date DESC,service_logs.created_at DESC',gardenId,m.user_id)).map(serviceLog)});
       if(id&&['PUT','DELETE'].includes(method)){
         if(method==='DELETE'){if(!['owner','administrator','admin'].includes(m.role))fail(403,'Servisní záznamy může mazat pouze správce.');}else checkWrite(m);
         const b=await body(request,25_000),version=expectedVersion(b.version),mutationId=b.mutationId==null?null:validId(b.mutationId),old=await one(env.DB,'SELECT * FROM service_logs WHERE id=?',id);
+        if(old&&m._workspace&&!m._workspace.disciplines.includes(old.discipline))fail(404,'Servisní záznam není dostupný.');
         if(old&&old.garden_id!==gardenId)fail(404,'Servisní záznam nebyl nalezen v této zahradě.');
         if(old?.deleted)fail(409,'Tento servisní záznam už kolega smazal.',{code:'service_deleted'});if(method==='PUT'&&mutationId&&old?.last_mutation_id===mutationId&&old.updated_by===m.user_id)return json({service:serviceLog(await one(env.DB,serviceSelect+' WHERE service_logs.id=?',id))});if((old?.version||0)!==version)serviceConflict();
         if(method==='DELETE'){if(!old)fail(404,'Servisní záznam nebyl nalezen.');const result=await execute(env.DB,'UPDATE service_logs SET deleted=1,version=version+1,updated_at=?,updated_by=? WHERE id=? AND garden_id=? AND version=? AND deleted=0',Date.now(),m.user_id,id,gardenId,version);if(!result.meta.changes)serviceConflict();return json({ok:true});}
+        const discipline=workspaceWriteDiscipline(m,b,old,fail);
         const date=validServiceDate(b.date),work=cleanText(b.work,4000,true),parts=cleanText(b.parts,2000),notes=cleanText(b.notes,2000),now=Date.now();let result;
         if(old)result=await execute(env.DB,'UPDATE service_logs SET date=?,work=?,parts=?,notes=?,last_mutation_id=?,version=version+1,updated_at=?,updated_by=? WHERE id=? AND garden_id=? AND version=? AND deleted=0 AND EXISTS(SELECT 1 FROM gardens WHERE id=? AND deleted=0)',date,work,parts,notes,mutationId,now,m.user_id,id,gardenId,version,gardenId);
-        else result=await execute(env.DB,'INSERT OR IGNORE INTO service_logs(id,garden_id,date,work,parts,notes,last_mutation_id,version,created_at,updated_at,created_by,updated_by,deleted) SELECT ?,?,?,?,?,?,?,1,?,?,?,?,0 WHERE EXISTS(SELECT 1 FROM gardens WHERE id=? AND deleted=0)',id,gardenId,date,work,parts,notes,mutationId,now,now,m.user_id,m.user_id,gardenId);
+        else result=await execute(env.DB,'INSERT OR IGNORE INTO service_logs(discipline,id,garden_id,date,work,parts,notes,last_mutation_id,version,created_at,updated_at,created_by,updated_by,deleted) SELECT ?,?,?,?,?,?,?,?,1,?,?,?,?,0 WHERE EXISTS(SELECT 1 FROM gardens WHERE id=? AND deleted=0)',discipline,id,gardenId,date,work,parts,notes,mutationId,now,now,m.user_id,m.user_id,gardenId);
         if(!result.meta.changes){const latest=await one(env.DB,'SELECT * FROM service_logs WHERE id=?',id);if(!mutationId||latest?.deleted||latest?.last_mutation_id!==mutationId||latest?.updated_by!==m.user_id)serviceConflict();}return json({service:serviceLog(await one(env.DB,serviceSelect+' WHERE service_logs.id=?',id))});
       }
     }
@@ -332,7 +352,11 @@ export async function api(request,env,ctx){
       if(!gardenMatch[2]&&method==='DELETE')return await deleteGarden(request,env,ctx,m,old);
       if(!gardenMatch[2]&&method==='PATCH'){
         checkWrite(m);const b=await body(request,10_000),version=expectedVersion(b.version),name=cleanText(b.name,100,true),address=cleanText(b.address,500),notes=cleanText(b.notes,2000),pumpType=Object.hasOwn(b,'pumpType')?cleanText(b.pumpType,160):(old.pump_type||'');
-        const result=await execute(env.DB,'UPDATE gardens SET name=?,address=?,notes=?,pump_type=?,version=version+1,updated_at=?,updated_by=? WHERE id=? AND version=? AND deleted=0',name,address,notes,pumpType,Date.now(),m.user_id,id,version);if(!result.meta.changes)gardenConflict();return json({garden:garden(await one(env.DB,'SELECT * FROM gardens WHERE id=?',id))});
+        const discipline=workspaceWriteDiscipline(m,b,null,fail);if(m._workspace&&discipline==='garden'&&Object.hasOwn(b,'pumpType')&&pumpType!==(old.pump_type||''))fail(403,'Údaje o čerpadle patří závlahám.');
+        const storedNotes=m._workspace&&discipline==='garden'?old.notes:notes;
+        const primary=env.DB.prepare('UPDATE gardens SET name=?,address=?,notes=?,pump_type=?,version=version+1,updated_at=?,updated_by=? WHERE id=? AND version=? AND deleted=0').bind(name,address,storedNotes,pumpType,Date.now(),m.user_id,id,version);
+        const statements=[primary];if(m._workspace)statements.push(workspaceGardenNotesStatement(env,m,id,discipline,notes,'EXISTS(SELECT 1 FROM gardens WHERE id=? AND version=? AND updated_by=?)',id,version+1,m.user_id));
+        const result=(await env.DB.batch(statements))[0];if(!result.meta.changes)gardenConflict();return json({garden:garden(await one(env.DB,'SELECT * FROM gardens WHERE id=?',id))});
       }
       if(isPlan&&method==='GET'){
         if(!old.plan_key)fail(404,'Zahrada zatím nemá plán.');const obj=await env.BUCKET.get(old.plan_key);if(!obj)fail(404,'Plán nebyl nalezen.');
@@ -353,7 +377,7 @@ export async function api(request,env,ctx){
         if(!result.meta.changes){await env.BUCKET.delete(key);gardenConflict();}if(old.plan_key)ctx.waitUntil(env.BUCKET.delete(old.plan_key));return json({garden:garden(await one(env.DB,'SELECT * FROM gardens WHERE id=?',id))});
       }
     }
-    if(path==='/api/shafts'&&method==='GET'){return json({records:(await all(env.DB,"SELECT shafts.*, COALESCE(members.name,'Kolega') AS updater_name FROM shafts LEFT JOIN members ON members.user_id=shafts.updated_by ORDER BY shafts.updated_at DESC LIMIT 2000")).map(record)});}
+    if(path==='/api/shafts'&&method==='GET'){return json({records:(await all(env.DB,"SELECT shafts.*, COALESCE(members.name,'Kolega') AS updater_name FROM shafts LEFT JOIN members ON members.user_id=shafts.updated_by WHERE shafts.garden_id IS NULL OR EXISTS(SELECT 1 FROM gardens g WHERE g.id=shafts.garden_id AND "+workspaceGardenScope()+") ORDER BY shafts.updated_at DESC LIMIT 2000",m.user_id)).map(record)});}
     const match=path.match(/^\/api\/shafts\/([-a-zA-Z0-9_]{1,100})(\/photo)?$/);
     if(match){
       const id=match[1],photo=!!match[2],old=await one(env.DB,'SELECT * FROM shafts WHERE id=?',id);
@@ -383,5 +407,5 @@ export async function api(request,env,ctx){
       }
     }
     fail(404,'Požadavek nebyl nalezen.');
-  }catch(error){if(error instanceof HttpError)return json({error:error.message,...error.extra},error.status);console.error('Team API error',error?.name,error?.message);return json({error:'Týmové úložiště není dostupné. Zkuste to za chvíli.'},503);}
+  }catch(error){if(String(error?.message).includes('workspace_'))return json({error:'Změna neodpovídá aktuálnímu oboru nebo oprávnění. Obnovte údaje.',code:'workspace_conflict'},409);if(error instanceof HttpError)return json({error:error.message,...error.extra},error.status);console.error('Team API error',error?.name,error?.message);return json({error:'Týmové úložiště není dostupné. Zkuste to za chvíli.'},503);}
 }

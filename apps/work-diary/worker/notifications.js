@@ -1,10 +1,11 @@
+import {workspaceDisciplineSql} from './workspace-policy.js';
 import {normalizeFeatures,featureEnabled} from '../web/features.js';
 import {tenantPolicy,tenantFeaturePolicy} from './tenant-platform.js';
 import {pushBytes,pushEndpoint,sendWebPush,pushDiagnostic} from './web-push.js';
 // Recheck access on every inbox read, mark-read and delivery, including assignment/role changes.
 const notificationAccess=`EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=n.user_id AND (
- (n.kind IN ('job_assigned','job_reminder','job_handoff') AND EXISTS(SELECT 1 FROM jobs j WHERE j.id=n.resource_id AND j.deleted=0 AND j.service_approval='confirmed' AND (n.kind<>'job_reminder' OR (j.job_type='installation' AND j.status<>'done' AND n.event_key='service-reminder:'||j.id||':'||j.due_date||':'||n.user_id)) AND ((j.assigned_to=actor.user_id OR EXISTS(SELECT 1 FROM json_each(j.assigned_users) selected WHERE selected.value=actor.user_id)) OR actor.role IN ('owner','administrator','admin')))) OR
- (n.kind IN ('job_status','job_material') AND actor.role IN ('owner','administrator','admin') AND EXISTS(SELECT 1 FROM jobs j WHERE j.id=n.resource_id AND j.deleted=0)) OR
+ (n.kind IN ('job_assigned','job_reminder','job_handoff') AND EXISTS(SELECT 1 FROM jobs j WHERE j.id=n.resource_id AND ${workspaceDisciplineSql('j.discipline')} AND j.deleted=0 AND j.service_approval='confirmed' AND (n.kind<>'job_reminder' OR (j.job_type='installation' AND j.status<>'done' AND n.event_key='service-reminder:'||j.id||':'||j.due_date||':'||n.user_id)) AND ((j.assigned_to=actor.user_id OR EXISTS(SELECT 1 FROM json_each(j.assigned_users) selected WHERE selected.value=actor.user_id)) OR actor.role IN ('owner','administrator','admin')))) OR
+ (n.kind IN ('job_status','job_material') AND actor.role IN ('owner','administrator','admin') AND EXISTS(SELECT 1 FROM jobs j WHERE j.id=n.resource_id AND ${workspaceDisciplineSql('j.discipline')} AND j.deleted=0)) OR
  (n.kind='attendance_request' AND actor.role IN ('owner','administrator','admin') AND EXISTS(SELECT 1 FROM attendance_corrections c WHERE c.id=n.resource_id)) OR
  (n.kind='vehicle_deadline' AND EXISTS(SELECT 1 FROM vehicles v WHERE v.id=n.resource_id AND v.archived_at IS NULL AND (actor.role IN ('owner','administrator','admin') OR EXISTS(SELECT 1 FROM vehicle_drivers d WHERE d.user_id=actor.user_id AND d.enabled=1 AND d.vehicle_id=v.id)))) OR
  (n.kind='attendance_review' AND EXISTS(SELECT 1 FROM attendance_corrections c WHERE c.id=n.resource_id AND c.user_id=actor.user_id))))`;

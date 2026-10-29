@@ -1,8 +1,10 @@
+import {workspaceDisciplineSql} from './workspace-policy.js';
+import {workspaceWriteDiscipline} from './workspace-resources.js';
 import {jobAssignedIds,jobAssignment} from './assignments.js';
 import {subDate,subAddDays,subPeriodEnd,subToday,subSuggestedDates,subBalances} from '../web/subscription-model.js';
 export const subAll=(db,sql,...args)=>db.prepare(sql).bind(...args).all().then(r=>r.results);
 export const subOne=(db,sql,...args)=>db.prepare(sql).bind(...args).first();
-export const subScope="EXISTS(SELECT 1 FROM members a WHERE a.user_id=? AND (a.role IN ('owner','administrator','admin') OR EXISTS(SELECT 1 FROM subscription_periods sp JOIN jobs sj ON sj.service_period_id=sp.id WHERE sp.subscription_id=s.id AND (sj.assigned_to=a.user_id OR EXISTS(SELECT 1 FROM json_each(sj.assigned_users) selected WHERE selected.value=a.user_id)) AND sj.deleted=0 AND sj.service_approval='confirmed')))";
+export const subScope=`EXISTS(SELECT 1 FROM members a WHERE a.user_id=? AND ${workspaceDisciplineSql('s.discipline','a')} AND (a.role IN ('owner','administrator','admin') OR EXISTS(SELECT 1 FROM subscription_periods sp JOIN jobs sj ON sj.service_period_id=sp.id WHERE sp.subscription_id=s.id AND (sj.assigned_to=a.user_id OR EXISTS(SELECT 1 FROM json_each(sj.assigned_users) selected WHERE selected.value=a.user_id)) AND sj.deleted=0 AND sj.service_approval='confirmed')))`;
 const subManagerGate="EXISTS(SELECT 1 FROM members a WHERE a.user_id=? AND a.role IN ('owner','administrator','admin'))";
 export async function subHash(value){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),b=>b.toString(16).padStart(2,'0')).join('');}
 export async function subReplay(env,id,userId,entity,hash,fail){const old=await subOne(env.DB,'SELECT * FROM subscription_operations WHERE id=?',id);if(!old)return false;if(old.user_id!==userId||old.entity_id!==entity||old.hash!==hash)fail(409,'Identifikátor požadavku už byl použit pro jinou změnu.');return true;}
@@ -83,6 +85,7 @@ export async function handleSubscriptions(request,env,m,h){
  const old=await subOne(env.DB,'SELECT * FROM subscriptions WHERE id=?',id),version=integer(b.version),now=Date.now();if(old?.deleted_at)fail(404,'Předplatné bylo smazáno.');
  if((old?.version||0)!==version)fail(409,'Předplatné mezitím změnil jiný správce. Obnovte detail.');
  if(action!=='activate'&&!old)fail(404,'Předplatné nebylo nalezeno.');if(action==='activate'&&old)fail(409,'Předplatné už existuje.');
+ const discipline=workspaceWriteDiscipline(m,b,old,fail);
  const gate="EXISTS(SELECT 1 FROM subscriptions WHERE id=? AND last_operation=? AND version=?) AND NOT EXISTS(SELECT 1 FROM subscription_operations WHERE id=?)",gateArgs=[id,operationId,version+1,operationId];
  const statements=[];let newPeriod=null,newJobs=[];
  if(['activate','change','renew'].includes(action)){
@@ -110,7 +113,7 @@ export async function handleSubscriptions(request,env,m,h){
   }
   if(newJobs.length>80)fail(400,'Plán je příliš rozsáhlý. Zmenšete počet automatických návštěv.');
   if(b.autoConfirm===undefined)for(const j of newJobs)j.approval=snapshot.autoConfirm?'confirmed':'pending';
-  if(!old)statements.push(env.DB.prepare(`INSERT OR IGNORE INTO subscriptions(id,customer_id,garden_id,status,version,last_operation,created_at,updated_at,updated_by) SELECT ?,?,?,'active',1,?,?,?,? WHERE ${subManagerGate}`).bind(id,customer.id,gardenId,operationId,now,now,m.user_id,m.user_id));
+  if(!old)statements.push(env.DB.prepare(`INSERT OR IGNORE INTO subscriptions(discipline,id,customer_id,garden_id,status,version,last_operation,created_at,updated_at,updated_by) SELECT ?,?,?,?,'active',1,?,?,?,? WHERE ${subManagerGate}`).bind(discipline,id,customer.id,gardenId,operationId,now,now,m.user_id,m.user_id));
   if(action==='change'){
    statements.push(env.DB.prepare(`UPDATE subscription_periods SET end_date=? WHERE id=? AND ${gate}`).bind(subAddDays(start,-1),previous.id,...gateArgs));
    statements.push(env.DB.prepare(`UPDATE jobs SET deleted=1,version=version+1,updated_at=?,updated_by=? WHERE service_period_id=? AND due_date>=? AND status<>'done' AND deleted=0 AND ${gate}`).bind(now,m.user_id,previous.id,start,...gateArgs));
@@ -149,7 +152,7 @@ export async function handleSubscriptions(request,env,m,h){
   newPeriod={id:p.id};newJobs.push({id:validId(b.jobId),service,unit:(last.n||0)+1,date:day,title:service.name+' – '+customer.name,address:garden?.address||JSON.parse(customer.addresses)[0]?.address||'',city:'',customer,gardenId:old.garden_id,assignedTo:person.user_id,additional:assignment.additional,assignedName:person.name,approval:b.confirm===true?'confirmed':'pending'});
  }
  if(!['activate','change','renew','state','payment','plan','confirm-plan','visit'].includes(action))fail(404,'Neznámá změna.');
- for(const j of newJobs)statements.push(env.DB.prepare(`INSERT INTO jobs(id,title,description,address,garden_id,assigned_to,assigned_users,assigned_name,due_date,status,incomplete_reason,version,created_at,updated_at,created_by,updated_by,deleted,customer_name,city,customer_id,service_period_id,service_item_id,service_unit,service_approval,service_deduct) SELECT ?,?,?,?,?,?,?,?,?,'planned','',1,?,?,?,?,0,?,?,?,?,?,?,?,? WHERE ${gate}`).bind(j.id,j.title.slice(0,120),j.service.description,j.address.slice(0,200),j.gardenId,j.assignedTo,JSON.stringify(j.additional||[]),j.assignedName,j.date,now,now,m.user_id,m.user_id,j.customer.name,j.city,j.customer.id,newPeriod.id,j.service.id,j.unit,j.approval,j.service.deduct?1:0,...gateArgs));
+ for(const j of newJobs)statements.push(env.DB.prepare(`INSERT INTO jobs(discipline,id,title,description,address,garden_id,assigned_to,assigned_users,assigned_name,due_date,status,incomplete_reason,version,created_at,updated_at,created_by,updated_by,deleted,customer_name,city,customer_id,service_period_id,service_item_id,service_unit,service_approval,service_deduct) SELECT ?,?,?,?,?,?,?,?,?,?,'planned','',1,?,?,?,?,0,?,?,?,?,?,?,?,? WHERE ${gate}`).bind(discipline,j.id,j.title.slice(0,120),j.service.description,j.address.slice(0,200),j.gardenId,j.assignedTo,JSON.stringify(j.additional||[]),j.assignedName,j.date,now,now,m.user_id,m.user_id,j.customer.name,j.city,j.customer.id,newPeriod.id,j.service.id,j.unit,j.approval,j.service.deduct?1:0,...gateArgs));
  statements.push(subOperation(env,operationId,m.user_id,id,hash,gate,gateArgs));
  let results;try{results=await env.DB.batch(statements);}catch(error){if(String(error.message).includes('subscriptions.status'))fail(409,'Servisní plán nebo přiřazení se mezitím změnilo. Obnovte detail.');if(await subReplay(env,operationId,m.user_id,id,hash,fail))return json({subscription:await subRead(env,m,id,fail),replayed:true});throw error;}
  if(!results[0].meta.changes&&!await subReplay(env,operationId,m.user_id,id,hash,fail))fail(409,'Změna nebyla uložena. Obnovte detail a ověřte oprávnění.');

@@ -34,7 +34,9 @@ test('Cancelled and reissued invitations are unusable; administrators cannot cre
  assert.equal((await call(env,'/api/members/'+id+'/access-link',people.admin,'POST')).status,403);assert.equal((await call(env,'/api/members/'+id,people.admin,'DELETE')).status,403);
  assert.equal((await call(env,'/api/invitations',people.owner,'POST',{email:people.owner.email,role:'admin',mode:'link'})).status,409);
 });
-test('Anonymous link attempts are throttled, invalid cookies cannot select a member, and logout clears the cookie',async()=>{
+test('Anonymous link attempts are throttled, invalid cookies cannot select a member, and logout clears the cookie',async t=>{
+ // Exercise one fixed rate-limit window; crossing a real minute is not a bypass.
+ const now=Date.now();t.mock.method(Date,'now',()=>now);
  const env=await setup();for(let n=0;n<60;n++)assert.equal((await call(env,'/api/access-info',undefined,'POST',{token:'0'.repeat(64)})).status,401);assert.equal((await call(env,'/api/access-info',undefined,'POST',{token:'0'.repeat(64)})).status,429);
  assert.equal((await call(env,'/api/me',people.owner,'GET',undefined,{cookie:'__Host-zavlahy-access=not-a-key'})).status,401);
  const r=await call(env,'/api/access-logout',undefined,'POST');assert.equal(r.status,200);assert.match(r.headers.get('set-cookie'),/Max-Age=0/);assert.equal((await call(env,'/api/access-logout',undefined,'POST',undefined,{origin:'https://evil.test'})).status,403);
