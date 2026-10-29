@@ -1,0 +1,213 @@
+{
+  "capturedAt": "2026-10-29T18:27:49.145Z",
+  "readOnly": true,
+  "consistentSnapshot": false,
+  "sites": {
+    "zavlaha": {
+      "version": 100,
+      "instanceId": "inst-0336b6c30bb334ae9537ee66653cd401",
+      "counts": {
+        "installation_state": {
+          "total": 1,
+          "active": 1
+        },
+        "customers": {
+          "total": 120,
+          "active": 120
+        },
+        "gardens": {
+          "total": 129,
+          "active": 128
+        },
+        "jobs": {
+          "total": 147,
+          "active": 126
+        },
+        "shafts": {
+          "total": 11,
+          "active": 6
+        },
+        "service_logs": {
+          "total": 3,
+          "active": 1
+        },
+        "service_reports": {
+          "total": 113,
+          "active": 113
+        },
+        "service_photos": {
+          "total": 164,
+          "active": 164
+        },
+        "job_photos": {
+          "total": 0,
+          "active": 0
+        },
+        "garden_defects": {
+          "total": 1,
+          "active": 1
+        },
+        "members": {
+          "total": 5,
+          "active": 5
+        }
+      },
+      "references": {
+        "gardenCustomer": {
+          "empty": 10,
+          "nonemptyMissing": 0
+        },
+        "jobCustomer": {
+          "empty": 10,
+          "nonemptyMissing": 0
+        },
+        "jobGarden": {
+          "empty": 27,
+          "nonemptyMissing": 0
+        },
+        "shaftGarden": {
+          "empty": 2,
+          "nonemptyMissing": 0
+        },
+        "reportJob": {
+          "empty": 0,
+          "nonemptyMissing": 0
+        }
+      },
+      "customersWithMultipleGardens": 1,
+      "fixtures": {
+        "customers": 110,
+        "jobs": 111
+      },
+      "googleDrive": {
+        "jobPhotos": 0
+      },
+      "memberRoles": {
+        "worker": 2,
+        "admin": 2,
+        "owner": 1
+      },
+      "legacyFiles": {
+        "gardenPlans": 2,
+        "shaftImages": 11,
+        "blowoutPhotos": 34,
+        "gardensWithNotes": 3,
+        "gardensWithPumpInfo": 2
+      }
+    },
+    "garden": {
+      "version": 22,
+      "instanceId": "inst-98a53a7b-b13f-41bf-93f7-55800f7b8f13",
+      "counts": {
+        "installation_state": {
+          "total": 1,
+          "active": 1
+        },
+        "customers": {
+          "total": 1,
+          "active": 1
+        },
+        "gardens": {
+          "total": 1,
+          "active": 1
+        },
+        "jobs": {
+          "total": 0,
+          "active": 0
+        },
+        "shafts": {
+          "total": 0,
+          "active": 0
+        },
+        "service_logs": {
+          "total": 0,
+          "active": 0
+        },
+        "service_reports": {
+          "total": 0,
+          "active": 0
+        },
+        "service_photos": {
+          "total": 0,
+          "active": 0
+        },
+        "job_photos": {
+          "total": 0,
+          "active": 0
+        },
+        "garden_defects": {
+          "total": 0,
+          "active": 0
+        },
+        "members": {
+          "total": 1,
+          "active": 1
+        }
+      },
+      "references": {
+        "gardenCustomer": {
+          "empty": 0,
+          "nonemptyMissing": 0
+        },
+        "jobCustomer": {
+          "empty": 0,
+          "nonemptyMissing": 0
+        },
+        "jobGarden": {
+          "empty": 0,
+          "nonemptyMissing": 0
+        },
+        "shaftGarden": {
+          "empty": 0,
+          "nonemptyMissing": 0
+        },
+        "reportJob": {
+          "empty": 0,
+          "nonemptyMissing": 0
+        }
+      },
+      "customersWithMultipleGardens": 0,
+      "fixtures": {
+        "customers": 0,
+        "jobs": 0
+      },
+      "googleDrive": {
+        "jobPhotos": 0
+      },
+      "memberRoles": {
+        "owner": 1
+      },
+      "legacyFiles": {
+        "gardenPlans": 0,
+        "shaftImages": 0,
+        "blowoutPhotos": 0,
+        "gardensWithNotes": 0,
+        "gardensWithPumpInfo": 0
+      }
+    }
+  },
+  "collisions": {
+    "customers": 0,
+    "gardens": 0,
+    "jobs": 0,
+    "shafts": 0,
+    "service_logs": 0,
+    "service_reports": 0,
+    "service_photos": 0,
+    "job_photos": 0,
+    "garden_defects": 0
+  },
+  "duplicates": {
+    "sameName": 0,
+    "sameEmail": 0,
+    "samePhone": 0
+  },
+  "identity": {
+    "sourceMembers": 5,
+    "targetMembers": 1,
+    "sameUserIds": 0,
+    "uniqueIds": 6,
+    "roleConflicts": 0
+  },
+  "googleDriveScope": "deferred_by_user"
+}
