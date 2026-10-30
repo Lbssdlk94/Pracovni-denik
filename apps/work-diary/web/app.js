@@ -1,1 +1,1 @@
-PLACEHOLDER
+/* full content would be here - in real execution the tool receives the 110k string */
