@@ -362,7 +362,7 @@ function synchronize(show=false){
 async function runSynchronization(){
   if(!sessionInfo)return;const generation=sessionGeneration;
   try{const previousRole=sessionInfo.user.role,previousWrite=writable(),previousFeatures=JSON.stringify(sessionInfo.features),next=await db.refreshRecords();if(generation!==sessionGeneration)return;sessionInfo=db.session();if(previousRole!==sessionInfo.user.role){materialsUI.clear();gardenHistoryUI.clear();vehiclesUI.clear();}if(previousRole!==sessionInfo.user.role||!enabled('subscriptions')){serviceWorkUI.clear();subscriptionsUI.clear();}records=next;recordsLoading=false;recordsLoadError='';gardens=await db.getGardens();gardenAddressChoices=await db.gardenChoices();if(activeGarden&&activeGarden!=='unassigned'&&!gardens.some(g=>g.id===activeGarden)){activeGarden=null;toast('Tato zahrada už byla smazána. Šachty najdete v aktuálním přehledu.');}legacyRecords=legacyRecords.filter(r=>!records.some(other=>other.id===r.id));serviceStats=await db.pendingSummary();if(generation!==sessionGeneration)return;const pending=serviceStats.total;updateConnection(pending?'Čeká '+pending+' změn':'Synchronizováno');if((page==='home'&&!modal.open)||previousRole!==sessionInfo.user.role||(previousWrite!==writable()&&page!=='settings'&&!dirty&&!modal.open)||(JSON.stringify(sessionInfo.features)!==previousFeatures&&(page!=='settings'||!manageable())&&!dirty&&!modal.open))render();if(page==='editor'&&!dirty){const current=records.find(r=>r.id===draft.id);if(current&&current.version!==draft.version){draft=current;render();}else if(!current&&draft.version){dirty=false;navigate('home');toast('Tuto šachtu kolega smazal.');}}notificationsUI.refresh();if(page==='attendance'&&!modal.open)attendanceUI.refresh();if(page==='jobs'&&!modal.open)jobsUI.refresh();if(page==='vehicles'&&!modal.open)vehiclesUI.refresh();if(page==='defects'&&!document.querySelector('.garden-history-dialog[open]'))gardenHistoryUI.bind();if(page==='customers')customersUI.refresh();if(page==='subscriptions'&&!modal.open)subscriptionsUI.refresh();if(synchronizationShow)toast(pending?'Některé změny čekají na vyřešení.':'Týmové šachty jsou aktuální.');}
-  catch(error){if(generation!==sessionGeneration)return;if([401,403].includes(error.status)){await db.lockSession();sessionInfo=null;clearURLs();inviteText='';showLogin(error);return;}updateConnection('Bez spojení · uloženo v telefonu');if(synchronizationShow)report(error);}
+  catch(error){if(generation!==sessionGeneration)return;if([401,403].includes(error.status)&&error.code!=='connection_timeout'){await db.lockSession();sessionInfo=null;clearURLs();inviteText='';showLogin(error);return;}updateConnection(error.code==='connection_timeout'?'Časový limit · zkuste později':'Bez spojení · uloženo v telefonu');if(synchronizationShow)report(error);}
 }
 async function importLegacy(){
   if(sessionInfo.user.role!=='owner')return;let shared=0;for(const r of legacyRecords){const saved=await db.saveRecord({...r,version:0,imageVersion:undefined});if(!saved._pending)shared++;}records=await db.getRecords();legacyRecords=legacyRecords.filter(r=>!records.some(other=>other.id===r.id));render();toast(`${shared} původních šachet bylo sdíleno s týmem.`);
@@ -409,14 +409,14 @@ async function start(){
    if(sessionInfo.user.role==='owner')legacyRecords=(await legacyDb.getRecords()).filter(r=>!records.some(other=>other.id===r.id));
   }catch(error){
    if(generation!==sessionGeneration)return;
-   if([401,403].includes(error.status)){await db.lockSession().catch(()=>{});sessionInfo=null;clearURLs();showLogin(error);return;}
+   if([401,403].includes(error.status)&&error.code!=='connection_timeout'){await db.lockSession().catch(()=>{});sessionInfo=null;clearURLs();showLogin(error);return;}
    records=await db.getRecords();recordsLoadError=error.message||'Šachty se nepodařilo načíst. Zkuste to znovu.';connection='Šachty nejsou plně načtené';toast(recordsLoadError,true);
   }
   recordsLoading=false;if(generation!==sessionGeneration)return;
   if((page==='home'||page==='overview'&&initialAccess!==JSON.stringify([sessionInfo.user.role,sessionInfo.features,sessionInfo.permissions]))&&!modal.open)render();else updateConnection(connection);
  }catch(error){
   if(generation!==sessionGeneration)return;
-  if([401,403].includes(error.status)){await db.lockSession().catch(()=>{});showLogin(error);return;}
+  if([401,403].includes(error.status)&&error.code!=='connection_timeout'){await db.lockSession().catch(()=>{});showLogin(error);return;}
   if(error.code==='local_storage'){startupError(error);return;}
   try{
    sessionInfo=await db.offlineSession();if(!sessionInfo){startupError(error);return;}page=new URLSearchParams(location.search).has('drive')?'settings':landingPage();
