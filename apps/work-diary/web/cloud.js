@@ -3,10 +3,13 @@ import {workspaceSameAccount} from './workspace-sync-model.js?v=shared-directory
 import {captureActiveFormDrafts} from './form-drafts.js?v=shared-directory-v1';
 import {pendingGardenHistory} from './garden-history-model.js?v=workspace-roles-v1';
 import {packLocalPhotos,unpackLocalPhotos} from './photo-storage.js?v=workspace-roles-v1';
-import {readFromServer,openLocalDatabase,finishLocalTransaction} from './io.js?v=workspace-roles-v1';
+import {readFromServer,openLocalDatabase,finishLocalTransaction,transientConnectionError} from './io.js?v=connection-recovery-v1';
 import {normalizeAddress} from './nearby.js?v=workspace-roles-v1';
 import {featureEnabled} from './features.js?v=fleet-photo-v1';
 import {DEFAULT_ZONES} from './model.js?v=workspace-roles-v1';
+let pendingSyncFlight=null;
+const communicationSamples=[];
+export const communicationDiagnostics=()=>communicationSamples.map(sample=>({...sample}));
 let database,opening,identity,zonesVersion=0,refreshFlight=null,workspaceBlocked=false,workspaceEpoch=0,workspaceReconciling=false,workspaceChecking=null;
 const workspaceSeen={records:new Set(),gardens:new Set(),services:new Set(),serviceWork:new Set(),defects:new Set()};
 const open=()=>database?Promise.resolve(database):opening||(opening=openLocalDatabase('zavlahovy-denik-team',5,r=>{const db=r.result;if(!db.objectStoreNames.contains('recovery'))db.createObjectStore('recovery',{keyPath:'id'});if(!db.objectStoreNames.contains('defects'))db.createObjectStore('defects',{keyPath:'id'});if(!db.objectStoreNames.contains('serviceWork'))db.createObjectStore('serviceWork',{keyPath:'id'});if(!db.objectStoreNames.contains('records'))db.createObjectStore('records',{keyPath:'id'});if(!db.objectStoreNames.contains('settings'))db.createObjectStore('settings');if(!db.objectStoreNames.contains('services')){const target=db.createObjectStore('services',{keyPath:'id'}),cursor=r.transaction.objectStore('settings').openCursor();cursor.onsuccess=()=>{const c=cursor.result;if(!c)return;if(String(c.key).startsWith('services:')&&Array.isArray(c.value))for(const value of c.value)target.put({...value,gardenId:value.gardenId||String(c.key).slice(9)});c.continue();};}}).then(db=>{database=db;database.onversionchange=()=>{database.close();database=null;opening=null;};return db;}).catch(error=>{opening=null;throw error;}));
@@ -27,10 +30,13 @@ export async function request(path,options={}){
   if(identity?.workspace?.selectedDiscipline&&['/api/jobs','/api/customers','/api/gardens','/api/defects'].includes(path.split('?')[0])){const selected=new URL(path,location.origin);if(!selected.searchParams.has('discipline'))selected.searchParams.set('discipline',identity.workspace.selectedDiscipline);path=selected.pathname+selected.search;}
   const epoch=workspaceEpoch,headers=new Headers(options.headers);headers.set('x-workspace-client-version','shared-directory-v1');if(identity?.workspace?.selectedDiscipline&&!headers.has('x-work-discipline'))headers.set('x-work-discipline',identity.workspace.selectedDiscipline);if(options.method&&options.method!=='GET')headers.set('x-zavlahy-request','1');
   const {timeoutMs,...fetchOptions}=options;
-  return readFromServer(path,{...fetchOptions,headers,credentials:'same-origin',cache:'no-store'},async response=>{
+  const started=performance.now();let failure;
+  try{return await readFromServer(path,{...fetchOptions,headers,credentials:'same-origin',cache:'no-store'},async response=>{
     if(!response.ok){const data=await response.json().catch(()=>({error:'Přihlášení vypršelo. Otevřete svůj osobní odkaz znovu.'}));const error=new Error(data.error||'Operace se nepodařila.');error.status=response.status;error.code=data.code;error.preview=data.preview;error.email=data.email;if(error.code==='workspace_conflict')window.dispatchEvent(new CustomEvent('workspace-recheck-required'));throw error;}
     const value=await response.json();if(epoch!==workspaceEpoch||workspaceBlocked)throw workspaceResetError();rememberWorkspaceIds(value);return value;
-  },timeoutMs??(options.method&&options.method!=='GET'?60000:15000));
+  },timeoutMs??(options.method&&options.method!=='GET'?60000:15000),{retries:1});}
+  catch(error){failure=error;if(transientConnectionError(error))window.dispatchEvent(new CustomEvent('communication-retry-needed'));throw error;}
+  finally{communicationSamples.push({route:'/api/'+path.split('/')[2]?.split('?')[0],method:options.method||'GET',ms:Math.round(performance.now()-started),status:failure?.status||(!failure?200:0),code:failure?.code||null});if(communicationSamples.length>50)communicationSamples.shift();}
 }
 export async function checkAccountSwitch(id,info=null){const previous=await getSetting('session');if(previous?.user.id&&!workspaceSameAccount(previous,{user:{id},installation:info?.installation,workspace:info?.workspace})&&(await pendingSummary()).total){const error=new Error('V tomto zařízení čekají nesdílené změny jiného uživatele. Nejdříve je sdílejte původním účtem nebo jeho osobním odkazem.');error.code='pending_account';throw error;}}
 export async function checkChatGPTSwitch(){const previous=await getSetting('session');if(previous?.user.authMethod==='link'&&(await pendingSummary()).total)throw new Error('Nejdříve sdílejte čekající změny pomocí původního osobního odkazu.');}
@@ -61,15 +67,11 @@ export async function saveRecord(record){
     throw error;
   }
 }
-export async function waitForRefresh(){if(refreshFlight)await refreshFlight.catch(()=>{});}
-export async function refreshRecords(){
+export async function waitForRefresh(){await Promise.allSettled([refreshFlight,pendingSyncFlight].filter(Boolean));}
+export async function refreshRecords({reconnect=true}={}){
   if(refreshFlight)return refreshFlight;
   refreshFlight=(async()=>{
-    await connect();if(identity.license&&!identity.license.active)return getRecords();if(!identity.license||identity.license.modules.service)await syncServices();await syncServiceWork();if(!identity.license||identity.license.modules.defects)await syncDefects();
-    for(const pending of (await getRecords()).filter(r=>r._pending&&!r._conflict)){
-      if(!identity.permissions.write||!featureEnabled('shafts',identity.features)||identity.license&&!identity.license.modules.shafts)break;
-      try{await upload(pending);}catch(error){if(error.status===409||error.code==='garden_missing')await put({...pending,_conflict:true});else throw error;}
-    }
+    if(reconnect)await connect();if(identity.license&&!identity.license.active)return getRecords();
     if(!featureEnabled('shafts',identity.features)||identity.license&&!identity.license.modules.shafts)return [];const data=await request('/api/shafts');
     for(const remote of data.records){const local=await get(remote.id);if(local?._pending){if(remote.version!==local.version||remote.deleted)await put({...local,_conflict:true});continue;}if(remote.deleted){if(local)await remove(remote.id);continue;}
       if(local?.version===remote.version&&!local._needsRefresh)continue;
@@ -81,9 +83,26 @@ export async function refreshRecords(){
   })();
   try{return await refreshFlight;}finally{refreshFlight=null;}
 }
+// A failed photo/upload is independent of loading jobs, customers and gardens.
+// No queue is removed here: each sender acknowledges only its own operation ID.
+export async function syncPendingChanges(){
+ if(!identity||workspaceBlocked||!navigator.onLine||identity.license&&!identity.license.active)return;
+ if(pendingSyncFlight)return pendingSyncFlight;
+ const task=(async()=>{
+  for(const send of [()=>featureEnabled('service',identity?.features)&&syncServices(),()=>syncServiceWork(),()=>featureEnabled('defects',identity?.features)&&syncDefects(),async()=>{
+    for(const pending of (await getRecords()).filter(r=>r._pending&&!r._conflict)){
+      if(!identity.permissions.write||!featureEnabled('shafts',identity.features)||identity.license&&!identity.license.modules.shafts)break;
+      try{await upload(pending);}catch(error){if(error.status===409||error.code==='garden_missing')await put({...pending,_conflict:true});else throw error;}
+    }
+  }]){
+   try{await send();}catch(error){if([401,403].includes(error.status)||workspaceBlocked)throw error;window.dispatchEvent(new CustomEvent('communication-retry-needed'));}
+  }
+ })();pendingSyncFlight=task;
+ try{return await task;}finally{if(pendingSyncFlight===task)pendingSyncFlight=null;}
+}
 export async function discardConflict(id){await remove(id);return refreshRecords();}
 export async function deleteRecord(id){const record=await get(id);if(!record?.version){await remove(id);return;}await request('/api/shafts/'+encodeURIComponent(id),{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({version:record.version})});await remove(id);}
-export async function getGardens(){if(identity?.license&&(!identity.license.active||!identity.license.modules.gardens))return [];const data=await request('/api/gardens');await setting('gardens',data.gardens);return data.gardens;}
+export async function getGardens(){if(!featureEnabled('gardens',identity?.features))return [];if(identity?.license&&(!identity.license.active||!identity.license.modules.gardens))return [];const data=await request('/api/gardens');await setting('gardens',data.gardens);return data.gardens;}
 export const cachedGardens=async()=>await getSetting('gardens')||[];
 export const gardenSort=async()=>(await getSetting('garden-sort'))==='nearest'?'nearest':'name';
 export const saveGardenSort=mode=>setting('garden-sort',mode==='nearest'?'nearest':'name');

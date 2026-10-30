@@ -5,9 +5,54 @@ const tpEncoder=new TextEncoder();
 const tpBase64=s=>Uint8Array.from(atob(s.replaceAll('-','+').replaceAll('_','/')),c=>c.charCodeAt(0));
 const tpConfigured=env=>!!env.PLATFORM_CONTROL_URL;
 const tpFlights=new WeakMap();
+const tpRefreshFailures=new WeakMap();
+// Reuse only a cryptographically valid, unexpired policy. A transient control
+// plane outage must not sit in front of every operational read. Expiry and a
+// verified suspension still take effect normally; no grace period is invented.
+function tpRefreshState(env){let states=tpRefreshFailures.get(env.DB);if(!states){states=new Map();tpRefreshFailures.set(env.DB,states);}return states;}
 async function tpVerified(env,envelope,instanceId,minRevision=0,allowExpired=false){try{if(envelope.keyId!==env.PLATFORM_SIGNING_KEY_ID)return null;const key=await crypto.subtle.importKey('spki',tpBase64(env.PLATFORM_SIGNING_PUBLIC_KEY),{name:'ECDSA',namedCurve:'P-256'},false,['verify']),raw=tpBase64(envelope.payload);if(!await crypto.subtle.verify({name:'ECDSA',hash:'SHA-256'},key,tpBase64(envelope.signature),raw))return null;const p=JSON.parse(new TextDecoder().decode(raw)),now=Date.now();if(p.format!=='work-diary-policy-v1'||p.companyId!==env.PLATFORM_COMPANY_ID||p.installationId!==instanceId||!Number.isSafeInteger(p.revision)||p.revision<minRevision||!Number.isSafeInteger(p.expiresAt)||!Number.isSafeInteger(p.issuedAt)||(!allowExpired&&p.expiresAt<=now)||p.expiresAt-p.issuedAt>86400000||p.issuedAt>now+60000||typeof p.active!=='boolean'||p.featureOverrides!==undefined&&(!p.featureOverrides||Array.isArray(p.featureOverrides)||typeof p.featureOverrides!=='object'||Object.values(p.featureOverrides).some(v=>typeof v!=='boolean'))||!p.modules||typeof p.modules!=='object'||Object.values(p.modules).some(v=>typeof v!=='boolean')||!Number.isSafeInteger(p.maxUsers)||p.maxUsers<1||p.maxUsers>10000)return null;return p;}catch{return null;}}
 async function tpCall(env,path,value){const origin=new URL(env.PLATFORM_CONTROL_URL);if(origin.protocol!=='https:'||origin.pathname!=='/'||origin.search||origin.hash||origin.username||origin.password)throw Error('Invalid control origin');const headers={authorization:'Bearer '+env.PLATFORM_SERVICE_TOKEN,'content-type':'application/json'};if(env.PLATFORM_CONTROL_BYPASS_TOKEN)headers['OAI-Sites-Authorization']='Bearer '+env.PLATFORM_CONTROL_BYPASS_TOKEN;const response=await fetch(origin.origin+path,{method:value===undefined?'GET':'POST',headers,...(value===undefined?{}:{body:JSON.stringify(value)}),signal:AbortSignal.timeout(8000),redirect:'manual'});if(!response.ok)throw Error('Control connection unavailable');return response.json();}
-export async function tenantPolicy(env,{refresh=false}={}){if(!tpConfigured(env))return null;if(!env.PLATFORM_COMPANY_ID||!env.PLATFORM_SERVICE_TOKEN||!env.PLATFORM_SIGNING_PUBLIC_KEY||!env.PLATFORM_SIGNING_KEY_ID)throw Error('Neúplné propojení platformy.');let flights=tpFlights.get(env.DB);if(!flights){flights=new Map();tpFlights.set(env.DB,flights);}const flightKey=env.PLATFORM_COMPANY_ID+'|'+(env.WORKSPACE_POLICY_INSTALLATION_ID||'physical'),existing=flights.get(flightKey);if(existing)return existing.then(tpCurrentPolicy);const flight=(async()=>{const info=await env.DB.prepare("SELECT instance_id FROM installation_state WHERE singleton='primary'").first(),row=await env.DB.prepare("SELECT value FROM settings WHERE key=?").bind(workspacePreferenceKey(env,'platform-policy')).first();let cache=null;try{cache=JSON.parse(row?.value||'null');}catch{}const previous=cache?await tpVerified(env,cache.envelope,env.WORKSPACE_POLICY_INSTALLATION_ID||info.instance_id,cache.revision):null;if(previous&&!refresh&&cache.checkedAt>Date.now()-300000)return previous;try{const {policy:envelope}=await tpCall(env,'/api/service/policy?companyId='+encodeURIComponent(env.PLATFORM_COMPANY_ID)),policy=await tpVerified(env,envelope,env.WORKSPACE_POLICY_INSTALLATION_ID||info.instance_id,cache?.revision||0);if(!policy)throw Error('Invalid signed policy');const data=JSON.stringify({envelope,revision:policy.revision,checkedAt:Date.now()});const saved=await env.DB.prepare("INSERT INTO settings(key,value,version) VALUES(?,?,1) ON CONFLICT(key) DO UPDATE SET value=excluded.value,version=settings.version+1 WHERE COALESCE(json_extract(settings.value,'$.revision'),-1)<=?").bind(workspacePreferenceKey(env,'platform-policy'),data,policy.revision).run();if(!saved.meta.changes)throw Error('Policy revision changed');return policy;}catch(e){if(previous)return previous;const expired=cache?await tpVerified(env,cache.envelope,env.WORKSPACE_POLICY_INSTALLATION_ID||info.instance_id,cache.revision,true):null;if(expired)return {...expired,active:false,configurationExpired:true};throw Error('Platnost licence nelze ověřit. Uložené změny zůstávají zachované; obnovte připojení.');}})();flights.set(flightKey,flight);try{return tpCurrentPolicy(await flight);}finally{flights.delete(flightKey);}}
+export async function tenantPolicy(env,{refresh=false}={}){
+ if(!tpConfigured(env))return null;
+ if(!env.PLATFORM_COMPANY_ID||!env.PLATFORM_SERVICE_TOKEN||!env.PLATFORM_SIGNING_PUBLIC_KEY||!env.PLATFORM_SIGNING_KEY_ID)throw Error('Neúplné propojení platformy.');
+ let flights=tpFlights.get(env.DB);if(!flights){flights=new Map();tpFlights.set(env.DB,flights);}
+ const flightKey=env.PLATFORM_COMPANY_ID+'|'+(env.WORKSPACE_POLICY_INSTALLATION_ID||'physical');
+ const info=await env.DB.prepare("SELECT instance_id FROM installation_state WHERE singleton='primary'").first();
+ const row=await env.DB.prepare('SELECT value FROM settings WHERE key=?').bind(workspacePreferenceKey(env,'platform-policy')).first();
+ let cache=null;try{cache=JSON.parse(row?.value||'null');}catch{}
+ const installation=env.WORKSPACE_POLICY_INSTALLATION_ID||info.instance_id;
+ const previous=cache?await tpVerified(env,cache.envelope,installation,cache.revision):null;
+ if(previous&&!refresh&&cache.checkedAt>Date.now()-300000)return tpCurrentPolicy(previous);
+ const update=()=>{
+  if(flights.has(flightKey))return flights.get(flightKey);
+  const flight=(async()=>{
+   try{
+    const {policy:envelope}=await tpCall(env,'/api/service/policy?companyId='+encodeURIComponent(env.PLATFORM_COMPANY_ID));
+    const policy=await tpVerified(env,envelope,installation,cache?.revision||0);
+    if(!policy)throw Error('Invalid signed policy');
+    const data=JSON.stringify({envelope,revision:policy.revision,checkedAt:Date.now()});
+    const saved=await env.DB.prepare("INSERT INTO settings(key,value,version) VALUES(?,?,1) ON CONFLICT(key) DO UPDATE SET value=excluded.value,version=settings.version+1 WHERE COALESCE(json_extract(settings.value,'$.revision'),-1)<=?").bind(workspacePreferenceKey(env,'platform-policy'),data,policy.revision).run();
+    if(!saved.meta.changes)throw Error('Policy revision changed');
+    tpRefreshState(env).delete(flightKey);return policy;
+   }catch(error){
+    tpRefreshState(env).set(flightKey,Date.now()+30000);
+    // Never return a policy which expired during the failed network request.
+    if(previous&&previous.expiresAt>Date.now())return previous;
+    const expired=cache?await tpVerified(env,cache.envelope,installation,cache.revision,true):null;
+    if(expired)return {...expired,active:false,configurationExpired:true};
+    throw Error('Platnost licence nelze ověřit. Uložené změny zůstávají zachované; obnovte připojení.');
+   }
+  })().finally(()=>{if(flights.get(flightKey)===flight)flights.delete(flightKey);});
+  flights.set(flightKey,flight);return flight;
+ };
+ if(previous&&!refresh&&env._workspaceWaitUntil){
+  if(!(tpRefreshState(env).get(flightKey)>Date.now()))env._workspaceWaitUntil(update().catch(()=>{}));
+  return tpCurrentPolicy(previous);
+ }
+ // Requests without a background lifetime (including explicit initialization)
+ // continue to await verification. A control-plane error never grants a licence.
+ return tpCurrentPolicy(await update());
+}
 export async function tenantFeaturePolicy(env,preferences){const policy=await tenantPolicy(env);if(!policy)return {features:preferences};const active=tpActive(policy);return {features:Object.fromEntries(Object.entries(preferences).map(([key,value])=>[key,active&&(policy.featureOverrides?.[key]??value)&&licensedFeature(key,policy.modules,policy.featureOverrides)])),license:{active,companyId:policy.companyId,revision:policy.revision,expiresAt:policy.expiresAt,maxUsers:policy.maxUsers,modules:policy.modules,featureOverrides:policy.featureOverrides||{},labels:policy.labels}};}
 const tpCurrentPolicy=p=>({...p,active:tpActive(p)});
 function tpActive(p){const day=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());return p.active&&p.expiresAt>Date.now()&&(!p.startDate||day>=p.startDate)&&(!p.endDate||day<=p.endDate)&&(p.status!=='trial'||p.trialStart&&p.trialEnd&&day>=p.trialStart&&day<=p.trialEnd);}

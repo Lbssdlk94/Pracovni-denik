@@ -199,12 +199,26 @@ function mutationAllowed(request){
 }
 async function featureSettings(env){const row=await one(env.DB,"SELECT * FROM settings WHERE key=?",workspacePreferenceKey(env,'features'));return {...await tenantFeaturePolicy(env,normalizeFeatures(row?JSON.parse(row.value):null)),featuresVersion:row?.version||0};}
 export async function api(request,env,ctx){
+ const started=performance.now(),requestId=crypto.randomUUID(),route='/api/'+(new URL(request.url).pathname.split('/')[2]||'');
+ let response;
+ try{response=await workspaceAPI(request,env,ctx);}
+ catch(error){console.error('API communication failure',{requestId,route,code:'api_unavailable',name:error?.name});response=json({error:'Server nyní neodpovídá. Neodeslané změny ponechte v zařízení a zkuste to znovu.',code:'api_unavailable'},503);}
+ const duration=Math.round((performance.now()-started)*10)/10;
+ if(duration>=3000||response.status>=500)console.warn('API communication diagnostic',{requestId,route,method:request.method,status:response.status,durationMs:duration});
+ const result=new Response(response.body,response);result.headers.append('server-timing','app;dur='+duration);result.headers.set('x-request-id',requestId);return result;
+}
+async function workspaceAPI(request,env,ctx){
+ if(new URL(request.url).pathname==='/api/connection-health'&&request.method==='GET'){
+  const started=performance.now();
+  try{await env.DB.prepare('SELECT 1 AS ready').first();const databaseMs=Math.round((performance.now()-started)*10)/10;return new Response(JSON.stringify({ok:true,databaseMs}),{headers:{'content-type':'application/json','cache-control':'no-store','server-timing':'db;dur='+databaseMs}});}
+  catch{console.error('Connection probe failed',{code:'database_unavailable'});return json({ok:false,code:'database_unavailable'},503);}
+ }
  await workspaceTransferEnsureControl(env);
  if(new URL(request.url).pathname.startsWith('/api/workspace-transfer/')){
   try{if(!['GET','HEAD'].includes(request.method))mutationAllowed(request);return await handleWorkspaceTransfer(request,env,{json,fail,body});}
   catch(error){if(error instanceof HttpError)return json({error:error.message,...error.extra},error.status);console.error('Workspace transfer failed',error?.name,error?.message);return json({error:'Řízený převod nebyl uložen. Ověřte stav a plán.',code:'workspace_transfer_failed'},409);}
  }
- const scopedEnv={...env,_workspaceStartStamp:await workspaceTransferStamp(env)};
+ const scopedEnv={...env,_workspaceWaitUntil:task=>ctx.waitUntil(task),_workspaceStartStamp:await workspaceTransferStamp(env)};
  scopedEnv.DB=workspaceFencedDatabase(env.DB,scopedEnv._workspaceStartStamp);
  const response=await workspaceRawApi(request,scopedEnv,ctx);
  try{return await workspaceFilterResponse(response,request,scopedEnv);}catch{return json({error:'Přehled se nepodařilo bezpečně načíst. Zkuste jej obnovit.'},503);}

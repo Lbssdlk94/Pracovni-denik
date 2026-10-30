@@ -1,0 +1,77 @@
+{
+  "measuredAt": "2026-10-30T17:37:00Z",
+  "endpoint": "/api/connection-health",
+  "method": "GET",
+  "identity": "Identity-less infrastructure probe through native Sites gate; no business data read",
+  "timing": "Client time to response headers, including executor proxy and Sites transport. Database measurement is server-side SELECT 1 round-trip, not SQL engine CPU time.",
+  "installations": [
+    {
+      "name": "Dr. Závlaha",
+      "version": 106,
+      "totalMs": [
+        1914,
+        1376,
+        1273,
+        1228,
+        1274,
+        1149,
+        1356,
+        1129
+      ],
+      "databaseMs": [
+        150,
+        153,
+        153,
+        163,
+        152,
+        151,
+        155,
+        165
+      ],
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ]
+    },
+    {
+      "name": "Dr. Garden",
+      "version": 27,
+      "totalMs": [
+        2655,
+        1226,
+        850,
+        955,
+        1162,
+        766,
+        1228,
+        740
+      ],
+      "databaseMs": [
+        158,
+        162,
+        166,
+        162,
+        168,
+        167,
+        163,
+        163
+      ],
+      "statuses": [
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200,
+        200
+      ]
+    }
+  ]
+}

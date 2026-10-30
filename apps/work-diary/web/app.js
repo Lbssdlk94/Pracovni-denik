@@ -1,3 +1,5 @@
+import {transientConnectionError} from './io.js?v=connection-recovery-v1';
+import {createConnectionRecovery} from './connection-recovery.js?v=connection-recovery-v1';
 import {createWorkspaceUI,workspaceFilterMarkup,workspaceBadge,workspaceDisciplineField} from './workspace-ui.js?v=shared-directory-v1';
 import {createWorkspaceRecoveryUI} from './workspace-recovery-ui.js?v=shared-directory-v1';
 import {createVolumeTestUI} from './volume-test-ui.js?v=live-volume-v3';
@@ -37,7 +39,7 @@ import {gardenTabsMarkup,gardenPanel} from './garden-ui.js?v=workspace-roles-v1'
 import {FEATURE_OPTIONS,featureEnabled} from './features.js?v=fleet-photo-v1';
 import {settingsPage,bindSettings} from './settings-ui.js?v=workspace-controls-v1';
 import {COLORS,DEFAULT_ZONES,clamp,createMarker,normalizedPoint,validateBackup} from './model.js?v=workspace-roles-v1';
-import * as db from './cloud.js?v=shared-directory-v1';
+import * as db from './cloud.js?v=connection-recovery-v1';
 import * as legacyDb from './storage.js?v=workspace-roles-v1';
 import {preparePhoto,annotatedPhoto,download,blobToDataURL} from './export.js?v=workspace-roles-v1';
 
@@ -49,10 +51,10 @@ let gardens=[],activeGarden=null,records=[],zones=[],page='home',draft=null,dirt
 const gardenTabs=new Map();
 const urls=new Set(),serviceLists=new Map(),openMaps=new Set(),mapViews=new Map();let gardenMap=null,serviceStats={total:0,services:0,conflicts:0,blocked:0};
 const enabled=key=>featureEnabled(key,sessionInfo?.features);
-const writeConnection=()=>enabled('offline')||(navigator.onLine&&!connection.startsWith('Offline')&&!connection.startsWith('Bez spojení'));
+const writeConnection=()=>enabled('offline')||navigator.onLine;
 const writable=()=>!!sessionInfo?.permissions.write&&writeConnection();
 const manageable=()=>!!sessionInfo?.permissions.manage;
-const nearby=createNearbyUI({db,getGardens:()=>gardens,getChoices:()=>gardenAddressChoices,setChoices:v=>gardenAddressChoices=v,enabled:()=>enabled('nearby'),onChange:()=>{if(page==='home'&&!activeGarden)render();},showModal,closeModal:()=>modal.close(),esc:v=>esc(v),editGarden,writable,isOnline:()=>navigator.onLine&&!connection.startsWith('Offline')&&!connection.startsWith('Bez spojení')});
+const nearby=createNearbyUI({db,getGardens:()=>gardens,getChoices:()=>gardenAddressChoices,setChoices:v=>gardenAddressChoices=v,enabled:()=>enabled('nearby'),onChange:()=>{if(page==='home'&&!activeGarden)render();},showModal,closeModal:()=>modal.close(),esc:v=>esc(v),editGarden,writable,isOnline:()=>navigator.onLine});
 const planUI=createPlanUI({showModal,closeModal:()=>modal.close(),esc:v=>esc(v),icon:name=>icon(name),getRows:id=>enabled('shafts')?records.filter(r=>r.gardenId===id):[],writable:()=>writable()&&enabled('plans')&&enabled('shafts'),isOnline:()=>mapOnline(),save:(g,m)=>db.savePlanMarkers(g,m),onSaved:async()=>{gardens=await db.cachedGardens();render();toast('Značky v plánu jsou uložené pro celý tým.');},onReload:async()=>{gardens=await db.getGardens();},onOpen:openRecord});
 const accessUI=createAccessUI({app,esc:v=>esc(v),db,onReady:enterFromAccess,onBeforeSwitch:async id=>{if(!id||db.session()?.user.id!==id)await notificationsUI.detach({allowInvalid:true});}});
 const attendanceUI=createAttendanceUI({db,esc:v=>esc(v),getSession:()=>sessionInfo,showModal,closeModal:()=>modal.close(),toast});
@@ -193,7 +195,8 @@ function selectPositionOnMap(){
  modalCleanup=openPositionMap({modal,showModal,position:draft.position,center,isOnline:mapOnline,icon,canEdit:()=>page==='editor'&&draft?.id===id&&writable()&&enabled('map'),onConfirm:position=>{draft.position=position;markDirty();modal.close();render();toast('Špendlík byl přidán. Uložte šachtu pro sdílení s kolegy.');}});
 }
 function manualPosition(){if(!writable()||!enabled('location')||!draft)return;showModal('Souřadnice šachty',`<form id="position-form"><label class="field">Zeměpisná šířka<input id="position-lat" inputmode="decimal" maxlength="25" required placeholder="Např. 50.087" value="${esc(draft.position?.latitude??'')}"></label><label class="field">Zeměpisná délka<input id="position-lon" inputmode="decimal" maxlength="25" required placeholder="Např. 14.421" value="${esc(draft.position?.longitude??'')}"></label><p class="modal-text">Použijte desetinné souřadnice. Přijímáme tečku i čárku.</p><div id="position-error" class="form-message" role="alert"></div><div class="modal-actions"><button class="btn primary" type="submit">Použít polohu</button></div></form>`);modal.querySelector('form').onsubmit=e=>{e.preventDefault();const latitude=Number(modal.querySelector('#position-lat').value.trim().replace(',','.')),longitude=Number(modal.querySelector('#position-lon').value.trim().replace(',','.'));if(!Number.isFinite(latitude)||latitude<-90||latitude>90||!Number.isFinite(longitude)||longitude<-180||longitude>180){modal.querySelector('#position-error').textContent='Šířka musí být mezi −90 a 90, délka mezi −180 a 180.';return;}draft.position={latitude,longitude,accuracy:null};markDirty();modal.close();render();};}
-const mapOnline=()=>navigator.onLine&&!connection.startsWith('Offline')&&!connection.startsWith('Bez spojení');
+// A failure in another module is not evidence this request cannot be tried.
+const mapOnline=()=>navigator.onLine;
 function mapSection(){const rows=folderRecords().filter(positioned);return `<section class="storage-card garden-map-card"><div class="section-head"><div><h2>Mapa šachet</h2><p>${rows.length} z ${folderRecords().length} šachet má uloženou polohu.</p></div>${rows.length?button(openMaps.has(activeGarden)?'Skrýt mapu':'Zobrazit mapu','toggle-map','','pin'):''}</div>${!rows.length?'<p class="mini-empty">Otevřete šachtu a v části Poloha šachty uložte GPS polohu.</p>':openMaps.has(activeGarden)?`<div id="garden-map" aria-label="Mapa šachet v zahradě"></div><p id="map-status" class="mini-empty">${mapOnline()?'Klepnutím na značku otevřete šachtu nebo navigaci.':'Podklad mapy vyžaduje internet. Uložené souřadnice a značky zůstávají dostupné.'}</p><div class="map-shaft-list">${rows.map(r=>`<div><button class="text-link" data-record="${esc(r.id)}">${esc(r.name)}</button><a href="${esc(mapLink(r))}" target="_blank" rel="noopener noreferrer">Otevřít v mapách ↗</a></div>`).join('')}</div>`:''}</section>`;}
 function disposeMap(){if(gardenMap){mapViews.set(gardenMap._gardenId,{center:gardenMap.getCenter(),zoom:gardenMap.getZoom()});gardenMap.remove();gardenMap=null;}}
 function renderGardenMap(){const container=document.querySelector('#garden-map'),rows=folderRecords().filter(positioned);if(!container||!rows.length)return;if(!window.L){document.querySelector('#map-status').textContent='Mapa není dostupná. Použijte odkazy na uložené polohy níže.';return;}gardenMap=L.map(container,{scrollWheelZoom:false});gardenMap._gardenId=activeGarden;const view=mapViews.get(activeGarden);if(view)gardenMap.setView(view.center,view.zoom);else gardenMap.fitBounds(rows.map(r=>[r.position.latitude,r.position.longitude]),{padding:[35,35],maxZoom:19});if(mapOnline())L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'}).on('tileerror',()=>{const status=document.querySelector('#map-status');if(status)status.textContent='Podklad mapy se nepodařilo načíst. Uložené značky a odkazy zůstávají dostupné.';}).addTo(gardenMap);for(const [i,r] of rows.entries()){const popup=document.createElement('div'),title=document.createElement('strong'),open=document.createElement('button'),link=document.createElement('a');title.textContent=r.name;open.textContent='Otevřít šachtu';open.className='text-link';open.dataset.record=r.id;open.onclick=e=>{e.stopPropagation();openRecord(r.id);};link.textContent='Otevřít v mapách ↗';link.href=mapLink(r);link.target='_blank';link.rel='noopener noreferrer';popup.className='map-popup';popup.append(title,open,link);L.marker([r.position.latitude,r.position.longitude],{icon:L.divIcon({className:'map-shaft-marker',html:`<span>${i+1}</span>`,iconSize:[34,34],iconAnchor:[17,34]}),title:r.name}).addTo(gardenMap).bindPopup(popup);}requestAnimationFrame(()=>gardenMap?.invalidateSize());}
@@ -323,7 +326,9 @@ app.addEventListener('input',e=>{if(e.target.id==='search'){searchQuery=e.target
 for(const id of ['camera-input','photo-input'])document.getElementById(id).addEventListener('change',async e=>{await openPhoto(e.target.files[0]);e.target.value='';});
 document.querySelector('#backup-input').addEventListener('change',async e=>{try{await importBackup(e.target.files[0]);}catch(error){report(error);}finally{e.target.value='';}});
 window.addEventListener('beforeunload',e=>{if(dirty||planUI.hasAnyChanges()){e.preventDefault();e.returnValue='';}});
-window.addEventListener('online',()=>synchronize());
+const connectionRecovery=createConnectionRecovery({run:()=>synchronize(),available:()=>!!sessionInfo&&navigator.onLine&&document.visibilityState==='visible'});
+window.addEventListener('online',()=>connectionRecovery.retryNow());
+window.addEventListener('communication-retry-needed',()=>connectionRecovery.failed());
 window.addEventListener('offline',()=>{updateConnection('Offline · změny čekají na připojení');if(page==='jobs')jobsUI.refresh();if(!enabled('offline')&&!dirty&&!modal.open)render();});
 function updateConnection(text){connection=text;const status=document.querySelector('.top-status span:last-child');if(status)status.textContent=text;const box=document.querySelector('.top-status');if(box){box.title=text;box.setAttribute('aria-label',text);}}
 function teamStatus(){const pending=records.filter(r=>r._pending).length+serviceStats.services+(serviceStats.serviceWork||0);return `<div class="team-strip"><span>${icon('zones')} <strong>Náš tým</strong><span class="role-pill">${roleNames[sessionInfo.user.role]}</span></span><button class="text-link" data-action="sync">${pending?pending+' změn čeká na sdílení':esc(connection)} ↻</button></div>${pending?`<button class="text-link pending-link" data-action="pending-changes">Zobrazit čekající změny</button>`:''}${legacyRecords.length&&sessionInfo.user.role==='owner'?`<div class="note-box migration"><strong>${legacyRecords.length} šachet je zatím jen v tomto telefonu.</strong><p>Převeďte je do týmu, aby je měli i kolegové. Původní záznamy zůstanou zachované.</p>${button('Sdílet původní šachty s týmem','import-local','primary','share')}</div>`:''}`;}
@@ -334,10 +339,59 @@ function synchronize(show=false){
  const task=runSynchronization().finally(()=>{if(synchronizationFlight===task){synchronizationFlight=null;synchronizationShow=false;}});
  synchronizationFlight=task;return task;
 }
+let ancillaryFlight=null;
+function refreshVisibleData(){
+ notificationsUI.refresh();
+ if(page==='attendance'&&!modal.open)attendanceUI.refresh();
+ if(page==='jobs'&&!modal.open)jobsUI.refresh();
+ if(page==='vehicles'&&!modal.open)vehiclesUI.refresh();
+ if(page==='defects'&&!document.querySelector('.garden-history-dialog[open]'))gardenHistoryUI.bind();
+ if(page==='customers')customersUI.refresh();
+ if(page==='subscriptions'&&!modal.open)subscriptionsUI.refresh();
+}
+function queueAncillaryRefresh(){
+ if(ancillaryFlight)return;
+ const generation=sessionGeneration;
+ const task=(async()=>{
+  const results=await Promise.allSettled([db.refreshRecords({reconnect:false}),db.syncPendingChanges()]);
+  if(generation!==sessionGeneration||!sessionInfo)return;
+  const denied=results.find(r=>r.status==='rejected'&&[401,403].includes(r.reason.status));
+  if(denied){await db.lockSession();sessionInfo=null;clearURLs();showLogin(denied.reason);return;}
+  records=await db.getRecords();recordsLoading=false;
+  recordsLoadError=results[0].status==='rejected'?results[0].reason.message:'';
+  serviceStats=await db.pendingSummary();
+  if(generation!==sessionGeneration||!sessionInfo)return;
+  if(results.some(r=>r.status==='rejected'))connectionRecovery.failed();
+  if(page==='home'&&!modal.open)render();
+  if(page==='editor'&&!dirty){const current=records.find(r=>r.id===draft.id);if(current&&current.version!==draft.version){draft=current;render();}else if(!current&&draft.version&&!recordsLoadError){dirty=false;navigate('home');toast('Tuto šachtu kolega smazal.');}}
+ })().catch(error=>{if(generation===sessionGeneration){recordsLoading=false;recordsLoadError=error.message;connectionRecovery.failed();}}).finally(()=>{if(ancillaryFlight===task)ancillaryFlight=null;});
+ ancillaryFlight=task;
+}
 async function runSynchronization(){
-  if(!sessionInfo)return;const generation=sessionGeneration;
-  try{const previousRole=sessionInfo.user.role,previousWrite=writable(),previousFeatures=JSON.stringify(sessionInfo.features),next=await db.refreshRecords();if(generation!==sessionGeneration)return;sessionInfo=db.session();if(previousRole!==sessionInfo.user.role){materialsUI.clear();gardenHistoryUI.clear();vehiclesUI.clear();}if(previousRole!==sessionInfo.user.role||!enabled('subscriptions')){serviceWorkUI.clear();subscriptionsUI.clear();}records=next;recordsLoading=false;recordsLoadError='';gardens=await db.getGardens();gardenAddressChoices=await db.gardenChoices();if(activeGarden&&activeGarden!=='unassigned'&&!gardens.some(g=>g.id===activeGarden)){activeGarden=null;toast('Tato zahrada už byla smazána. Šachty najdete v aktuálním přehledu.');}legacyRecords=legacyRecords.filter(r=>!records.some(other=>other.id===r.id));serviceStats=await db.pendingSummary();if(generation!==sessionGeneration)return;const pending=serviceStats.total;updateConnection(pending?'Čeká '+pending+' změn':'Synchronizováno');if((page==='home'&&!modal.open)||previousRole!==sessionInfo.user.role||(previousWrite!==writable()&&page!=='settings'&&!dirty&&!modal.open)||(JSON.stringify(sessionInfo.features)!==previousFeatures&&(page!=='settings'||!manageable())&&!dirty&&!modal.open))render();if(page==='editor'&&!dirty){const current=records.find(r=>r.id===draft.id);if(current&&current.version!==draft.version){draft=current;render();}else if(!current&&draft.version){dirty=false;navigate('home');toast('Tuto šachtu kolega smazal.');}}notificationsUI.refresh();if(page==='attendance'&&!modal.open)attendanceUI.refresh();if(page==='jobs'&&!modal.open)jobsUI.refresh();if(page==='vehicles'&&!modal.open)vehiclesUI.refresh();if(page==='defects'&&!document.querySelector('.garden-history-dialog[open]'))gardenHistoryUI.bind();if(page==='customers')customersUI.refresh();if(page==='subscriptions'&&!modal.open)subscriptionsUI.refresh();if(synchronizationShow)toast(pending?'Některé změny čekají na vyřešení.':'Týmové šachty jsou aktuální.');}
-  catch(error){if(generation!==sessionGeneration)return;if([401,403].includes(error.status)){await db.lockSession();sessionInfo=null;clearURLs();inviteText='';showLogin(error);return;}updateConnection('Bez spojení · uloženo v telefonu');if(synchronizationShow)report(error);}
+ if(!sessionInfo)return false;const generation=sessionGeneration;
+ try{
+  const previousRole=sessionInfo.user.role,previousWrite=writable(),previousFeatures=JSON.stringify(sessionInfo.features);
+  await db.connect();if(generation!==sessionGeneration)return false;sessionInfo=db.session();
+  if(previousRole!==sessionInfo.user.role){materialsUI.clear();gardenHistoryUI.clear();vehiclesUI.clear();}
+  if(previousRole!==sessionInfo.user.role||!enabled('subscriptions')){serviceWorkUI.clear();subscriptionsUI.clear();}
+  // Start the visible module before background photos and outbox uploads.
+  refreshVisibleData();
+  gardens=await db.getGardens();gardenAddressChoices=await db.gardenChoices();
+  if(generation!==sessionGeneration)return false;
+  if(activeGarden&&activeGarden!=='unassigned'&&!gardens.some(g=>g.id===activeGarden)){activeGarden=null;toast('Tato zahrada už byla smazána. Šachty najdete v aktuálním přehledu.');}
+  legacyRecords=legacyRecords.filter(r=>!records.some(other=>other.id===r.id));serviceStats=await db.pendingSummary();
+  if(generation!==sessionGeneration)return false;
+  const pending=serviceStats.total;updateConnection(pending?'Čeká '+pending+' změn':'Spojení obnoveno');
+  if((page==='home'&&!modal.open)||previousRole!==sessionInfo.user.role||(previousWrite!==writable()&&page!=='settings'&&!dirty&&!modal.open)||(JSON.stringify(sessionInfo.features)!==previousFeatures&&(page!=='settings'||!manageable())&&!dirty&&!modal.open))render();
+  queueAncillaryRefresh();
+  if(synchronizationShow)toast(pending?'Některé změny čekají na sdílení nebo vyřešení.':'Přehledy byly obnoveny.');
+  return true;
+ }catch(error){
+  if(generation!==sessionGeneration)return false;
+  if([401,403].includes(error.status)){await db.lockSession();sessionInfo=null;clearURLs();inviteText='';showLogin(error);return false;}
+  updateConnection(navigator.onLine?'Server nyní neodpovídá · zkouším obnovit spojení':'Offline · neodeslané změny zůstávají v telefonu');
+  connectionRecovery.failed();if(synchronizationShow)report(error);return false;
+ }
 }
 async function importLegacy(){
   if(sessionInfo.user.role!=='owner')return;let shared=0;for(const r of legacyRecords){const saved=await db.saveRecord({...r,version:0,imageVersion:undefined});if(!saved._pending)shared++;}records=await db.getRecords();legacyRecords=legacyRecords.filter(r=>!records.some(other=>other.id===r.id));render();toast(`${shared} původních šachet bylo sdíleno s týmem.`);
@@ -361,12 +415,20 @@ app.addEventListener('submit',async e=>{if(e.target.id==='invite-form'){e.preven
 app.addEventListener('change',async e=>{if(e.target.dataset.memberRole)await teamRequest('/api/members/'+encodeURIComponent(e.target.dataset.memberRole),{method:'PATCH',body:JSON.stringify({role:e.target.value})});});
 function showLogin(error){gardenHistoryUI.clear();devicePermissionsUI.clear();notificationsUI.clear();materialsUI.clear();subscriptionsUI.clear();serviceWorkUI.clear();customersUI.clear();jobsUI.clear();blowoutUI.clear();attendanceUI.clear();accessUI.login(error);app.querySelector('main')?.insertAdjacentHTML('beforeend',workspaceRecoveryUI.markup());workspaceRecoveryUI.bind();}
 async function enterFromAccess(){gardenHistoryUI.clear();devicePermissionsUI.clear();notificationsUI.clear();materialsUI.clear();subscriptionsUI.clear();serviceWorkUI.clear();customersUI.clear();jobsUI.clear();attendanceUI.clear();sessionGeneration++;sessionInfo=null;await db.waitForRefresh();inviteText='';draft=null;dirty=false;page='home';activeGarden=null;records=[];gardens=[];zones=[];teamData=null;legacyRecords=[];serviceLists.clear();gardenAddressChoices={};planUI.clear();blowoutUI.clear();clearURLs();await start().catch(startupError);}
+let startupRetryTimer=null,startupFailures=0;
 function startupError(error){
+ clearTimeout(startupRetryTimer);startupRetryTimer=null;
  devicePermissionsUI.clear();notificationsUI.clear();materialsUI.clear();subscriptionsUI.clear();serviceWorkUI.clear();customersUI.clear();jobsUI.clear();sessionInfo=null;recordsLoading=false;
  app.innerHTML=`<main class="login-page"><img src="./logo-dr-zavlaha.jpg" alt="Dr. Závlaha"><h1>Deník se nepodařilo otevřít</h1><p role="alert">${esc(error?.message||'Zkontrolujte připojení a zkuste to znovu.')}</p><p>Pokud jste odkaz otevřeli v jiné aplikaci, otevřete ho přímo v Safari nebo Chrome. Uložené změny zůstávají v zařízení.</p><button class="btn primary" id="startup-retry">Zkusit znovu</button></main>`;
- app.querySelector('#startup-retry').onclick=()=>location.reload();
+ app.querySelector('#startup-retry').onclick=()=>{clearTimeout(startupRetryTimer);start().catch(startupError);};
+ if(transientConnectionError(error)){
+  const delay=Math.min(60000,3000*2**Math.min(startupFailures++,4));
+  const retry=()=>{if(document.visibilityState==='visible'&&navigator.onLine)start().catch(startupError);else startupRetryTimer=setTimeout(retry,5000);};
+  startupRetryTimer=setTimeout(retry,delay);
+ }
 }
 async function start(){
+ clearTimeout(startupRetryTimer);startupRetryTimer=null;
  const platformInvite=new URLSearchParams(location.hash.slice(1)).get('platform-invite');if(platformInvite){app.innerHTML='<div class="loading">Ověřuji firemní pozvánku…</div>';try{await db.request('/api/platform-invitation',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token:platformInvite})});history.replaceState(null,'',location.pathname+location.search);}catch(e){if(e.status===401){app.innerHTML='<main class="login-page"><h1>Pozvánka do firmy</h1><p>Přihlaste se účtem, na který byla pozvánka vystavena.</p><a class="btn primary" target="_top" href="/signin-with-chatgpt?returnTo='+encodeURIComponent('/#platform-invite='+platformInvite)+'">Přihlásit se</a></main>';}else startupError(e);return;}}const access=new URLSearchParams(location.hash.slice(1)).get('access');if(access){jobsUI.clear();sessionGeneration++;sessionInfo=null;clearURLs();await accessUI.open(access);return;}if(new URLSearchParams(location.search).get('login')==='1'){showLogin();return;}
  const generation=++sessionGeneration;
  app.innerHTML='<div class="loading" role="status">Ověřuji přístup do vašeho závlahového deníku…</div>';
@@ -375,34 +437,25 @@ async function start(){
   app.querySelector('.loading').textContent='Načítám vaše zahrady…';
   const initial=await Promise.all([db.getRecords(),db.getGardens(),(async()=>db.getZones(sessionInfo.user.role==='owner'?(await legacyDb.getZones()||DEFAULT_ZONES):DEFAULT_ZONES))(),db.gardenChoices(),db.pendingSummary()]);
   if(generation!==sessionGeneration)return;
-  [records,gardens,zones,gardenAddressChoices,serviceStats]=initial;
-  const initialAccess=JSON.stringify([sessionInfo.user.role,sessionInfo.features,sessionInfo.permissions]);
-  recordsLoading=true;recordsLoadError='';connection='Načítám šachty a fotografie…';render();
-  try{
-   const next=await db.refreshRecords();if(generation!==sessionGeneration)return;records=next;sessionInfo=db.session();serviceStats=await db.pendingSummary();
-   connection=serviceStats.total?'Čeká '+serviceStats.total+' změn':'Synchronizováno';
-   if(sessionInfo.user.role==='owner')legacyRecords=(await legacyDb.getRecords()).filter(r=>!records.some(other=>other.id===r.id));
-  }catch(error){
-   if(generation!==sessionGeneration)return;
-   if([401,403].includes(error.status)){await db.lockSession().catch(()=>{});sessionInfo=null;clearURLs();showLogin(error);return;}
-   records=await db.getRecords();recordsLoadError=error.message||'Šachty se nepodařilo načíst. Zkuste to znovu.';connection='Šachty nejsou plně načtené';toast(recordsLoadError,true);
-  }
-  recordsLoading=false;if(generation!==sessionGeneration)return;
-  if((page==='home'||page==='overview'&&initialAccess!==JSON.stringify([sessionInfo.user.role,sessionInfo.features,sessionInfo.permissions]))&&!modal.open)render();else updateConnection(connection);
+  [records,gardens,zones,gardenAddressChoices,serviceStats]=initial;startupFailures=0;
+  recordsLoading=true;recordsLoadError='';connection='Připojeno · obnovuji data na pozadí';render();
+  queueAncillaryRefresh();
+  if(sessionInfo.user.role==='owner')legacyDb.getRecords().then(rows=>{if(generation===sessionGeneration)legacyRecords=rows.filter(r=>!records.some(other=>other.id===r.id));}).catch(()=>{});
  }catch(error){
   if(generation!==sessionGeneration)return;
   if([401,403].includes(error.status)){await db.lockSession().catch(()=>{});showLogin(error);return;}
   if(error.code==='local_storage'){startupError(error);return;}
   try{
    sessionInfo=await db.offlineSession();if(!sessionInfo){startupError(error);return;}page=new URLSearchParams(location.search).has('drive')?'settings':landingPage();
-   records=await db.getRecords();zones=await db.cachedZones()||DEFAULT_ZONES;gardens=await db.cachedGardens();gardenAddressChoices=await db.gardenChoices();serviceStats=await db.pendingSummary();connection='Offline · uloženo v telefonu';recordsLoading=false;render();
+   records=await db.getRecords();zones=await db.cachedZones()||DEFAULT_ZONES;gardens=await db.cachedGardens();gardenAddressChoices=await db.gardenChoices();serviceStats=await db.pendingSummary();connection=navigator.onLine?'Server nyní neodpovídá · zkouším obnovit spojení':'Offline · uloženo v telefonu';recordsLoading=false;render();
   }catch(storageError){startupError(storageError);return;}
  }
  nearby.restore().catch(report);
  if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').then(()=>{offlineReady=true;}).catch(()=>{offlineReady=false;});}
  const linkedJob=new URLSearchParams(location.search).get('job');if(linkedJob){history.replaceState(null,'',location.pathname);navigate('jobs');jobsUI.open(linkedJob).catch(report);}
- if(!sessionListeners){sessionListeners=true;setInterval(()=>{if(document.visibilityState==='visible'&&navigator.onLine)synchronize();},20000);
- document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')return;if(navigator.onLine)synchronize().finally(()=>nearby.resume().catch(report));else nearby.resume().catch(report);});}
+ connectionRecovery.start();
+ if(!sessionListeners){sessionListeners=true;
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')return;if(navigator.onLine)Promise.resolve(connectionRecovery.retryNow()).finally(()=>nearby.resume().catch(report));else nearby.resume().catch(report);});}
 }
 window.addEventListener('hashchange',()=>{const token=new URLSearchParams(location.hash.slice(1)).get('access');if(token){if(!leaveDraft()||planUI.hasAnyChanges()&&!confirm('Přepnout přístup a zahodit neuložené značky v plánu?')){history.replaceState(null,'',location.pathname+location.search);return;}gardenHistoryUI.clear();notificationsUI.clear();materialsUI.clear();subscriptionsUI.clear();serviceWorkUI.clear();customersUI.clear();jobsUI.clear();sessionGeneration++;sessionInfo=null;clearURLs();accessUI.open(token).catch(report);}});
 start().catch(startupError);

@@ -19,8 +19,7 @@ export async function workspaceRequestContext(env,request,member,all=false){
  if(['irrigation','garden'].includes(discipline))selected=organizations.find(org=>org.discipline===discipline);
  }
  if(!selected)throw Error('Vstup nepatří do společného pracovního prostoru.');
- const contexts=[];
- for(const organization of organizations){
+ const contexts=await Promise.all(organizations.map(async organization=>{
   const source=organization.installation_id===physical,prefix=source?'':'workspace:'+organization.id+':';
   let runtime={};
   if(!source){const row=await env.DB.prepare('SELECT sealed_runtime FROM workspace_organization_config WHERE organization_id=?').bind(organization.id).first();
@@ -35,11 +34,13 @@ export async function workspaceRequestContext(env,request,member,all=false){
   const preferences=await env.DB.prepare('SELECT value FROM settings WHERE key=?').bind(prefix+'features').first();
   const result=await tenantFeaturePolicy(scoped,normalizeFeatures(preferences?JSON.parse(preferences.value):null));
   const active=result.license?.active??true,expires=result.license?.expiresAt??Date.now()+300000,revision=result.license?.revision||0,maxUsers=result.license?.maxUsers||100;
-  await env.DB.prepare(`INSERT INTO workspace_organization_policies(organization_id,active,expires_at,revision,features,max_users,checked_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(organization_id) DO UPDATE SET active=excluded.active,expires_at=excluded.expires_at,revision=excluded.revision,features=excluded.features,max_users=excluded.max_users,checked_at=excluded.checked_at WHERE workspace_organization_policies.revision<=excluded.revision`)
-   .bind(organization.id,Number(active),expires,revision,JSON.stringify(result.features),maxUsers,Date.now()).run();
-  scoped._workspaceLicenseActive=active;contexts.push(scoped);
- }
- return all?contexts:contexts.find(context=>context.WORKSPACE_ORGANIZATION_ID===selected.id);
+  const policyWrite=env.DB.prepare(`INSERT INTO workspace_organization_policies(organization_id,active,expires_at,revision,features,max_users,checked_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(organization_id) DO UPDATE SET active=excluded.active,expires_at=excluded.expires_at,revision=excluded.revision,features=excluded.features,max_users=excluded.max_users,checked_at=excluded.checked_at WHERE workspace_organization_policies.revision<=excluded.revision AND (workspace_organization_policies.active IS NOT excluded.active OR workspace_organization_policies.expires_at IS NOT excluded.expires_at OR workspace_organization_policies.revision IS NOT excluded.revision OR workspace_organization_policies.features IS NOT excluded.features OR workspace_organization_policies.max_users IS NOT excluded.max_users OR workspace_organization_policies.checked_at<excluded.checked_at-300000)`)
+   .bind(organization.id,Number(active),expires,revision,JSON.stringify(result.features),maxUsers,Date.now());
+  scoped._workspaceLicenseActive=active;return {scoped,policyWrite};
+ }));
+ for(const context of contexts)await context.policyWrite.run();
+ const scopedContexts=contexts.map(context=>context.scoped);
+ return all?scopedContexts:scopedContexts.find(context=>context.WORKSPACE_ORGANIZATION_ID===selected.id);
 }
 
 export async function workspaceScheduledContexts(env){const result=await workspaceRequestContext(env,null,null,true);return Array.isArray(result)?result:[result];}
