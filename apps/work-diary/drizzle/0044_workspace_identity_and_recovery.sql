@@ -9,7 +9,7 @@ CREATE TABLE `workspace_identity_aliases` (
 	`approved_at` integer NOT NULL,
 	`method` text NOT NULL,
 	PRIMARY KEY(`installation_id`, `external_user_id`),
-	FOREIGN KEY (`canonical_user_id`) REFERENCES `members`(`user_id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`canonical_user_id`) REFERENCES `members`(`user_id`) ON UPDATE no action ON DELETE cascade,
 	CONSTRAINT "workspace_identity_method" CHECK("workspace_identity_aliases"."method" IN ('original','confirmed','personal-proof','invitation'))
 );
 --> statement-breakpoint

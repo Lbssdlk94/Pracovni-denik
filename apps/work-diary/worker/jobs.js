@@ -104,7 +104,8 @@ export async function handleJobs(request,env,m,h){
   const contact=customerId?await one(env.DB,'SELECT * FROM customers WHERE id=?',customerId):null;
   if(customerId&&(!contact||contact.deleted&&customerId!==old?.customer_id))fail(400,'Vyberte dostupného zákazníka.');
   if(customerAddressId&&contact&&!JSON.parse(contact.addresses).some(a=>a.id===customerAddressId)&&!(customerId===old?.customer_id&&customerAddressId===old?.customer_address_id))fail(400,'Vybraná adresa už u zákazníka není. Vyberte ji znovu.');
-  const customerName=Object.hasOwn(b,'customerName')?cleanText(b.customerName,160):(old?.customer_name||''),city=Object.hasOwn(b,'city')?cleanText(b.city,120):(old?.city||'');
+  const selectedAddress=contact&&customerAddressId?JSON.parse(contact.addresses).find(address=>address.id===customerAddressId):null;
+  const customerName=Object.hasOwn(b,'customerName')?cleanText(b.customerName,160):(old?.customer_name??contact?.name??''),city=Object.hasOwn(b,'city')?cleanText(b.city,120):(old?.city??selectedAddress?.city??'');
   const title=cleanText(b.title,120,true),description=cleanText(b.description??'',4000),address=cleanText(b.address??'',500),assignment=await jobAssignment(env,{...b,discipline},old,fail,{allowUnassigned:true}),assignedTo=assignment.assignedTo,dueDate=cleanText(b.dueDate??'',10),gardenId=b.gardenId==null?null:validId(b.gardenId),initialStatus=statusData(b),now=Date.now();let {status,reason}=initialStatus;
   if(dueDate){const date=new Date(dueDate+'T00:00:00Z');if(!/^\d{4}-\d{2}-\d{2}$/.test(dueDate)||!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==dueDate||Number(dueDate.slice(0,4))<1000)fail(400,'Vyberte platný termín zakázky.');}
   const startTime=cleanText(Object.hasOwn(b,'startTime')?b.startTime:old?.start_time||'',5),endTime=cleanText(Object.hasOwn(b,'endTime')?b.endTime:old?.end_time||'',5);

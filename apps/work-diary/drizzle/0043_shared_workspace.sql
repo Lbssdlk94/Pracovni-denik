@@ -59,7 +59,7 @@ CREATE TABLE `workspace_entity_versions` (
 	CONSTRAINT "workspace_entity_kind" CHECK("workspace_entity_versions"."entity" IN ('member','customer','garden'))
 );
 --> statement-breakpoint
-CREATE TABLE `workspace_gateway_nonces` (
+CREATE TABLE IF NOT EXISTS `workspace_gateway_nonces` (
 	`nonce` text PRIMARY KEY NOT NULL,
 	`expires_at` integer NOT NULL
 );

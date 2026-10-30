@@ -54,5 +54,5 @@ export function createPlanUI({showModal,closeModal,esc,icon,getRows,writable,isO
   container.querySelector('.plan-shaft-list').onclick=e=>{const row=e.target.closest('[data-plan-row]');if(row)pinMenu(row.dataset.planRow);};
   draw();
  }
- return {render,clear,hasChanges:id=>!!drafts.get(id)?.dirty,hasAnyChanges:()=>[...drafts.values()].some(s=>s.dirty)};
+ return {render,clear,recoveryDrafts:()=>[...drafts.entries()].filter(([,value])=>value.dirty).map(([gardenId,value])=>({gardenId,...value})),hasChanges:id=>!!drafts.get(id)?.dirty,hasAnyChanges:()=>[...drafts.values()].some(s=>s.dirty)};
 }

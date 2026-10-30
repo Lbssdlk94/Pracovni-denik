@@ -1,6 +1,6 @@
 # Společný adresář: rozpracovaná fáze 2
 
-29. října 2026. Uživatel schválil jednu autoritativní pracovní databázi a společné API. Následně výslovně požádal pokračovat i bez nové zálohy. Čekání na novou zálohu proto není blokátorem. Dosavadní zálohy se nemažou ani nevypínají. Google Disk a e-mailové integrace nejsou součástí změny.
+30. října 2026. Uživatel schválil jednu autoritativní pracovní databázi a společné API. Následně výslovně požádal pokračovat i bez nové zálohy. Čekání na novou zálohu proto není blokátorem. Dosavadní zálohy se nemažou ani nevypínají. Google Disk a e-mailové integrace nejsou součástí změny.
 
 Větev: `plan/shared-directory-disciplines-2026-10-29`. Tento dokument je pracovní stav, nikoli tvrzení o dokončené implementaci nebo nasazení.
 
@@ -17,18 +17,23 @@ Větev: `plan/shared-directory-disciplines-2026-10-29`. Tento dokument je pracov
 
 ## Dosud ověřeno
 
-Izolovaná SQLite, skutečný workerd/D1/R2 přes Miniflare a stávající regresní sada. Poslední úplný běh po doplnění aliasů a šifrované obnovy měl 241 úspěšných testů. Další změny vyžadují nový běh před nasazením. Samostatný Worker test ověřuje společný zápis/čtení/úpravu, nezměněné ID zákazníka a zahrady, souběžnou CAS změnu členství, jeden auditní záznam při opakování, nepřihlášeného/cizího člena a nepodepsané RPC.
+Izolovaná SQLite, skutečný workerd/D1/R2 přes Miniflare a stávající regresní sada. Poslední úplný běh má 264 úspěšných testů; zaměřená sada propojení má 45 testů. Další změny vyžadují nový běh před nasazením. Samostatný Worker test ověřuje společný zápis/čtení/úpravu, nezměněné ID zákazníka a zahrady, souběžnou CAS změnu členství, jeden auditní záznam při opakování, nepřihlášeného/cizího člena a nepodepsané RPC.
 
 Nejde o ověření produkčního propojení Sites, které dosud nebylo zapnuto. Dosud nebyla přesunuta, sloučena ani přepsána žádná produkční pracovní data.
 
+## Dokončené rozšíření pracovní větve (30. října)
+
+- Přídavné migrace 0044–0048: výslovné aliasy identit, šifrovaná obnova, adresní vazby přes ID, oddělené licenční politiky a konfigurace organizací, katalogy tarifů a limity členů podle oboru.
+- Organizační kontext zachovává původní licenční připojení obou firem. Nastavení, pracovní poznámky, připomínky a výchozí tarify se neslévají. Sdílí se kontaktní poznámky a základní popis zahrady.
+- Mobilní štítky a výběr oboru, auditovaná správa příslušnosti zákazníka/pracovníka a formuláře. Vazby zákazník–více zahrad–adresa–opravná zakázka jsou ověřeny přes ID.
+- Offline manifest před odesláním čekajících změn; verze oprávnění, oddělení účtu/instalace, atomické odstranění nepřístupných cache a šifrované zachování neodeslané práce včetně fotek a rozepsaných formulářů. Schválené aliasy přebírají čekající operace se zachováním jejich ID.
+- Izolované skutečné Worker/D1/R2 ověření obou vstupů včetně 25 MiB fotografie. Skutečný Chromium ověřil IndexedDB/WebCrypto a šířky 390/430/1280/1440; nejde o fyzický iPhone/Safari ani produkční ověření.
+- Dokončení původní i opravné návštěvy samo neuzavírá závadu. Výslovné řešení, protokol a společná historie bez dvojí návštěvy jsou ověřeny testy.
+
 ## Nutné dokončit před aktivací
 
-1. Dotažení celého rozsahu autorizace a integračních testů, včetně předplatných, oprav více závad, oddělených poznámek, zápisů při odvolání oprávnění a exportů.
-2. Organizační kontext původních vlastnických oprávnění, nastavení a licencí. Je ověřeno, že hosting přiděluje ID podle konkrétního Site. Uživatel výslovně potvrdil propojení obou vlastnických přístupů stejného e-mailu do jedné kanonické identity se zachováním původních ID jako aliasů. Ze šesti původních hostingových ID má vzniknout pět kanonických členů; čtyři ostatní účty zůstávají beze sloučení. Konkrétní schválená ID jsou uložena mimo Git v soukromém převodním souboru. Garden vlastník nesmí získat tajné konfigurace ani zálohovací pravomoci původní Závlahy pouhým importem řádku members.
-3. Dokončit klientské začlenění. Serverové ověřování konkrétních lokálních ID je připravené; šifrované obnovovací balíčky včetně fotografií lze uložit a zobrazit pouze původnímu vlastníkovi. Soukromý klíč je zašifrovaný původním instalačním klíčem a rekey při obnově zálohy je doplněn. Zbývá offline verze oprávnění, zabezpečení neodeslané práce, odvolání místní dostupnosti a odstranění otevřených detailů/objektových URL. Změna musí proběhnout před odesláním čekajících zápisů.
-4. UI štítky a filtry oborů, správa příslušnosti týmu/zákazníků, mobilní ovládání a navigace. Zachovat nynější vzhled.
-5. Skutečný převod nanečisto nad konzistentními snímky obou instalací, klasifikace všech pracovních tabulek a souborových odkazů, řízený import a ověření idempotence. Aktuální plánovač je kontrolní nástroj, nikoli dokončený importér.
-6. Ověření brány na hostingu Sites, přenos změn do přesných zdrojů obou instalací při zachování různých migračních základen, značek a hostingových publik. Nezaměňovat místní test za produkční proof.
-7. Teprve následně aktivovat společný prostor a směrování. Účet Test, ostatní firmy a Super Admin se nepřipojují k pracovní databázi.
+1. Konzistentní převod nanečisto, zámek zápisů během přepnutí, řízený opakovatelný import Garden dat a kontrola výsledných vazeb. Dosavadní plánovač je kontrolní nástroj, nikoli dokončený importér.
+2. Ověření brány na hostingu Sites, přenos změn do přesných zdrojů obou instalací při zachování různých migračních základen, značek a hostingových publik. Nezaměňovat místní test za produkční proof.
+3. Teprve následně aktivovat společný prostor a směrování. Účet Test, ostatní firmy a Super Admin se nepřipojují k pracovní databázi.
 
-Nastavení `SHARED_WORKSPACE_GATEWAY` se zatím nikde v produkci nevytvářelo. Vývojový kód ani migrace zatím nebyly nasazené.
+Nastavení `SHARED_WORKSPACE_GATEWAY` se zatím nikde v produkci nevytvářelo. Vývojový kód ani migrace zatím nebyly nasazené. Přesun aktivního společného prostoru na úplně jiné hostingové identity vyžaduje výslovné přepárování vstupů a licencí; není ověřen jako obyčejná obnova zálohy.

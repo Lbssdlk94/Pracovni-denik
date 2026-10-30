@@ -1,5 +1,5 @@
 // One physical Site/D1/R2 per company. No user-supplied tenant routing.
-export async function installationInfo(env){const row=await env.DB.prepare("SELECT * FROM installation_state WHERE singleton='primary'").first();return {id:row.instance_id,name:row.company_name,version:row.version,mode:'isolated',publicUrl:env.PUBLIC_APP_URL||null};}
+export async function installationInfo(env){const row=await env.DB.prepare("SELECT * FROM installation_state WHERE singleton='primary'").first();return {id:row.instance_id,name:env.WORKSPACE_ORGANIZATION_NAME||row.company_name,version:row.version,mode:env.WORKSPACE_ORGANIZATION_ID?'shared-workspace':'isolated',publicUrl:env.PUBLIC_APP_URL||null};}
 export async function handleInstallation(request,env,m,h){
  if(!['owner','administrator','admin'].includes(m.role))h.fail(403,'Instalaci spravuje vlastník nebo správce.');
  if(request.method==='GET')return h.json(await installationInfo(env));

@@ -1,10 +1,11 @@
+import {workspacePreferenceKey} from './workspace-context.js';
 import {driveSeal,driveOpen,driveUnbase64} from './drive-core.js';
 import {subOne} from './subscriptions.js';
 const EMAIL_CONFIG_KEY='resend-config',EMAIL_CONFIG_AAD='zavlahovy-denik:resend-config:v1';
 export function emailEncryptionReady(env){try{return driveUnbase64(env.DRIVE_TOKEN_ENCRYPTION_KEY||'').length===32;}catch{return false;}}
 // Runtime-only credentials: never return this object from an API or put it in a log.
 export async function readEmailConfiguration(env){
- const row=await subOne(env.DB,'SELECT value,version FROM settings WHERE key=?',EMAIL_CONFIG_KEY);
+ const row=await subOne(env.DB,'SELECT value,version FROM settings WHERE key=?',workspacePreferenceKey(env,EMAIL_CONFIG_KEY));
  if(row){
   let stored;try{stored=JSON.parse(row.value);}catch{return {config:null,version:row.version,source:'app',error:'encrypted_config_unavailable'};}
   if(stored.enabled===false)return {config:null,version:row.version,source:'disabled',from:stored.from||''};
@@ -30,5 +31,5 @@ export async function handleEmailConfiguration(request,env,m,h){
   if(b.apiKey!==undefined&&typeof b.apiKey!=='string')fail(400,'Zkontrolujte API klíč.');const apiKey=b.apiKey?.trim()||current.config?.apiKey;if(!apiKey||!/^re_[A-Za-z0-9_-]{10,200}$/.test(apiKey))fail(400,'Vložte platný API klíč Resend začínající re_.');
   const cipher=await driveSeal(env,{apiKey,from},EMAIL_CONFIG_AAD);value={enabled:true,cipher};
  }
- const result=await env.DB.prepare(`INSERT INTO settings(key,value,version) SELECT ?,?,1 WHERE ${managerGate} AND (?=0 OR EXISTS(SELECT 1 FROM settings WHERE key=? AND version=?)) ON CONFLICT(key) DO UPDATE SET value=excluded.value,version=settings.version+1 WHERE settings.version=?`).bind(EMAIL_CONFIG_KEY,JSON.stringify(value),m.user_id,b.version,EMAIL_CONFIG_KEY,b.version,b.version).run();if(!result.meta.changes)fail(409,'Nastavení se změnilo nebo už nemáte oprávnění. Obnovte ho.');return json(await status());
+ const result=await env.DB.prepare(`INSERT INTO settings(key,value,version) SELECT ?,?,1 WHERE ${managerGate} AND (?=0 OR EXISTS(SELECT 1 FROM settings WHERE key=? AND version=?)) ON CONFLICT(key) DO UPDATE SET value=excluded.value,version=settings.version+1 WHERE settings.version=?`).bind(workspacePreferenceKey(env,EMAIL_CONFIG_KEY),JSON.stringify(value),m.user_id,b.version,workspacePreferenceKey(env,EMAIL_CONFIG_KEY),b.version,b.version).run();if(!result.meta.changes)fail(409,'Nastavení se změnilo nebo už nemáte oprávnění. Obnovte ho.');return json(await status());
 }

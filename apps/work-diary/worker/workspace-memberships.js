@@ -64,6 +64,7 @@ export async function changeWorkspaceMembership(db, actor, entity, id, input, fa
     const committed = await db.prepare('SELECT request_hash FROM workspace_audit WHERE operation_id=?').bind(input.operationId).first();
     if (committed?.request_hash === hash) return {...await readWorkspaceMembership(db, entity, id), replayed: true};
     if (committed) fail(409, 'Identifikátor změny už byl použit pro jiná data.');
+    if(String(error.message).includes('workspace_member_capacity'))fail(409,'Přidání do oboru překračuje jeho limit členů a pozvánek.');
     if (String(error.message).includes('workspace_customer_has_work')) fail(409, 'Obor nelze odebrat: zákazník v něm má zakázky nebo pracovní historii.');
     throw error;
   }

@@ -20,8 +20,12 @@ export async function workspaceResourceAccess(request, env, member, fail) {
   if (requested && !['all', 'irrigation', 'garden'].includes(requested)) fail(400, 'Vyberte platný pracovní obor.');
   if (requested && requested !== 'all' && !authorization.disciplines.includes(requested)) fail(403, 'K tomuto oboru nemáte přístup.');
   const organization = await env.DB.prepare('SELECT * FROM workspace_organizations WHERE installation_id=?').bind(env.WORKSPACE_ENTRY_ID || env.INSTALLATION_ID || '').first();
-  authorization.selectedDiscipline = requested && requested !== 'all' ? requested : authorization.disciplines.length === 1 ? authorization.disciplines[0] : organization?.discipline || null;
+  authorization.selectedDiscipline = requested ? requested : authorization.disciplines.length === 1 ? authorization.disciplines[0] : organization?.discipline || null;
   member._workspace = authorization;
+  member.role = authorization.role;
+  // This version fence protects old cached clients; SQL permissions remain authoritative.
+  const legacySafe=metadataRoute||['GET','HEAD'].includes(method)&&/\/(?:photo|plan|content|file|assets\/\d+|photos\/[-\w]+)$/.test(path);
+  if(!legacySafe&&request.headers.get('x-workspace-client-version')!=='shared-directory-v1')fail(403,'Aplikace potřebuje novou verzi. Zavřete ji, připojte se k internetu a znovu ji otevřete.',{code:'client_update_required'});
   if (authorization.state === 'read_only' && !['GET', 'HEAD'].includes(method) && !/^\/api\/(?:access-|notifications|system-backups|privacy|workspace\/(?:recovery|manifest))/.test(path)) fail(409, 'Společný pracovní prostor je dočasně pouze ke čtení.');
   const irrigation = /^\/api\/(?:shafts|zones)(?:\/|$)/.test(path) || /^\/api\/gardens\/[^/]+\/(?:blowout|plan)(?:\/|-|$)/.test(path);
   if (irrigation && !authorization.disciplines.includes('irrigation')) fail(404, 'Tato část není dostupná.');
@@ -47,7 +51,7 @@ export async function workspaceResourceAccess(request, env, member, fail) {
   if (defect && defect[1] !== 'people') {
     const exists = await env.DB.prepare('SELECT id FROM garden_defects WHERE id=?').bind(defect[1]).first();
     if (exists) {
-      const row = await env.DB.prepare(`SELECT d.id FROM garden_defects d JOIN gardens g ON g.id=d.garden_id WHERE d.id=? AND ${workspaceGardenScope()} AND EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND ${workspaceDisciplineSql('d.discipline')})`).bind(defect[1], member.user_id, member.user_id).first();
+      const row = await env.DB.prepare(`SELECT d.id FROM garden_defects d JOIN gardens g ON g.id=d.garden_id WHERE d.id=? AND ${workspaceGardenScope()} AND EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND ${workspaceDisciplineSql('d.discipline','actor','defects')})`).bind(defect[1], member.user_id, member.user_id).first();
       if (!row) fail(404, 'Závada není dostupná.');
     }
   }
@@ -66,7 +70,7 @@ export function workspaceInitialStatements(env, member, entity, id, discipline, 
       .bind('initial:' + entity + ':' + id, entity, id, member.user_id, now, JSON.stringify([discipline]), 'initial:' + id, ...args)];
 }
 
-export async function workspaceFilterResponse(response, request, env) {
+async function workspaceProjectResponse(response, request, env) {
   const authorization = env._workspaceScope;
   if (!authorization || !response.headers.get('content-type')?.includes('application/json') || response.status >= 400) return response;
   const path = new URL(request.url).pathname;
@@ -74,9 +78,10 @@ export async function workspaceFilterResponse(response, request, env) {
   const value = await response.json();
   const gardens = [...(Array.isArray(value.gardens) ? value.gardens : []), ...(value.garden ? [value.garden] : [])];
   if (gardens.length) {
-    const notes = new Map();
+    const notes = new Map(),memberships=new Map();
     for (let offset = 0; offset < gardens.length; offset += 50) {
       const ids = gardens.slice(offset, offset + 50).map(garden => garden.id);
+      const classes=(await env.DB.prepare(`SELECT g.id,CASE WHEN g.customer_id IS NOT NULL THEN (SELECT json_group_array(d.discipline) FROM customer_disciplines d WHERE d.customer_id=g.customer_id) ELSE (SELECT json_group_array(d.discipline) FROM garden_disciplines d WHERE d.garden_id=g.id) END disciplines FROM gardens g WHERE g.id IN (${ids.map(()=>'?').join(',')})`).bind(...ids).all()).results;for(const row of classes)memberships.set(row.id,JSON.parse(row.disciplines||'[]'));
       const rows = (await env.DB.prepare(`SELECT garden_id,discipline,notes FROM garden_discipline_data WHERE garden_id IN (${ids.map(() => '?').join(',')})`).bind(...ids).all()).results;
       for (const row of rows) {
         if (!authorization.disciplines.includes(row.discipline)) continue;
@@ -86,8 +91,10 @@ export async function workspaceFilterResponse(response, request, env) {
     }
     for (const garden of gardens) {
       const own = notes.get(garden.id) || {};
-      if (authorization.disciplines.includes('irrigation') && !Object.hasOwn(own, 'irrigation')) own.irrigation = garden.notes || '';
-      const selected = authorization.selectedDiscipline || authorization.disciplines[0];
+      garden.disciplines=memberships.get(garden.id)||[];
+      if (authorization.disciplines.includes('irrigation') && garden.disciplines.includes('irrigation') && !Object.hasOwn(own, 'irrigation')) own.irrigation = garden.notes || '';
+      const selected=garden.disciplines.includes(authorization.selectedDiscipline)&&authorization.disciplines.includes(authorization.selectedDiscipline)?authorization.selectedDiscipline:authorization.disciplines.find(key=>garden.disciplines.includes(key));
+      garden.workDiscipline=selected||null;
       garden.notes = own[selected] || '';
       garden.workNotes = own;
       if (!authorization.disciplines.includes('irrigation')) {
@@ -109,4 +116,35 @@ export async function workspaceFilterResponse(response, request, env) {
 
 export function workspaceGardenNotesStatement(env, member, id, discipline, notes, gate, ...args) {
   return env.DB.prepare(`INSERT INTO garden_discipline_data(garden_id,discipline,notes,version) SELECT ?,?,?,1 WHERE ${gate} ON CONFLICT(garden_id,discipline) DO UPDATE SET notes=excluded.notes,version=garden_discipline_data.version+1`).bind(id, discipline, notes, ...args);
+}
+
+// A response must belong to one authorization snapshot. In particular, a list
+// queried after reassignment must never be projected with the previous team's
+// irrigation privileges. Guard binary responses as well as JSON DTOs.
+export async function workspaceFilterResponse(response, request, env) {
+  const initial = env._workspaceScope;
+  if (!initial || response.status >= 400) return response;
+  const path = new URL(request.url).pathname;
+  const ownMetadataChange = !['GET','HEAD'].includes(request.method) && (
+    /^\/api\/workspace\/(?:members|customers|gardens)\/[-\w]+\/disciplines$/.test(path) ||
+    /^\/api\/members\/[-\w]+$/.test(path) || path === '/api/workspace/link-identity'||['owner','administrator','admin'].includes(initial.role)&&/^\/api\/(?:gardens|customers)\/[-\w]+(?:\/customer)?$/.test(path));
+  const sameAccess = current => current && current.workspaceId === initial.workspaceId &&
+    current.state === initial.state && current.role === initial.role &&
+    JSON.stringify(current.disciplines) === JSON.stringify(initial.disciplines);
+  const compatible = current => sameAccess(current) &&
+    (current.authorizationVersion === initial.authorizationVersion || ownMetadataChange) &&
+    (!['GET','HEAD'].includes(request.method) || current.plannerVersion === initial.plannerVersion);
+  const conflict = async pending => {
+    try { await pending.body?.cancel(); } catch {}
+    return new Response(JSON.stringify({code:'workspace_conflict',error:'Oprávnění nebo přiřazení se během načítání změnila. Obnovte přehled.'}),
+      {status:409,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
+  };
+  const current = await workspaceActor(env.DB,initial.userId);
+  if (!compatible(current)) return conflict(response);
+  current.selectedDiscipline = initial.selectedDiscipline;
+  const projected = await workspaceProjectResponse(response,request,{...env,_workspaceScope:current});
+  const after = await workspaceActor(env.DB,initial.userId);
+  if (!compatible(after) || after.authorizationVersion !== current.authorizationVersion || after.plannerVersion !== current.plannerVersion)
+    return conflict(projected);
+  return projected;
 }

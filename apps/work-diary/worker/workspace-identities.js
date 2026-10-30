@@ -14,19 +14,19 @@ export async function workspaceIdentityMember(env, user) {
 // from the invitation inside the same transaction, never from the browser or e-mail matching.
 export async function workspaceInvitationStatements(env, email, canonicalId, externalUserId = null) {
   if (!await env.DB.prepare("SELECT id FROM workspaces WHERE state='active' LIMIT 1").first()) return [];
-  const installationId = await workspaceEntryInstallation(env), now = Date.now();
+  const installationId = await workspaceEntryInstallation(env), now = Date.now(),operation='enrol:'+crypto.randomUUID();
   const gate = "i.email=? AND i.expires_at>? AND EXISTS(SELECT 1 FROM members m WHERE m.user_id=? AND m.email=i.email)";
   const args = [email, now, canonicalId];
   const statements = [env.DB.prepare(`INSERT OR IGNORE INTO member_disciplines(user_id,discipline) SELECT ?,d.value FROM invitations i,json_each(i.disciplines) d WHERE ${gate} AND d.value IN ('irrigation','garden')`)
     .bind(canonicalId, ...args),
     env.DB.prepare(`INSERT OR IGNORE INTO workspace_member_grants(user_id,organization_id,original_role) SELECT ?,i.origin_organization_id,m.role FROM invitations i JOIN members m ON m.user_id=? JOIN workspace_organizations o ON o.id=i.origin_organization_id WHERE ${gate}`)
       .bind(canonicalId, canonicalId, ...args),
-    env.DB.prepare(`INSERT OR IGNORE INTO workspace_entity_versions(entity,entity_id) SELECT 'member',? FROM invitations i WHERE ${gate}`).bind(canonicalId, ...args),
-    env.DB.prepare(`INSERT OR IGNORE INTO workspace_audit(operation_id,entity,entity_id,actor_id,at,base_version,old_disciplines,new_disciplines,request_hash) SELECT ?,'member',?,i.created_by,?,0,'[]',i.disciplines,? FROM invitations i WHERE ${gate}`)
-      .bind('initial:member:' + canonicalId, canonicalId, now, 'invitation:' + canonicalId, ...args)];
+    env.DB.prepare(`INSERT INTO workspace_entity_versions(entity,entity_id,version,last_operation) SELECT 'member',?,1,? FROM invitations i WHERE ${gate} ON CONFLICT(entity,entity_id) DO UPDATE SET version=workspace_entity_versions.version+1,last_operation=excluded.last_operation`).bind(canonicalId,operation, ...args),
+    env.DB.prepare(`INSERT OR IGNORE INTO workspace_audit(operation_id,entity,entity_id,actor_id,at,base_version,old_disciplines,new_disciplines,request_hash) SELECT ?,'member',?,i.created_by,?,(SELECT version-1 FROM workspace_entity_versions WHERE entity='member' AND entity_id=?),'[]',i.disciplines,? FROM invitations i WHERE ${gate}`)
+      .bind(operation, canonicalId, now,canonicalId, 'invitation:' + canonicalId, ...args)];
   if (externalUserId) statements.push(env.DB.prepare(`INSERT OR IGNORE INTO workspace_identity_aliases(installation_id,external_user_id,canonical_user_id,original_role,original_email,original_name,approved_by,approved_at,method) SELECT ?,?,m.user_id,m.role,m.email,m.name,i.created_by,?,'invitation' FROM invitations i JOIN members m ON m.user_id=? WHERE ${gate}`)
     .bind(installationId, externalUserId, now, canonicalId, ...args));
-  statements.push(env.DB.prepare("UPDATE workspaces SET authorization_revision=authorization_revision+1,updated_at=? WHERE EXISTS(SELECT 1 FROM workspace_audit WHERE operation_id=? AND at=?)").bind(now, 'initial:member:' + canonicalId, now));
+  statements.push(env.DB.prepare("UPDATE workspaces SET authorization_revision=authorization_revision+1,updated_at=? WHERE EXISTS(SELECT 1 FROM workspace_audit WHERE operation_id=? AND at=?)").bind(now,operation,now));
   return statements;
 }
 

@@ -17,9 +17,9 @@ export async function handleWorkspaceManifest(request,env,member,helpers) {
   const scopes={
     records:{feature:'shafts',query:marks=>`SELECT s.id FROM shafts s WHERE s.id IN (${marks}) AND s.deleted=0 AND (s.garden_id IS NULL OR EXISTS(SELECT 1 FROM gardens g WHERE g.id=s.garden_id AND g.deleted=0 AND ${workspaceGardenScope()}))`,irrigation:true},
     gardens:{feature:'gardens',query:marks=>`SELECT g.id FROM gardens g WHERE g.id IN (${marks}) AND g.deleted=0 AND ${workspaceGardenScope()}`},
-    services:{feature:'service',query:marks=>`SELECT s.id FROM service_logs s JOIN gardens g ON g.id=s.garden_id AND g.deleted=0 WHERE s.id IN (${marks}) AND s.deleted=0 AND ${workspaceGardenScope()} AND EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND ${workspaceDisciplineSql('s.discipline')})`,actors:2},
+    services:{feature:'service',query:marks=>`SELECT s.id FROM service_logs s JOIN gardens g ON g.id=s.garden_id AND g.deleted=0 WHERE s.id IN (${marks}) AND s.deleted=0 AND ${workspaceGardenScope()} AND EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND ${workspaceDisciplineSql('s.discipline','actor','service')})`,actors:2},
     serviceWork:{feature:'jobs',query:marks=>`SELECT j.id FROM jobs j WHERE j.id IN (${marks}) AND ${['owner','administrator','admin'].includes(member.role)?'1=1':'j.deleted=0'} AND ${workspaceJobScope()}`},
-    defects:{feature:'defects',query:marks=>`SELECT d.id FROM garden_defects d JOIN gardens g ON g.id=d.garden_id AND g.deleted=0 WHERE d.id IN (${marks}) AND ${workspaceGardenScope()} AND EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND ${workspaceDisciplineSql('d.discipline')})`,actors:2}
+    defects:{feature:'defects',query:marks=>`SELECT d.id FROM garden_defects d JOIN gardens g ON g.id=d.garden_id AND g.deleted=0 WHERE d.id IN (${marks}) AND ${workspaceGardenScope()} AND EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND ${workspaceDisciplineSql('d.discipline','actor','defects')})`,actors:2}
   };
   for(const name of names){
     const scope=scopes[name];
@@ -30,5 +30,5 @@ export async function handleWorkspaceManifest(request,env,member,helpers) {
     }
   }
   if(await wmStamp(env.DB)!==before)fail(409,'Oprávnění nebo přiřazení se během ověřování změnila.',{code:'workspace_manifest_changed'});
-  return json({stamp:before,completeForRequestedIds:true,requestedCounts:Object.fromEntries(names.map(name=>[name,input[name].length])),allowed,workspace:member._workspace,writable:['owner','administrator','admin','worker'].includes(member.role)});
+  return json({features,stamp:before,completeForRequestedIds:true,requestedCounts:Object.fromEntries(names.map(name=>[name,input[name].length])),allowed,workspace:member._workspace,writable:['owner','administrator','admin','worker'].includes(member.role)});
 }

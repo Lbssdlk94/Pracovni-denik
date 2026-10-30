@@ -1,5 +1,5 @@
 import {protocolStatus,PROTOCOL_LABELS} from './job-workflow-model.js?v=workspace-roles-v1';
-import {attachFormDraft,captureFormFields,restoreFormFields} from './form-drafts.js?v=workspace-roles-v1';
+import {attachFormDraft,captureFormFields,restoreFormFields} from './form-drafts.js?v=shared-directory-v1';
 import {createLiveProtocolPreview} from './live-protocol-preview.js?v=customer-signature-v1';
 import {createProtocolEmailUI} from './protocol-email-ui.js?v=workspace-roles-v1';
 import {createWorkChargesUI} from './work-charges-ui.js?v=workspace-roles-v1';

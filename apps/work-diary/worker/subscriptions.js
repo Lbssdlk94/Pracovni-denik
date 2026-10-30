@@ -4,7 +4,7 @@ import {jobAssignedIds,jobAssignment} from './assignments.js';
 import {subDate,subAddDays,subPeriodEnd,subToday,subSuggestedDates,subBalances} from '../web/subscription-model.js';
 export const subAll=(db,sql,...args)=>db.prepare(sql).bind(...args).all().then(r=>r.results);
 export const subOne=(db,sql,...args)=>db.prepare(sql).bind(...args).first();
-export const subScope=`EXISTS(SELECT 1 FROM members a WHERE a.user_id=? AND ${workspaceDisciplineSql('s.discipline','a')} AND (a.role IN ('owner','administrator','admin') OR EXISTS(SELECT 1 FROM subscription_periods sp JOIN jobs sj ON sj.service_period_id=sp.id WHERE sp.subscription_id=s.id AND (sj.assigned_to=a.user_id OR EXISTS(SELECT 1 FROM json_each(sj.assigned_users) selected WHERE selected.value=a.user_id)) AND sj.deleted=0 AND sj.service_approval='confirmed')))`;
+export const subScope=`EXISTS(SELECT 1 FROM members a WHERE a.user_id=? AND ${workspaceDisciplineSql('s.discipline','a','subscriptions')} AND (a.role IN ('owner','administrator','admin') OR EXISTS(SELECT 1 FROM subscription_periods sp JOIN jobs sj ON sj.service_period_id=sp.id WHERE sp.subscription_id=s.id AND (sj.assigned_to=a.user_id OR EXISTS(SELECT 1 FROM json_each(sj.assigned_users) selected WHERE selected.value=a.user_id)) AND sj.deleted=0 AND sj.service_approval='confirmed')))`;
 const subManagerGate="EXISTS(SELECT 1 FROM members a WHERE a.user_id=? AND a.role IN ('owner','administrator','admin'))";
 export async function subHash(value){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),b=>b.toString(16).padStart(2,'0')).join('');}
 export async function subReplay(env,id,userId,entity,hash,fail){const old=await subOne(env.DB,'SELECT * FROM subscription_operations WHERE id=?',id);if(!old)return false;if(old.user_id!==userId||old.entity_id!==entity||old.hash!==hash)fail(409,'Identifikátor požadavku už byl použit pro jinou změnu.');return true;}
@@ -23,7 +23,7 @@ export async function subBundle(env,m,rows){
   const ownPeriods=periods.filter(p=>p.subscriptionId===row.id).map(p=>({...p,services:balances[p.id],paymentStatus:p.paymentStatus!=='paid'&&p.dueDate<today?'overdue':p.paymentStatus,received:payments.filter(pay=>pay.period_id===p.id).reduce((s,pay)=>s+pay.amount,0)}));
   const current=ownPeriods.find(p=>p.startDate<=today&&p.endDate>=today)||ownPeriods.filter(p=>p.startDate>today)[0]||ownPeriods.at(-1);
   const jobs=visits.filter(j=>ownPeriods.some(p=>p.id===j.service_period_id)).map(j=>({id:j.id,cancelled:!!j.deleted,title:j.title,jobType:j.job_type,periodId:j.service_period_id,serviceId:j.service_item_id,unit:j.service_unit,approval:j.service_approval,materialStatus:j.material_status,materialNote:j.material_note,status:j.status,dueDate:j.due_date,startTime:j.start_time,endTime:j.end_time,assignedTo:j.assigned_to,assignedTos:jobAssignedIds(j),assignedName:j.assigned_name,version:j.version,completedDate:j.completed_date}));
-  return {id:row.id,customerId:row.customer_id,customerName:row.customer_name||'Smazaný zákazník',gardenId:row.garden_id,gardenName:row.garden_name||'',status:row.status,version:row.version,periods:manager?ownPeriods:ownPeriods.map(({agreedPrice,received,...period})=>{const {priceMinor,...snapshot}=period.snapshot;return {...period,snapshot};}),currentPeriodId:current?.id||null,jobs,nearestVisit:jobs.find(j=>!j.cancelled&&j.approval==='confirmed'&&j.status!=='done'&&j.dueDate>=today)||null,payments:payments.filter(pay=>ownPeriods.some(p=>p.id===pay.period_id)).map(p=>({id:p.id,periodId:p.period_id,date:p.date,amount:p.amount,note:p.note}))};
+  return {id:row.id,...(m._workspace?{discipline:row.discipline}:{}),customerId:row.customer_id,customerName:row.customer_name||'Smazaný zákazník',gardenId:row.garden_id,gardenName:row.garden_name||'',status:row.status,version:row.version,periods:manager?ownPeriods:ownPeriods.map(({agreedPrice,received,...period})=>{const {priceMinor,...snapshot}=period.snapshot;return {...period,snapshot};}),currentPeriodId:current?.id||null,jobs,nearestVisit:jobs.find(j=>!j.cancelled&&j.approval==='confirmed'&&j.status!=='done'&&j.dueDate>=today)||null,payments:payments.filter(pay=>ownPeriods.some(p=>p.id===pay.period_id)).map(p=>({id:p.id,periodId:p.period_id,date:p.date,amount:p.amount,note:p.note}))};
  });
 }
 export async function subRead(env,m,id,fail){const row=await subOne(env.DB,`SELECT s.*,c.name customer_name,g.name garden_name FROM subscriptions s LEFT JOIN customers c ON c.id=s.customer_id AND c.deleted=0 LEFT JOIN gardens g ON g.id=s.garden_id AND g.deleted=0 WHERE s.id=? AND s.deleted_at IS NULL AND ${subScope}`,id,m.user_id);if(!row)fail(404,'Předplatné nebylo nalezeno.');return (await subBundle(env,m,[row]))[0];}
@@ -33,7 +33,7 @@ export async function handleSubscriptions(request,env,m,h){
  const integer=(v,max=100000000)=>{if(!Number.isSafeInteger(v)||v<0||v>max)fail(400,'Zadejte platné nezáporné číslo.');return v;};
  const flag=v=>{if(typeof v!=='boolean')fail(400,'Neplatné přepnutí služby.');return v;};
  const date=v=>{if(!subDate(v))fail(400,'Vyberte platné datum.');return v;};
- const tariffDTO=r=>({id:r.id,definition:JSON.parse(r.definition),active:!!r.active,version:r.version});
+ const tariffDTO=r=>({id:r.id,...(m._workspace?{discipline:r.discipline}:{}),definition:JSON.parse(r.definition),active:!!r.active,version:r.version});
  const definition=v=>{
   if(!v||!Array.isArray(v.services)||!v.services.length||v.services.length>30||!Array.isArray(v.benefits)||v.benefits.length>30)fail(400,'Tarif musí obsahovat 1 až 30 služeb.');
   const services=v.services.map(s=>{if(!['service','blowout','spring','other'].includes(s.kind)||!['yearly','monthly','quarterly','custom'].includes(s.frequency)||!Array.isArray(s.months)||s.months.some(n=>!Number.isInteger(n)||n<1||n>12))fail(400,'Zkontrolujte druh, frekvenci a měsíce služby.');return {id:s.kind==='other'?validId(s.id):s.kind,kind:s.kind,name:cleanText(s.name,120,true),description:cleanText(s.description||'',2000),count:integer(s.count,120),frequency:s.frequency,months:[...new Set(s.months)],autoPlan:flag(s.autoPlan),deduct:flag(s.deduct),included:flag(s.included),limit:cleanText(s.limit||'',1000)};});
@@ -42,14 +42,15 @@ export async function handleSubscriptions(request,env,m,h){
   if(!['monthly','yearly'].includes(v.billingPeriod))fail(400,'Vyberte fakturační období.');
   return {code:cleanText(v.code||'',30),name:cleanText(v.name,120,true),priceMinor:integer(v.priceMinor),currency,billingPeriod:v.billingPeriod,description:cleanText(v.description||'',3000),priority:flag(v.priority),autoConfirm:flag(v.autoConfirm),partsIncluded:flag(v.partsIncluded),extraRepairsIncluded:flag(v.extraRepairsIncluded),visitLimit:cleanText(v.visitLimit||'',1000),terms:cleanText(v.terms||'',4000),benefits:v.benefits.map(b=>cleanText(b,300,true)),services};
  };
- if(path==='/api/tariffs'&&method==='GET'){manage();return json({tariffs:(await subAll(env.DB,'SELECT * FROM service_tariffs ORDER BY json_extract(definition,\'$.priceMinor\'),created_at,id')).map(tariffDTO)});}
- if(path==='/api/tariffs/options'&&method==='GET'){manage();return json({tariffs:(await subAll(env.DB,'SELECT * FROM service_tariffs WHERE active=1 ORDER BY json_extract(definition,\'$.priceMinor\'),created_at,id')).map(tariffDTO)});}
+ const catalogWhere=m._workspace?"discipline IN ('irrigation','garden') AND (? IS NULL OR discipline=?)":'1=1',catalogDiscipline=m._workspace?.selectedDiscipline==='all'?null:m._workspace?.selectedDiscipline,catalogArgs=m._workspace?[catalogDiscipline,catalogDiscipline]:[];
+ if(path==='/api/tariffs'&&method==='GET'){manage();return json({tariffs:(await subAll(env.DB,`SELECT * FROM service_tariffs WHERE ${catalogWhere} ORDER BY json_extract(definition,'$.priceMinor'),created_at,id`,...catalogArgs)).map(tariffDTO)});}
+ if(path==='/api/tariffs/options'&&method==='GET'){manage();return json({tariffs:(await subAll(env.DB,`SELECT * FROM service_tariffs WHERE active=1 AND ${catalogWhere} ORDER BY json_extract(definition,'$.priceMinor'),created_at,id`,...catalogArgs)).map(tariffDTO)});}
  const tariffMatch=path.match(/^\/api\/tariffs\/([-\w]{1,100})$/);
  if(tariffMatch&&method==='PUT'){
   manage();const id=tariffMatch[1],b=await body(request,60000),d=definition(b.definition),active=flag(b.active),version=integer(b.version),now=Date.now();
-  const old=await subOne(env.DB,'SELECT * FROM service_tariffs WHERE id=?',id);if((old?.version||0)!==version)fail(409,'Tarif se mezitím změnil. Obnovte jej před uložením.');
-  const sql=old?'UPDATE service_tariffs SET definition=?,active=?,version=version+1,updated_at=?,updated_by=? WHERE id=? AND version=? AND '+subManagerGate:'INSERT OR IGNORE INTO service_tariffs(id,definition,active,version,created_at,updated_at,updated_by) SELECT ?,?,?,1,?,?,? WHERE '+subManagerGate;
-  const args=old?[JSON.stringify(d),Number(active),now,m.user_id,id,version,m.user_id]:[id,JSON.stringify(d),Number(active),now,now,m.user_id,m.user_id];
+  const old=await subOne(env.DB,'SELECT * FROM service_tariffs WHERE id=?',id),discipline=workspaceWriteDiscipline(m,b,old,fail);if((old?.version||0)!==version)fail(409,'Tarif se mezitím změnil. Obnovte jej před uložením.');
+  const sql=old?'UPDATE service_tariffs SET definition=?,active=?,version=version+1,updated_at=?,updated_by=? WHERE id=? AND version=? AND '+subManagerGate:'INSERT OR IGNORE INTO service_tariffs(discipline,id,definition,active,version,created_at,updated_at,updated_by) SELECT ?,?,?,?,1,?,?,? WHERE '+subManagerGate;
+  const args=old?[JSON.stringify(d),Number(active),now,m.user_id,id,version,m.user_id]:[discipline,id,JSON.stringify(d),Number(active),now,now,m.user_id,m.user_id];
   const result=await env.DB.prepare(sql).bind(...args).run();if(!result.meta.changes)fail(409,'Tarif nelze uložit, obnovte jej a ověřte oprávnění.');return json({tariff:tariffDTO(await subOne(env.DB,'SELECT * FROM service_tariffs WHERE id=?',id))});
  }
  if(path==='/api/subscriptions'&&method==='GET'){
@@ -89,11 +90,11 @@ export async function handleSubscriptions(request,env,m,h){
  const gate="EXISTS(SELECT 1 FROM subscriptions WHERE id=? AND last_operation=? AND version=?) AND NOT EXISTS(SELECT 1 FROM subscription_operations WHERE id=?)",gateArgs=[id,operationId,version+1,operationId];
  const statements=[];let newPeriod=null,newJobs=[];
  if(['activate','change','renew'].includes(action)){
-  const tariff=await subOne(env.DB,'SELECT * FROM service_tariffs WHERE id=? AND active=1',validId(b.tariffId));if(!tariff)fail(400,'Vyberte aktivní tarif.');
+  const tariff=await subOne(env.DB,'SELECT * FROM service_tariffs WHERE id=? AND active=1',validId(b.tariffId));if(!tariff||m._workspace&&tariff.discipline!==discipline)fail(400,'Vyberte aktivní tarif stejného pracovního oboru.');
   if(b.tariffVersion!==undefined&&b.tariffVersion!==tariff.version)fail(409,'Tarif se od výběru změnil. Obnovte nabídku a zkontrolujte podmínky.');
   const snapshot=JSON.parse(tariff.definition),customer=await subOne(env.DB,'SELECT * FROM customers WHERE id=? AND deleted=0',validId(old?.customer_id||b.customerId));if(!customer)fail(400,'Vyberte zákazníka z adresáře.');
   const gardenId=old?old.garden_id:(b.gardenId==null?null:validId(b.gardenId)),garden=gardenId?await subOne(env.DB,'SELECT * FROM gardens WHERE id=? AND customer_id=? AND deleted=0',gardenId,customer.id):null;if(gardenId&&!garden)fail(400,'Vyberte zahradu propojenou s tímto zákazníkem.');
-  if(b.planLater!==undefined&&typeof b.planLater!=='boolean')fail(400,'Neplatná volba plánování.');const planLater=b.planLater===true,assignment=planLater?null:await jobAssignment(env,b,null,fail),assignee=assignment?.primary;if(!planLater&&!assignee)fail(400,'Vyberte člena týmu.');
+  if(b.planLater!==undefined&&typeof b.planLater!=='boolean')fail(400,'Neplatná volba plánování.');const planLater=b.planLater===true,assignment=planLater?null:await jobAssignment(env,{...b,discipline},null,fail),assignee=assignment?.primary;if(!planLater&&!assignee)fail(400,'Vyberte člena týmu.');
   const start=date(b.startDate),end=date(b.endDate||subPeriodEnd(start,snapshot.billingPeriod));if(end<start||end>subAddDays(start,1096))fail(400,'Období musí být platné a nejvýše tříleté.');
   const current=old?await subRead(env,m,id,fail):null,previous=current?.periods.at(-1),settlement=action==='change'?b.settlement:'reset';
   if(!['reset','carry','manual'].includes(settlement))fail(400,'Vyberte způsob vypořádání služeb.');
@@ -146,7 +147,7 @@ export async function handleSubscriptions(request,env,m,h){
  }
  if(action==='visit'){
   const p=await subOne(env.DB,'SELECT * FROM subscription_periods WHERE id=? AND subscription_id=?',validId(b.periodId),id);if(!p)fail(404,'Období nebylo nalezeno.');const service=JSON.parse(p.snapshot).services.find(s=>s.id===b.serviceId);if(!service)fail(400,'Vyberte zahrnutou službu.');
-  const day=date(b.date);if(day<p.start_date||day>p.end_date)fail(400,'Návštěva musí být v platnosti období.');const assignment=await jobAssignment(env,b,null,fail),person=assignment.primary;
+  const day=date(b.date);if(day<p.start_date||day>p.end_date)fail(400,'Návštěva musí být v platnosti období.');const assignment=await jobAssignment(env,{...b,discipline},null,fail),person=assignment.primary;
   const customer=await subOne(env.DB,'SELECT * FROM customers WHERE id=? AND deleted=0',old.customer_id),garden=old.garden_id?await subOne(env.DB,'SELECT * FROM gardens WHERE id=? AND deleted=0',old.garden_id):null;if(!customer)fail(400,'Zákazník už není dostupný.');
   const last=await subOne(env.DB,'SELECT MAX(service_unit) n FROM jobs WHERE service_period_id=? AND service_item_id=?',p.id,service.id);
   newPeriod={id:p.id};newJobs.push({id:validId(b.jobId),service,unit:(last.n||0)+1,date:day,title:service.name+' – '+customer.name,address:garden?.address||JSON.parse(customer.addresses)[0]?.address||'',city:'',customer,gardenId:old.garden_id,assignedTo:person.user_id,additional:assignment.additional,assignedName:person.name,approval:b.confirm===true?'confirmed':'pending'});

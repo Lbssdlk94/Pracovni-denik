@@ -3,6 +3,7 @@ const PHOTO_PHASES={before:'Před realizací',during:'Průběh montáže',after:
 const photoHash=async data=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',data)),b=>b.toString(16).padStart(2,'0')).join('');
 export function createJobPhotosUI({db,esc,getSession,toast,onOpenDrive}){
  let epoch=0,job=null,root=null,data=null,phase='before',queue=[],busy=false,loading=false;const urls=new Set(),thumbnails=new Map();let viewer=null;
+ window.addEventListener('workspace-capture-extra',event=>{if(job&&hasChanges())event.detail.push({key:'job-photos:'+job.id,record:{jobId:job.id,phase,queue:queue.filter(item=>item.state!=='done')}});});
  const actor=()=>getSession()?.user.id+'|'+getSession()?.user.role;
  const enabled=()=>getSession()?.features.googleDrive!==false&&getSession()?.features.drivePhotos!==false&&getSession()?.features.jobs!==false;
  const writable=()=>!!getSession()?.permissions.write;

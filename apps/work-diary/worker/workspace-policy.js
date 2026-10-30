@@ -5,15 +5,17 @@ function workspaceIdentifier(value) {
   if (!/^[a-z][a-z0-9_]*$/.test(value)) throw new TypeError('Invalid SQL identifier');
   return value;
 }
-export function workspaceDisciplineSql(discipline, actor = 'actor') {
+export function workspaceDisciplineSql(discipline, actor = 'actor', feature = null) {
   workspaceIdentifier(actor);
   if (!/^[a-z][a-z0-9_]*\.discipline$/.test(discipline)) throw new TypeError('Invalid discipline column');
+  if(feature!==null&&!/^[a-zA-Z][a-zA-Z0-9]*$/.test(feature))throw new TypeError('Invalid feature identifier');
+  const licensed=`EXISTS(SELECT 1 FROM workspace_organizations wo JOIN workspace_organization_policies wp ON wp.organization_id=wo.id WHERE wo.discipline=${discipline} AND wp.active=1 AND wp.expires_at>CAST(strftime('%s','now') AS INTEGER)*1000${feature?" AND json_extract(wp.features,'$."+feature+"')=1":''})`;
   // Unknown/unclassified discipline never grants access, including to a manager.
-  return `(${workspaceEnabled}=0 OR (${discipline} IN ('irrigation','garden') AND (${actor}.role IN ${workspaceManagers} OR EXISTS(SELECT 1 FROM member_disciplines md WHERE md.user_id=${actor}.user_id AND md.discipline=${discipline}))))`;
+  return `(${workspaceEnabled}=0 OR (${discipline} IN ('irrigation','garden') AND ${licensed} AND (${actor}.role IN ${workspaceManagers} OR EXISTS(SELECT 1 FROM member_disciplines md WHERE md.user_id=${actor}.user_id AND md.discipline=${discipline}))))`;
 }
 export function workspaceJobScope(alias = 'j') {
   workspaceIdentifier(alias);
-  return `EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND ${workspaceDisciplineSql(alias + '.discipline')} AND (actor.role IN ${workspaceManagers} OR ((${alias}.assigned_to=actor.user_id OR EXISTS(SELECT 1 FROM json_each(${alias}.assigned_users) chosen WHERE chosen.value=actor.user_id)) AND ${alias}.service_approval='confirmed')))`;
+  return `EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND ${workspaceDisciplineSql(alias + '.discipline','actor','jobs')} AND (actor.role IN ${workspaceManagers} OR ((${alias}.assigned_to=actor.user_id OR EXISTS(SELECT 1 FROM json_each(${alias}.assigned_users) chosen WHERE chosen.value=actor.user_id)) AND ${alias}.service_approval='confirmed')))`;
 }
 export function workspaceCustomerScope(alias = 'c') {
   workspaceIdentifier(alias);
@@ -25,7 +27,7 @@ export function workspaceGardenScope(alias = 'g') {
   return `EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND (${workspaceEnabled}=0 OR actor.role IN ${workspaceManagers} OR (${alias}.customer_id IS NOT NULL AND EXISTS(SELECT 1 FROM customer_disciplines cd JOIN member_disciplines md ON md.discipline=cd.discipline AND md.user_id=actor.user_id WHERE cd.customer_id=${alias}.customer_id)) OR (${alias}.customer_id IS NULL AND EXISTS(SELECT 1 FROM garden_disciplines gd JOIN member_disciplines md ON md.discipline=gd.discipline AND md.user_id=actor.user_id WHERE gd.garden_id=${alias}.id))))`;
 }
 export async function workspaceActor(db, actorId) {
-  const row = await db.prepare('SELECT id,state,authorization_revision FROM workspaces LIMIT 1').first();
+  const row = await db.prepare("SELECT id,state,authorization_revision,(SELECT version FROM settings WHERE key='job-planner-revision') planner_revision FROM workspaces LIMIT 1").first();
   if (!row || !['active', 'read_only'].includes(row.state)) return null;
   const actor = await db.prepare('SELECT user_id,role FROM members WHERE user_id=?').bind(actorId).first();
   if (!actor) return null;
@@ -34,7 +36,7 @@ export async function workspaceActor(db, actorId) {
   const identityBindings=(await db.prepare('SELECT installation_id AS installationId,external_user_id AS userId FROM workspace_identity_aliases WHERE canonical_user_id=? ORDER BY installation_id,external_user_id').bind(actorId).all()).results;
   const entryInstallations=(await db.prepare('SELECT installation_id AS id,discipline FROM workspace_organizations WHERE workspace_id=? ORDER BY discipline').bind(row.id).all()).results;
   return {identityBindings,entryInstallations,workspaceId: row.id, state: row.state, authorizationVersion: row.authorization_revision,
-    userId: actor.user_id, role: actor.role,
+    plannerVersion: row.planner_revision || 0, userId: actor.user_id, role: actor.role,
     disciplines: manager ? ['irrigation', 'garden'] : result.results.map(value => value.discipline)};
 }
 

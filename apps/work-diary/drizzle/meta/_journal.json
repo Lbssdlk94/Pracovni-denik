@@ -316,6 +316,34 @@
       "when": 1793302853648,
       "tag": "0044_workspace_identity_and_recovery",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "6",
+      "when": 1793339712105,
+      "tag": "0045_workspace_address_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "6",
+      "when": 1793340759869,
+      "tag": "0046_workspace_organization_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "6",
+      "when": 1793341465751,
+      "tag": "0047_workspace_tariff_scopes",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "6",
+      "when": 1793342715525,
+      "tag": "0048_workspace_member_capacity",
+      "breakpoints": true
     }
   ]
 }
