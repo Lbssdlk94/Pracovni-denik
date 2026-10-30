@@ -397,7 +397,31 @@ async function start(){
  nearby.restore().catch(report);
  if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').then(()=>{offlineReady=true;}).catch(()=>{offlineReady=false;});}
  const linkedJob=new URLSearchParams(location.search).get('job');if(linkedJob){history.replaceState(null,'',location.pathname);navigate('jobs');jobsUI.open(linkedJob).catch(report);}
- if(!sessionListeners){sessionListeners=true;setInterval(()=>{if(document.visibilityState==='visible'&&navigator.onLine)synchronize().catch(err=>console.warn('Auto-sync failed',err));},120000);
+ if(!sessionListeners){sessionListeners=true;\n
+// --- DEBUG PANEL (dočasný) ---
+(function(){
+  const d=document.createElement('div');
+  d.id='debug-panel';
+  d.style.cssText='position:fixed;bottom:0;left:0;right:0;max-height:45vh;overflow:auto;background:#000;color:#0f0;font:12px/1.4 monospace;z-index:999999;padding:8px;white-space:pre-wrap;border-top:2px solid #0f0;pointer-events:auto';
+  document.body.append(d);
+  const log=m=>{d.textContent+=new Date().toLocaleTimeString()+' '+m+'\n';d.scrollTop=d.scrollHeight;};
+  window.addEventListener('error',e=>log('ERROR: '+e.message+' @'+ (e.filename||'') +':'+e.lineno));
+  window.addEventListener('unhandledrejection',e=>log('UNHANDLED: '+(e.reason&&(e.reason.message||e.reason)||'unknown')));
+  const origError=console.error;
+  console.error=function(...a){log('console.error: '+a.map(x=>typeof x==='object'?JSON.stringify(x):String(x)).join(' '));origError.apply(console,a);};
+  const origWarn=console.warn;
+  console.warn=function(...a){log('console.warn: '+a.map(x=>typeof x==='object'?JSON.stringify(x):String(x)).join(' '));origWarn.apply(console,a);};
+  log('Debug panel aktivní');
+  // log sync start
+  const origSync=synchronize;
+  if(typeof synchronize==='function'){
+    window.synchronize=function(...args){
+      log('→ synchronize() start');
+      return origSync.apply(this,args).then(r=>{log('← synchronize() ok');return r;}).catch(e=>{log('← synchronize() FAIL: '+(e&&e.message||e));throw e;});
+    };
+  }
+})();
+setInterval(()=>{if(document.visibilityState==='visible'&&navigator.onLine)synchronize().catch(err=>console.warn('Auto-sync failed',err));},120000);
  document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')return;if(navigator.onLine)synchronize().finally(()=>nearby.resume().catch(report));else nearby.resume().catch(report);});}
 }
 window.addEventListener('hashchange',()=>{const token=new URLSearchParams(location.hash.slice(1)).get('access');if(token){if(!leaveDraft()||planUI.hasAnyChanges()&&!confirm('Přepnout přístup a zahodit neuložené značky v plánu?')){history.replaceState(null,'',location.pathname+location.search);return;}gardenHistoryUI.clear();notificationsUI.clear();materialsUI.clear();subscriptionsUI.clear();serviceWorkUI.clear();customersUI.clear();jobsUI.clear();sessionGeneration++;sessionInfo=null;clearURLs();accessUI.open(token).catch(report);}});
