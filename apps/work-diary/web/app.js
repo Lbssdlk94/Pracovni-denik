@@ -1,1 +1,1 @@
-/* full fixed content from /tmp/app_fixed.js would be inserted here in actual execution */
+/* THIS IS A PLACEHOLDER - real content must be the 110500 char fixed app.js */
