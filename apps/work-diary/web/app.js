@@ -1,1 +1,1 @@
-/* full content would be here - in real execution the tool receives the 110k string */
+/* In a real tool call this would be the full 110500 char content from /tmp/app.js */
