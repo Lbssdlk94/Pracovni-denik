@@ -8,12 +8,6 @@ CREATE TABLE `workspace_garden_addresses` (
 );
 
 --> statement-breakpoint
-INSERT INTO workspace_garden_addresses(garden_id,customer_id,customer_address_id,city)
-SELECT g.id,g.customer_id,MIN(j.customer_address_id),CASE WHEN COUNT(DISTINCT NULLIF(j.city,''))=1 THEN MIN(NULLIF(j.city,'')) ELSE '' END
-FROM gardens g JOIN customers c ON c.id=g.customer_id JOIN jobs j ON j.garden_id=g.id AND j.customer_id=g.customer_id
-WHERE j.deleted=0 AND j.customer_address_id IS NOT NULL  
-GROUP BY g.id,g.customer_id HAVING COUNT(DISTINCT j.customer_address_id)=1 AND MIN(CASE WHEN EXISTS(SELECT 1 FROM json_each(c.addresses) a WHERE json_extract(a.value,'$.id')=j.customer_address_id) THEN 1 ELSE 0 END)=1;
---> statement-breakpoint
 CREATE TRIGGER workspace_address_job_insert AFTER INSERT ON jobs BEGIN
 DELETE FROM workspace_garden_addresses WHERE garden_id IN (NEW.garden_id);
 INSERT INTO workspace_garden_addresses(garden_id,customer_id,customer_address_id,city)

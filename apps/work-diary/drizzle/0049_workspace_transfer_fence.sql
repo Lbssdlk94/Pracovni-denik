@@ -24,8 +24,6 @@ CREATE TABLE `workspace_transfer_sessions` (
 );
 
 --> statement-breakpoint
-INSERT INTO workspace_transfer_control(singleton,generation,bypass) VALUES('primary',0,0);
---> statement-breakpoint
 CREATE TRIGGER workspace_transfer_freeze_attendance_corrections_insert BEFORE INSERT ON "attendance_corrections"
 WHEN EXISTS(SELECT 1 FROM workspace_transfer_control WHERE singleton='primary' AND freeze_id IS NOT NULL AND bypass=0)
 BEGIN SELECT RAISE(ABORT,'workspace_transfer_frozen'); END;

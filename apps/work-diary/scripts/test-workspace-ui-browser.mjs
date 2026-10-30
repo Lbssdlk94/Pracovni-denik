@@ -1,7 +1,8 @@
 // Full application + real local Worker/D1/R2. All identities/data are synthetic.
 import assert from 'node:assert/strict';import {createServer} from 'node:http';import {readFileSync,mkdirSync} from 'node:fs';import {createRequire} from 'node:module';import {Miniflare} from 'miniflare';
 const require=createRequire(import.meta.url);let chromium;try{({chromium}=require('playwright'));}catch{({chromium}=createRequire('/opt/codex/runtimes/codex-primary-runtime/dependencies/node/node_modules/package.json')('playwright'));}
-const installation='inst-ui-isolated-123456789',people={owner:{id:'owner-ui',email:'owner@ui.test'},worker:{id:'worker-ui',email:'worker@ui.test'},gardenWorker:{id:'garden-worker-ui',email:'garden@ui.test'}};
+const bakedInstallation=JSON.parse(readFileSync('dist/server/index.js','utf8').match(/const EXPECTED_INSTALLATION_ID=(null|"[^"]+");/)?.[1]||'null');
+const installation=bakedInstallation||'inst-ui-isolated-123456789',people={owner:{id:'owner-ui',email:'owner@ui.test'},worker:{id:'worker-ui',email:'worker@ui.test'},gardenWorker:{id:'garden-worker-ui',email:'garden@ui.test'}};
 let actor=people.owner,mf,browser,server;const origin='http://127.0.0.1';
 const headers=(person=people.owner)=>({'oai-authenticated-user-id':person.id,'oai-authenticated-user-email':person.email,'x-zavlahy-request':'1','x-workspace-client-version':'shared-directory-v1','content-type':'application/json'});
 async function call(path,method='GET',value,person=people.owner){const response=await mf.dispatchFetch('http://ui.test'+path,{method,headers:headers(person),...(value===undefined?{}:{body:JSON.stringify(value)})});assert.equal(response.status,200,await response.clone().text());return response.json();}

@@ -1,5 +1,5 @@
 import {handleWorkspaceTransfer} from './workspace-transfer.js';
-import {workspaceTransferStamp,workspaceTransferFrozen,workspaceFencedDatabase} from './workspace-transfer-control.js';
+import {workspaceTransferStamp,workspaceTransferFrozen,workspaceFencedDatabase,workspaceTransferEnsureControl} from './workspace-transfer-control.js';
 import {workspaceRequestContext,workspacePreferenceKey} from './workspace-context.js';
 import {workspaceRecoveryPublicInfo} from './workspace-recovery.js';
 import {normalizeDisciplines} from '../web/discipline-model.js';
@@ -199,9 +199,10 @@ function mutationAllowed(request){
 }
 async function featureSettings(env){const row=await one(env.DB,"SELECT * FROM settings WHERE key=?",workspacePreferenceKey(env,'features'));return {...await tenantFeaturePolicy(env,normalizeFeatures(row?JSON.parse(row.value):null)),featuresVersion:row?.version||0};}
 export async function api(request,env,ctx){
+ await workspaceTransferEnsureControl(env);
  if(new URL(request.url).pathname.startsWith('/api/workspace-transfer/')){
   try{if(!['GET','HEAD'].includes(request.method))mutationAllowed(request);return await handleWorkspaceTransfer(request,env,{json,fail,body});}
-  catch(error){if(error instanceof HttpError)return json({error:error.message,...error.extra},error.status);return json({error:'Řízený převod nebyl uložen. Ověřte stav a plán.',code:'workspace_transfer_failed'},409);}
+  catch(error){if(error instanceof HttpError)return json({error:error.message,...error.extra},error.status);console.error('Workspace transfer failed',error?.name,error?.message);return json({error:'Řízený převod nebyl uložen. Ověřte stav a plán.',code:'workspace_transfer_failed'},409);}
  }
  const scopedEnv={...env,_workspaceStartStamp:await workspaceTransferStamp(env)};
  scopedEnv.DB=workspaceFencedDatabase(env.DB,scopedEnv._workspaceStartStamp);

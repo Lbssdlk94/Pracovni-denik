@@ -5,7 +5,8 @@ import {Miniflare} from 'miniflare';
 
 const canonicalOrigin = 'https://canonical.test';
 const entryOrigin = 'https://entry.test';
-const canonicalId = 'inst-canonical-isolated-12345';
+const bakedInstallation=JSON.parse(readFileSync('dist/server/index.js','utf8').match(/const EXPECTED_INSTALLATION_ID=(null|"[^"]+");/)?.[1]||'null');
+const canonicalId = bakedInstallation||'inst-canonical-isolated-12345';
 const entryId = 'inst-entry-isolated-12345';
 const key = Buffer.alloc(32, 9).toString('base64url');
 const ownerHeaders = {'oai-authenticated-user-id': 'owner-test', 'oai-authenticated-user-email': 'owner@example.test', 'x-zavlahy-request': '1', 'content-type': 'application/json','x-workspace-client-version':'shared-directory-v1'};

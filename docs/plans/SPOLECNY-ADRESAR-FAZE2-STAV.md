@@ -1,39 +1,72 @@
-# Společný adresář: rozpracovaná fáze 2
+# Společný adresář a oddělené obory – stav po nasazení
 
-30. října 2026. Uživatel schválil jednu autoritativní pracovní databázi a společné API. Následně výslovně požádal pokračovat i bez nové zálohy. Čekání na novou zálohu proto není blokátorem. Dosavadní zálohy se nemažou ani nevypínají. Google Disk a e-mailové integrace nejsou součástí změny.
+30. října 2026. Fáze 2 je aktivovaná. Pracovní větev: `plan/shared-directory-disciplines-2026-10-29`.
 
-Větev: `plan/shared-directory-disciplines-2026-10-29`. Tento dokument je pracovní stav, nikoli tvrzení o dokončené implementaci nebo nasazení.
+## Provozní stav
 
-## Dosud napsáno
+- Dr. Závlaha: https://zavlahovy-denik.purplecedar.chatgpt.site/ – vydání 105, prostředí 14.
+- Dr. Garden: https://dr-garden.purplecedar.chatgpt.site/ – vydání 26, prostředí 8.
+- Obě adresy používají společné API a jednu autoritativní pracovní D1/R2 instalaci Dr. Závlahy.
+- Pracovní prostor: `workspace-dr-zavlaha-garden-2026`. Oddělené obory: `irrigation`, `garden`.
+- Původní Garden D1 zůstala zachovaná a trvale uzamčená jako archiv. Není druhou pracovní evidencí ani záložním místem pro zápis při výpadku API.
+- Zachováno publikum obou Sites. Test, ostatní firmy a Super Admin se nepřipojily k pracovní databázi.
 
-- Přídavná migrace 0043 a odpovídající Drizzle snapshot. Neaktivuje pracovní prostor a neklasifikuje žádná stávající provozní data.
-- Skutečně vyzkoušená serverová brána: dvě vstupní adresy, jeden kanonický Worker/API a D1. Druhý testovací vstup nemá DB ani R2. HMAC, šifrovaná identita, hash těla, krátká platnost, trvalá evidence nonce proti opakování, kontrola párovaného originu.
-- Model dvou příslušností (irrigation/garden); Obojí je pouze zobrazení množiny dvou vazeb.
-- SQL autorizační predikáty a HTTP ochrana přímých odkazů; napojeny na čtení zakázek, zákazníků, servisních protokolů, historie, závad, fotografií, oznámení a základu zahrad. Pracovní údaje zahrady se odstraňují před odpovědí Garden pracovníkovi. Zůstává původní omezení přiřazení zakázek.
-- Transakční změny příslušnosti s auditem, idempotencí, CAS/verzí, aktuální hierarchií rolí a monotónní verzí oprávnění. Přidání druhého oboru nezakládá druhého zákazníka.
-- Databázové ochrany zachované historie při odebrání oboru, autorů pracovních zápisů, přiřazených kolegů, neměnného oboru zakázky a současných změn rolí. Původní výjimka přiřazeného čtenáře pro změnu stavu zůstává.
-- Bezpečné vytvoření počáteční příslušnosti u nově založeného zákazníka/zahrady; nové zakázky a předplatná nesou konkrétní obor.
-- Samostatný deterministický plánovač převodu nanečisto nad obnovenými snímky. Zachovává identifikátory, nikdy nepáruje lidi podle jména/telefonu/adresy, rozlišuje volitelné prázdné a neprázdné neplatné vazby. Neprovádí SQL ani připojení k produkci. Výstup neobsahuje kontakty ani tajné hodnoty.
+## Výsledek převodu
 
-## Dosud ověřeno
+Před uzamčením proběhl živý převod nanečisto. Poté byl po krátkém uzamčení obou databází ověřen konzistentní snímek. Finální plán neobsahoval žádnou blokující překážku a byl navázán na generaci změn a kontrolní hash:
 
-Izolovaná SQLite, skutečný workerd/D1/R2 přes Miniflare a stávající regresní sada. Poslední úplný běh má 268 úspěšných testů; zaměřená sada propojení má 49 testů. Další změny vyžadují nový běh před nasazením. Samostatný Worker test ověřuje společný zápis/čtení/úpravu, nezměněné ID zákazníka a zahrady, souběžnou CAS změnu členství, jeden auditní záznam při opakování, nepřihlášeného/cizího člena a nepodepsané RPC.
+`ea6778dad3a63fdb2a9a913e32073c6782c4be5ac4fcdf3ac30d32c115b3d050`
 
-Nejde o ověření produkčního propojení Sites, které dosud nebylo zapnuto. Dosud nebyla přesunuta, sloučena ani přepsána žádná produkční pracovní data.
+Stav při aktivaci:
 
-## Dokončené rozšíření pracovní větve (30. října)
+| Evidence | Původní Závlaha | Původní Garden | Společná evidence |
+| --- | ---: | ---: | ---: |
+| Zákazníci | 120 | 1 | 121 |
+| Zahrady včetně historie | 129 | 1 | 130 |
+| Zakázky včetně historie | 148 | 0 | 148 |
+| Kanoničtí členové | 5 | 1 | 5 |
 
-- Přídavné migrace 0044–0048: výslovné aliasy identit, šifrovaná obnova, adresní vazby přes ID, oddělené licenční politiky a konfigurace organizací, katalogy tarifů a limity členů podle oboru.
-- Organizační kontext zachovává původní licenční připojení obou firem. Nastavení, pracovní poznámky, připomínky a výchozí tarify se neslévají. Sdílí se kontaktní poznámky a základní popis zahrady.
-- Mobilní štítky a výběr oboru, auditovaná správa příslušnosti zákazníka/pracovníka a formuláře. Vazby zákazník–více zahrad–adresa–opravná zakázka jsou ověřeny přes ID.
-- Offline manifest před odesláním čekajících změn; verze oprávnění, oddělení účtu/instalace, atomické odstranění nepřístupných cache a šifrované zachování neodeslané práce včetně fotek a rozepsaných formulářů. Schválené aliasy přebírají čekající operace se zachováním jejich ID.
-- Izolované skutečné Worker/D1/R2 ověření obou vstupů včetně 25 MiB fotografie. Skutečný Chromium ověřil IndexedDB/WebCrypto a šířky 390/430/1280/1440; nejde o fyzický iPhone/Safari ani produkční ověření.
-- Dokončení původní i opravné návštěvy samo neuzavírá závadu. Výslovné řešení, protokol a společná historie bez dvojí návštěvy jsou ověřeny testy.
+Šest původních hostingových identit je výslovně navázáno na pět členů. Sloučil se pouze uživatelem schválený pár vlastnických identit. Ostatní členové, přiřazení zakázek a jejich role zůstali zachovaní. Nevznikaly shody podle jména, telefonu či adresy. Prázdné volitelné vazby se neopravovaly odhadem.
 
-## Nutné dokončit před aktivací
+Původní Garden zákazník a zahrada zachovali svá ID. Tři kolizní výchozí tarify dostaly ID `garden-tariff-low`, `garden-tariff-medium`, `garden-tariff-high`; jejich definice se zachovaly. Původní tarify a smluvní snapshoty Závlahy se nepřepsaly.
 
-1. Produkční provedení připraveného převodu nanečisto a importu. Migrace 0049 přidává trvalý zámek zápisů a generaci změn. Úzce vymezené, časově omezené technické připojení umí snímek, kontrolní plán s hashem, transakční import a odstavit starou databázi. Převod a rollback včetně aliasů, původních ID a kolizních tarifů jsou ověřeny izolovaně. Pokud v Garden přibudou pracovní záznamy mimo ověřený rozsah, převod se zastaví a nic nevynechá. Dosavadní samostatný plánovač zůstává pouze kontrolním nástrojem.
-2. Ověření brány na hostingu Sites, přenos změn do přesných zdrojů obou instalací při zachování různých migračních základen, značek a hostingových publik. Nezaměňovat místní test za produkční proof.
-3. Teprve následně aktivovat společný prostor a směrování. Účet Test, ostatní firmy a Super Admin se nepřipojují k pracovní databázi.
+Závlaha při převodu obsahovala také 2 závady, 113 protokolů a 164 servisních fotografií. Zůstaly na původních vazbách a v původním úložišti. Žádné provozní zakázky se nepoužily k testovacím zápisům.
 
-Nastavení `SHARED_WORKSPACE_GATEWAY` se zatím nikde v produkci nevytvářelo. Vývojový kód ani migrace zatím nebyly nasazené. Přesun aktivního společného prostoru na úplně jiné hostingové identity vyžaduje výslovné přepárování vstupů a licencí; není ověřen jako obyčejná obnova zálohy.
+Uživatel výslovně schválil pokračování bez nové úplné zálohy. Nová záloha nebyla předstíraná ani vynucovaná. Dosavadní zálohy se nemazaly. Původní Garden databáze a úložiště se zachovaly.
+
+## Funkce a ochrany
+
+- Společné kontakty, adresy a základní popis zahrady; oborové pracovní poznámky, zakázky, historie, protokoly, závady a pracovní fotografie.
+- Štítky Závlaha/Garden/Obojí a přepínač Vše/Závlaha/Garden. Správa příslušnosti v zákaznících a týmu s verzováním a auditem.
+- Zákaz odebrání zákaznického oboru s pracovní historií. Kategorie Obojí nezpřístupňuje pracovníkovi automaticky všechny zakázky. Nadále rozhoduje jeho role, obor a konkrétní přiřazení.
+- Serverové filtry před stránkováním a ochrana přímých odkazů, médií, historie, oznámení a synchronizace. Samostatná ochrana polí Šachty/Vyfukování/čerpadlo/plán.
+- SQL transakční kontroly současných změn rolí a příslušnosti, stabilní operační ID, idempotentní čerpání a zachování sjednaných tarifních podmínek.
+- Offline revize oprávnění, ověření lokálních ID před odesláním fronty, odstranění nepřístupných cache a šifrovaná záchrana neodeslaných textů, fotografií a rozepsaných formulářů.
+- Oddělená licenční připojení, preference a tarifní katalogy obou organizací. Technické statistiky nepočítají automaticky všechny členy společné databáze do každé firmy. Garden se neoznačuje jako zálohovaná starší zálohou samotné Závlahy.
+- Zdrojové změny jsou na samostatné pracovní větvi; hostingové zdroje zachovaly značky, migrační základy i publika instalací.
+
+## Kde funkce najít
+
+V horním přepínači **Obor** zvolte **Vše** pro společný přehled správce. V zákazníkovi nebo v týmu otevřete **Obory / Příslušnost k oborům**. Stávající zákazníci Závlahy začali jako Závlaha, původní zákazník Garden jako Garden. Přidání druhého oboru používá stejnou kartu; nezakládá její kopii. Pracovník jediného týmu má obor automaticky.
+
+Pro další osobní účty se identity neslučují jen podle e-mailu. Pro práci v obou oborech lze dál používat dosavadní adresu aplikace s příslušným oprávněním. Další hostingové identity vyžadují výslovné bezpečné propojení.
+
+## Ověření
+
+- Zaměřená sada propojení: 55 úspěšných testů. Úplná sada po finálních opravách: 274 úspěšných testů, žádný neúspěšný test.
+- Skutečný lokální workerd/D1/R2: podepsaný snímek, transakční převod s 305 syntetickými zakázkami, stabilní ID, vlastnický alias, opakování, zámek zápisů a zachování původních záznamů.
+- Skutečný lokální workerd: dvě vstupní adresy, jeden pracovní DB/R2, souběžná změna s CAS, idempotentní audit, neplatný podpis/cizí člen, přenos a čtení fotografie 25 MiB.
+- Chromium: mobilní šířky 390/430 a desktop 1280/1440, výběry oborů, více zahrad/adres přes ID, formuláře, zrušení bez zápisu a kontrola vodorovného přetečení.
+- Chromium/IndexedDB/WebCrypto: upgrade v4→v5, odebrání oprávnění, atomické odstranění čitelné cache, šifrované zachování protokolu/fotky/formuláře, stabilní ID čekajících operací a obnovení stránky.
+- Provoz: podepsaná komunikace Garden→Závlaha ověřená před převodem i po aktivaci. Stav společného prostoru je `active`; původní Garden zápisy jsou blokované. Dočasné převodní oprávnění je po dokončení explicitně neplatné; původní token vrací 404.
+
+Metadata živého převodu bez kontaktních údajů a bez tajných hodnot jsou v `/workspace/artifacts/shared-directory/production-preview.json`, `production-frozen-preview.json`, `production-transfer-result.json`.
+
+## Omezení a provozní poznámky
+
+- Ověření mobilu proběhlo v Chromiu, nikoli na fyzickém iPhonu/Safari. Přihlášení skutečných pracovníků a jejich provozní zakázky se neimpersonovaly; role a celé zápisy se testovaly izolovaně.
+- Už odpojenému telefonu nelze vzdáleně odebrat data okamžitě. Po dalším ověření připojení se uplatní revize oprávnění a bezpečné vyčištění. Při selhání šifrování/úložiště se nesmí předstírat úspěšná záchrana a zahodit originální práci.
+- Google Disk se nepřeváděl. Garden měl pouze prázdný technický řadič bez konfigurace a spojení; zůstal v původním archivu. Garden nesmí převzít připojení Závlahy. Interní fotografie protokolů používají stávající R2. Sdílení na Disku a jeho externí přímé odkazy zůstávají mimo tento úkol. E-mailové integrace se nezaváděly.
+- Při přípravě publikace se opravilo umístění migračních souborů v archivu; mezitím se obnovila předchozí vydání. Správný balíček kontroluje `scripts/package-workspace-release.mjs`. Nativní uložení je podle source SHA idempotentní: jiný archiv ke stejnému commitu nevytvoří náhradu; oprava balení musí mít nový commit.
+- Pouhé odebrání tajné proměnné z konfigurace nebylo dostačujícím důkazem jejího zneplatnění za běhu. Převodní přístup byl proto přepsán explicitně vypršelou hodnotou a ověřen odpovědí 404.
+- Po aktivaci nelze bezpečně jen přepnout na starou neoborovou verzi nebo obnovit zápisy do původní Garden DB. Rollback vyžaduje řízenou obnovu společných dat a započtení nových zápisů. Budoucí změna hostingových identit nebo technických klíčů vyžaduje výslovné přepárování vstupů a licencí; není ověřená jako obyčejná obnova na cizí hosting.

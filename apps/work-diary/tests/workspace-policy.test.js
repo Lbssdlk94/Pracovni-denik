@@ -520,3 +520,61 @@ test('shared contact and garden, discipline-private work, explicit defect repair
   assert.equal((await api(request('/api/defects/'+defect.id,native),e,context)).status,404);assert.equal((await api(request('/api/jobs/garden-repair/service',native),e,context)).status,404);
  }finally{e.sqlite.close();}
 });
+
+
+test('organization links use the paired entry URL without changing physical storage or identity',async()=>{
+ const e=await setup();try{
+  const {workspaceRequestContext}=await import('../worker/workspace-context.js');
+  e.PUBLIC_APP_URL='https://source.test';
+  e.SHARED_WORKSPACE_GATEWAY=JSON.stringify({mode:'canonical',peerId:'inst-garden-isolated-test',entryOrigin:'https://garden.test'});
+  const selected=await workspaceRequestContext(e,request('/api/me?discipline=garden',people.owner),e.manager);
+  assert.equal(selected.PUBLIC_APP_URL,'https://garden.test');assert.equal(selected.DB,e.DB);assert.equal(selected.BUCKET,e.BUCKET);
+  const original=await workspaceRequestContext(e,request('/api/me?discipline=irrigation',people.owner),e.manager);
+  assert.equal(original.PUBLIC_APP_URL,'https://source.test');
+ }finally{e.sqlite.close();}
+});
+
+
+test('technical heartbeat totals follow department seats, activity and backups covering the shared database',async()=>{
+ const e=await setup();try{
+  const {workspaceHeartbeatCounts}=await import('../worker/tenant-platform.js'),now=100000000;
+  e.sqlite.prepare("INSERT INTO invitations(email,role,created_by,created_at,disciplines) VALUES('next@example.test','worker',?,1,'[\"irrigation\"]')").run(people.owner.id);
+  for(const key of ['platform-activity:'+people.worker.id,'workspace:garden-org:platform-activity:'+people.worker.id,'workspace:garden-org:platform-activity:'+people.reader.id])e.sqlite.prepare('INSERT INTO settings(key,value) VALUES(?,?)').run(key,String(now));
+  e.sqlite.prepare("INSERT INTO system_backups(id,state,created_at,created_by,manifest,cursor,source) VALUES('before','ready',0,?,'{}','{}','manual')").run(people.owner.id);
+  const irrigation=await workspaceHeartbeatCounts({...e,WORKSPACE_ORGANIZATION_DISCIPLINE:'irrigation'},now),garden=await workspaceHeartbeatCounts({...e,WORKSPACE_ORGANIZATION_DISCIPLINE:'garden',WORKSPACE_SETTINGS_PREFIX:'workspace:garden-org:'},now);
+  assert.equal(irrigation.members,3);assert.equal(garden.members,3);assert.equal(irrigation.pendingInvites,1);assert.equal(garden.pendingInvites,0);assert.equal(irrigation.activeUsers30d,1);assert.equal(garden.activeUsers30d,1);assert.equal(garden.lastBackupAt,null);
+  e.sqlite.prepare("INSERT INTO system_backups(id,state,created_at,created_by,manifest,cursor,source) VALUES('after','ready',2,?,'{}','{}','manual')").run(people.owner.id);
+  assert.equal((await workspaceHeartbeatCounts({...e,WORKSPACE_ORGANIZATION_DISCIPLINE:'garden',WORKSPACE_SETTINGS_PREFIX:'workspace:garden-org:'},now)).lastBackupAt,2);
+ }finally{e.sqlite.close();}
+});
+
+
+test('deferred Garden Drive cannot inherit the irrigation connection or upload Google job photos',async()=>{
+ const e=await setup();try{
+  const requestGarden=path=>request(path,people.owner,'GET',undefined,{'x-work-discipline':'garden'});
+  for(const path of ['/api/drive/status','/api/jobs/g/photos']){
+   const response=await api(requestGarden(path),e,context);assert.equal(response.status,409,await response.clone().text());assert.equal((await response.json()).code,'integration_not_migrated');
+  }
+  const denied=await api(request('/api/jobs/g/photos',people.worker),e,context);assert.equal(denied.status,404,await denied.clone().text());
+  const response=await api(request('/api/jobs/i/service',people.owner),e,context);assert.equal(response.status,200,await response.clone().text());
+ }finally{e.sqlite.close();}
+});
+
+
+test('a garden-only writer can update shared basics without copying or clearing private irrigation pump data',async()=>{
+ const e=await setup();try{
+  const row=e.sqlite.prepare("SELECT * FROM gardens WHERE customer_id='both' LIMIT 1").get();
+  e.sqlite.prepare("UPDATE gardens SET pump_type='Private irrigation pump' WHERE id=?").run(row.id);
+  e.sqlite.prepare("DELETE FROM member_disciplines WHERE user_id=?").run(people.worker.id);e.sqlite.prepare("INSERT INTO member_disciplines VALUES(?,'garden')").run(people.worker.id);
+  const response=await api(request('/api/gardens/'+row.id,people.worker,'PATCH',{version:row.version,name:row.name,address:row.address,notes:'Garden work note',sharedDescription:'Common place description'}),e,context);assert.equal(response.status,200,await response.clone().text());
+  const saved=e.sqlite.prepare('SELECT * FROM gardens WHERE id=?').get(row.id);assert.equal(saved.pump_type,'Private irrigation pump');assert.equal(saved.shared_description,'Common place description');assert.equal(saved.notes,row.notes);
+  const detail=(await e.call('/api/gardens',people.worker)).gardens.find(g=>g.id===row.id);assert.equal(detail.notes,'Garden work note');assert.equal(detail.pumpType,undefined);
+ }finally{e.sqlite.close();}
+});
+
+test('irrigation OAuth top navigation keeps its own session and state checks without a JS-only version header',async()=>{
+ const e=await setup();try{
+  const response=await api(request('/api/drive/oauth/callback?error=cancelled&state=invalid',people.owner,'GET',undefined,{'x-workspace-client-version':''}),e,context);
+  assert.equal(response.status,303,await response.clone().text());assert.ok(response.headers.get('location').startsWith('/?drive='));
+ }finally{e.sqlite.close();}
+});

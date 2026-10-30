@@ -1,3 +1,14 @@
+const wtControlReady=new WeakSet();
+export async function workspaceTransferEnsureControl(env){
+ if(wtControlReady.has(env.DB))return;
+ const row=await env.DB.prepare("SELECT * FROM workspace_transfer_control WHERE singleton='primary'").first();
+ const planner=await env.DB.prepare("SELECT 1 FROM settings WHERE key='job-planner-revision'").first();
+ const statements=[];
+ if(!row)statements.push(env.DB.prepare("INSERT OR IGNORE INTO workspace_transfer_control(singleton,generation,bypass) VALUES('primary',0,0)"));
+ if(!planner)statements.push(env.DB.prepare("INSERT OR IGNORE INTO settings(key,value,version) VALUES('job-planner-revision','',0)"));
+ if(statements.length)await env.DB.batch(statements);
+ wtControlReady.add(env.DB);
+}
 // This fence is persisted in D1, so old requests and other Worker isolates cannot
 // silently write into an installation while its consistent transfer is frozen.
 export async function workspaceTransferFrozen(env){
@@ -6,6 +17,7 @@ export async function workspaceTransferFrozen(env){
  return null;
 }
 export async function workspaceTransferStamp(env){
+ await workspaceTransferEnsureControl(env);
  const row=await env.DB.prepare("SELECT c.freeze_id,w.id,w.state FROM workspace_transfer_control c LEFT JOIN workspaces w ON 1=1 WHERE c.singleton='primary'").first();
  return JSON.stringify([row?.freeze_id||null,row?.id||null,row?.state||null]);
 }

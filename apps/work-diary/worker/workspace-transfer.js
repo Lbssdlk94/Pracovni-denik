@@ -24,15 +24,20 @@ async function wtAuthorize(request,env,h){
  await assertInstallation(env);
  return {config:c,token,installationId:installation.instance_id,source:installation.instance_id===c.canonicalInstallationId};
 }
-async function wtInventory(env){const counts={};for(const name of WORKSPACE_TRANSFER_TABLES)counts[name]=(await env.DB.prepare('SELECT count(*) n FROM "'+name+'"').first()).n;return counts;}
+async function wtInventory(env){
+ // Scalar counts avoid D1's smaller compound-SELECT limit and use one bounded
+ // query. Names are exclusively from the server-owned schema whitelist.
+ const sql='SELECT '+WORKSPACE_TRANSFER_TABLES.map(name=>'(SELECT count(*) FROM "'+name+'") AS "'+name+'"').join(',');
+ return env.DB.prepare(sql).first();
+}
 async function wtExport(env,access,h){
  const preferences=await env.DB.prepare("SELECT value FROM settings WHERE key='features'").first(),policy=await tenantFeaturePolicy(env,normalizeFeatures(preferences?JSON.parse(preferences.value):null));
  const before=await wtControl(env),tables={};
  for(const name of wtExportTables){tables[name]=(await env.DB.prepare('SELECT * FROM "'+name+'" ORDER BY '+(name==='members'?'user_id':name==='garden_geocodes'?'garden_id':'id')+' LIMIT 1001').all()).results;if(tables[name].length>1000)h.fail(413,'Tento řízený převod vyžaduje menší datové části.');}
  tables.settings=(await env.DB.prepare('SELECT * FROM settings WHERE key IN ('+wtPreferences.map(()=>'?').join(',')+') ORDER BY key').bind(...wtPreferences).all()).results;
- const counts=await wtInventory(env),runtime=Object.fromEntries(wtRuntime.filter(key=>env[key]).map(key=>[key,env[key]])),after=await wtControl(env);
+ const counts=await wtInventory(env),emptyDriveControl=counts.drive_control===1&&counts.drive_connections===0&&counts.drive_folders===0&&counts.drive_oauth_states===0&&!!await env.DB.prepare("SELECT 1 FROM drive_control WHERE id='team' AND config IS NULL AND active_connection_id IS NULL AND version=0 AND last_operation IS NULL").first(),runtime=Object.fromEntries(wtRuntime.filter(key=>env[key]).map(key=>[key,env[key]])),after=await wtControl(env);
  if(before.generation!==after.generation||before.freeze_id!==after.freeze_id)h.fail(409,'Data se během snímku změnila. Opakujte načtení.');
- const payload={format:'work-diary-paired-transfer',version:1,installationId:access.installationId,workspaceId:access.config.workspaceId,generation:after.generation,sessionId:after.freeze_id,counts,tables,runtime,policy};
+ const payload={format:'work-diary-paired-transfer',version:1,installationId:access.installationId,workspaceId:access.config.workspaceId,generation:after.generation,sessionId:after.freeze_id,counts,tables,runtime,policy,emptyDriveControl};
  return {payload,signature:await wtSign(access.token,payload)};
 }
 async function wtReadPlan(env,access,envelope,h){
@@ -43,7 +48,7 @@ async function wtReadPlan(env,access,envelope,h){
  const source=await wtControl(env),blockers=[],warnings=[],renames=[];
  const counts=await wtInventory(env);
  if(counts.workspaces)blockers.push({code:'workspace_already_configured'});
- for(const name of WORKSPACE_TRANSFER_TABLES){if(!Number.isSafeInteger(p.counts?.[name])||p.counts[name]<0)h.fail(400,'Neúplný seznam tabulek snímku.');if(p.counts[name]>0&&!wtAllowedNonempty.has(name))blockers.push({code:'additional_garden_work_requires_transfer',table:name,count:p.counts[name]});}
+ for(const name of WORKSPACE_TRANSFER_TABLES){if(!Number.isSafeInteger(p.counts?.[name])||p.counts[name]<0)h.fail(400,'Neúplný seznam tabulek snímku.');if(p.counts[name]>0&&!wtAllowedNonempty.has(name)&&!(name==='drive_control'&&p.emptyDriveControl===true&&p.counts[name]===1&&['drive_connections','drive_folders','drive_oauth_states'].every(key=>p.counts[key]===0)))blockers.push({code:'additional_garden_work_requires_transfer',table:name,count:p.counts[name]});}
  for(const name of wtExportTables){if(p.counts[name]!==p.tables[name].length)h.fail(400,'Počet záznamů snímku nesouhlasí.');}
  const originalOwner=await env.DB.prepare("SELECT user_id,role,email FROM members WHERE user_id=?").bind(c.canonicalUserId).first(),linked=p.tables.members.find(row=>row.user_id===c.linkedUserId);
  if(originalOwner?.role!=='owner'||linked?.role!=='owner'||originalOwner.email.toLowerCase()!==linked.email.toLowerCase())blockers.push({code:'approved_owner_identity_changed'});
@@ -57,6 +62,7 @@ async function wtReadPlan(env,access,envelope,h){
  for(const row of p.tables.garden_geocodes)if(!p.tables.gardens.some(g=>g.id===row.garden_id))blockers.push({code:'geocode_without_garden',id:row.garden_id});
  // A new provider configuration is outside this transfer's authorized scope.
  // Source configuration is intentionally retained, never copied into Garden.
+ if(p.emptyDriveControl)warnings.push({code:'empty_infrastructure_kept_in_original_archive',table:'drive_control',count:1});
  const snapshotHash=await wtHash(p),content={workspaceId:c.workspaceId,sourceGeneration:source.generation,sourceSessionId:source.freeze_id,gardenGeneration:p.generation,gardenSessionId:p.sessionId,snapshotHash,sourcePolicyHash:await wtHash(sourcePolicy),counts:{source:counts,garden:p.counts},renames,blockers,warnings,identity:{canonicalUserId:c.canonicalUserId,linkedUserId:c.linkedUserId},backupRequirement:'explicitly-waived-by-owner'};
  return {payload:p,sourcePolicy,report:{...content,planHash:await wtHash(content),readyForCutover:!!source.freeze_id&&!!p.sessionId&&!blockers.length},source};
 }
@@ -83,6 +89,11 @@ async function wtApply(env,access,envelope,planHash,h){
  for(const person of p.tables.members){const userId=aliasMap.get(person.user_id)||person.user_id;if(userId===person.user_id)statements.push(await wtRowStatement(env,'members',person));statements.push(env.DB.prepare("INSERT INTO member_disciplines VALUES(?,'garden')").bind(userId),env.DB.prepare('INSERT INTO workspace_member_grants VALUES(?,?,?)').bind(userId,gardenOrg,person.role),env.DB.prepare('INSERT INTO workspace_identity_aliases VALUES(?,?,?,?,?,?,?,?,?)').bind(c.linkedInstallationId,person.user_id,userId,person.role,person.email,person.name,c.canonicalUserId,now,userId===person.user_id?'original':'confirmed'),env.DB.prepare("INSERT INTO workspace_identity_events VALUES(?,?,?,?,?,?,'migration-approved')").bind('transfer-alias:'+person.user_id,c.canonicalUserId,now,c.linkedInstallationId,person.user_id,userId));}
  for(const [table,idKey] of [['members','user_id'],['customers','id'],['gardens','id'],['jobs','id'],['garden_defects','id'],['service_logs','id'],['subscriptions','id'],['service_tariffs','id']]){const rows=(await env.DB.prepare('SELECT * FROM '+table).all()).results;statements.push(...await wtOrigins(env,rootOrg,table,rows,idKey));}
  for(const [entity,table,key] of [['member','members','user_id'],['customer','customers','id'],['garden','gardens','id']])statements.push(env.DB.prepare('INSERT INTO workspace_entity_versions(entity,entity_id,version) SELECT ?, '+key+',1 FROM '+table).bind(entity));
+ statements.push(env.DB.prepare(`INSERT OR IGNORE INTO workspace_garden_addresses(garden_id,customer_id,customer_address_id,city)
+ SELECT g.id,g.customer_id,MIN(j.customer_address_id),CASE WHEN COUNT(DISTINCT NULLIF(j.city,''))=1 THEN MIN(NULLIF(j.city,'')) ELSE '' END
+ FROM gardens g JOIN customers c ON c.id=g.customer_id JOIN jobs j ON j.garden_id=g.id AND j.customer_id=g.customer_id
+ WHERE j.deleted=0 AND j.customer_address_id IS NOT NULL
+ GROUP BY g.id,g.customer_id HAVING COUNT(DISTINCT j.customer_address_id)=1 AND MIN(CASE WHEN EXISTS(SELECT 1 FROM json_each(c.addresses) a WHERE json_extract(a.value,'$.id')=j.customer_address_id) THEN 1 ELSE 0 END)=1`));
  for(const [table,parent,key] of [['customer_disciplines','customers','customer_id'],['garden_disciplines','gardens','garden_id']])statements.push(env.DB.prepare('INSERT INTO '+table+'('+key+',discipline) SELECT id,\'irrigation\' FROM '+parent));
  for(const table of ['jobs','garden_defects','service_logs','subscriptions','service_tariffs'])statements.push(env.DB.prepare('UPDATE '+table+" SET discipline='irrigation'"));
  statements.push(env.DB.prepare("UPDATE invitations SET disciplines='[\"irrigation\"]',origin_organization_id=?").bind(rootOrg));

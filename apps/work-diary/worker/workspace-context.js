@@ -30,6 +30,7 @@ export async function workspaceRequestContext(env,request,member,all=false){
   }
   const scoped={...env,WORKSPACE_ORGANIZATION_ID:organization.id,WORKSPACE_ORGANIZATION_DISCIPLINE:organization.discipline,WORKSPACE_ORGANIZATION_NAME:organization.name,WORKSPACE_SETTINGS_PREFIX:prefix,WORKSPACE_POLICY_INSTALLATION_ID:organization.installation_id};
   if(!source){delete scoped.RESEND_API_KEY;delete scoped.SERVICE_EMAIL_FROM;}
+  if(!source&&env.SHARED_WORKSPACE_GATEWAY){const gateway=JSON.parse(env.SHARED_WORKSPACE_GATEWAY);if(gateway.mode==='canonical'&&gateway.peerId===organization.installation_id){const origin=new URL(gateway.entryOrigin);if(origin.protocol!=='https:'||origin.origin!==gateway.entryOrigin)throw Error('Neplatná adresa vstupu druhého oboru.');scoped.PUBLIC_APP_URL=origin.origin;}}
   if(!source)for(const key of woRuntimeKeys){delete scoped[key];if(runtime[key])scoped[key]=runtime[key];}
   const preferences=await env.DB.prepare('SELECT value FROM settings WHERE key=?').bind(prefix+'features').first();
   const result=await tenantFeaturePolicy(scoped,normalizeFeatures(preferences?JSON.parse(preferences.value):null));

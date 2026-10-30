@@ -35,7 +35,6 @@ export async function workspaceGateway(request,env,ctx,canonicalAPI){
  const parsed=new URL(meta.path,config.canonicalOrigin);if(parsed.origin!==config.canonicalOrigin||parsed.pathname+parsed.search!==meta.path)return wgFail(401,'Neplatná cesta požadavku.');
  const bytes=await wgBytes(request);if(await wgHash(bytes)!==meta.hash)return wgFail(401,'Obsah požadavku neodpovídá podpisu.');
  // The signed diagnostic can prove hosted transport before any business cutover.
- await env.DB.prepare('CREATE TABLE IF NOT EXISTS workspace_gateway_nonces(nonce TEXT PRIMARY KEY NOT NULL,expires_at INTEGER NOT NULL)').run();
  // Persistent nonces make replays fail across isolates/restarts as well.
  const nonce=await env.DB.prepare('INSERT OR IGNORE INTO workspace_gateway_nonces(nonce,expires_at) VALUES(?,?)').bind(meta.from+':'+meta.nonce,Date.now()+WG_TTL*2).run();if(!nonce.meta.changes)return wgFail(409,'Tento požadavek už byl zpracován.');
  ctx.waitUntil(env.DB.prepare('DELETE FROM workspace_gateway_nonces WHERE expires_at<?').bind(Date.now()).run().catch(()=>{}));
