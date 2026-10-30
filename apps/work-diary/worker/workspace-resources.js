@@ -1,3 +1,4 @@
+import {workspaceTransferStamp} from './workspace-transfer-control.js';
 import {workspaceActor, workspaceJobScope, workspaceGardenScope, workspaceDisciplineSql} from './workspace-policy.js';
 
 export function workspaceWriteDiscipline(member, body, previous, fail) {
@@ -123,7 +124,14 @@ export function workspaceGardenNotesStatement(env, member, id, discipline, notes
 // irrigation privileges. Guard binary responses as well as JSON DTOs.
 export async function workspaceFilterResponse(response, request, env) {
   const initial = env._workspaceScope;
-  if (!initial || response.status >= 400) return response;
+  if (response.status >= 400 || env._workspaceTransferResponse) return response;
+  if (!initial) {
+    if (env._workspaceStartStamp !== undefined && env._workspaceStartStamp !== await workspaceTransferStamp(env)) {
+      try { await response.body?.cancel(); } catch {}
+      return Response.json({code:'workspace_conflict',error:'Probíhá přepnutí společného adresáře. Obnovte aplikaci.'},{status:409,headers:{'cache-control':'no-store'}});
+    }
+    return response;
+  }
   const path = new URL(request.url).pathname;
   const ownMetadataChange = !['GET','HEAD'].includes(request.method) && (
     /^\/api\/workspace\/(?:members|customers|gardens)\/[-\w]+\/disciplines$/.test(path) ||

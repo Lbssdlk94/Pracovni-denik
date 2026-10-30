@@ -1,3 +1,4 @@
+import {workspaceTransferFrozen} from './workspace-transfer-control.js';
 import {workspacePreferenceKey,workspaceScheduledContexts} from './workspace-context.js';
 import {workspaceDisciplineSql} from './workspace-policy.js';
 import {runVehicleReminders} from './vehicles.js';
@@ -12,6 +13,7 @@ import {subToday,subAddDays} from '../web/subscription-model.js';
 import {dispatchNotifications} from './notifications.js';
 export async function readMaterialReminderSettings(env){const row=await subOne(env.DB,"SELECT value,version FROM settings WHERE key=?",workspacePreferenceKey(env,'material-reminders'));return {settings:row?validateMaterialReminderSettings(JSON.parse(row.value)):{...MATERIAL_REMINDER_DEFAULTS},version:row?.version||0};}
 export async function runServiceReminders(env,{source='manual'}={}){
+ if(await workspaceTransferFrozen(env))return {created:0,disabled:true,migrationInProgress:true};
  try{const contexts=source==='scheduled'?await workspaceScheduledContexts(env):[env],results=[];for(const context of contexts)results.push(await runMaterialChecks(context));const result=results.length===1?results[0]:{created:results.reduce((sum,value)=>sum+(value.created||0),0),organizations:results};let maintenance=null;if(source==='scheduled')maintenance=await systemMaintenance(env);if(source==='scheduled')await env.DB.prepare("INSERT INTO settings(key,value,version) VALUES('system-last-scheduled-run',?,1) ON CONFLICT(key) DO UPDATE SET value=excluded.value,version=version+1").bind(JSON.stringify({at:Date.now(),ok:true})).run();return {...result,maintenance};}catch(e){if(source==='scheduled')await env.DB.prepare("INSERT INTO settings(key,value,version) VALUES('system-last-scheduled-run',?,1) ON CONFLICT(key) DO UPDATE SET value=excluded.value,version=version+1").bind(JSON.stringify({at:Date.now(),ok:false,error:'Kontrolní běh selhal.'})).run();throw e;}
 }
 async function runMaterialChecks(env){

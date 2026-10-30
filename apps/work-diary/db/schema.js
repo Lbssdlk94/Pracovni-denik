@@ -148,3 +148,14 @@ export const workspaceOrganizationConfig=sqliteTable('workspace_organization_con
 export const workspaceOrganizationPolicies=sqliteTable('workspace_organization_policies',{
  organizationId:text('organization_id').primaryKey().references(()=>workspaceOrganizations.id),active:integer('active').notNull(),expiresAt:integer('expires_at').notNull(),revision:integer('revision').notNull(),features:text('features').notNull(),maxUsers:integer('max_users').notNull(),checkedAt:integer('checked_at').notNull()
 },t=>[check('workspace_org_features_json',sql`json_valid(${t.features})`),check('workspace_org_max_users',sql`${t.maxUsers}>0`)]);
+
+// A short-lived migration fence. Normal API clients cannot set the bypass flag.
+export const workspaceTransferControl=sqliteTable('workspace_transfer_control',{
+ singleton:text('singleton').primaryKey(),generation:integer('generation').notNull().default(0),freezeId:text('freeze_id'),bypass:integer('bypass').notNull().default(0)
+},t=>[check('workspace_transfer_singleton',sql`${t.singleton}='primary'`),check('workspace_transfer_bypass',sql`${t.bypass} IN (0,1)`)]);
+export const workspaceTransferSessions=sqliteTable('workspace_transfer_sessions',{
+ id:text('id').primaryKey(),state:text('state').notNull(),createdAt:integer('created_at').notNull(),generation:integer('generation').notNull(),planHash:text('plan_hash'),summary:text('summary').notNull().default('{}')
+},t=>[check('workspace_transfer_session_state',sql`${t.state} IN ('frozen','released','applied','retired')`)]);
+export const workspaceTransferAssertions=sqliteTable('workspace_transfer_assertions',{
+ id:text('id').primaryKey(),valid:integer('valid').notNull()
+},t=>[check('workspace_transfer_assertion',sql`${t.valid}=1`)]);

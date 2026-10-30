@@ -17,7 +17,7 @@ Větev: `plan/shared-directory-disciplines-2026-10-29`. Tento dokument je pracov
 
 ## Dosud ověřeno
 
-Izolovaná SQLite, skutečný workerd/D1/R2 přes Miniflare a stávající regresní sada. Poslední úplný běh má 264 úspěšných testů; zaměřená sada propojení má 45 testů. Další změny vyžadují nový běh před nasazením. Samostatný Worker test ověřuje společný zápis/čtení/úpravu, nezměněné ID zákazníka a zahrady, souběžnou CAS změnu členství, jeden auditní záznam při opakování, nepřihlášeného/cizího člena a nepodepsané RPC.
+Izolovaná SQLite, skutečný workerd/D1/R2 přes Miniflare a stávající regresní sada. Poslední úplný běh má 268 úspěšných testů; zaměřená sada propojení má 49 testů. Další změny vyžadují nový běh před nasazením. Samostatný Worker test ověřuje společný zápis/čtení/úpravu, nezměněné ID zákazníka a zahrady, souběžnou CAS změnu členství, jeden auditní záznam při opakování, nepřihlášeného/cizího člena a nepodepsané RPC.
 
 Nejde o ověření produkčního propojení Sites, které dosud nebylo zapnuto. Dosud nebyla přesunuta, sloučena ani přepsána žádná produkční pracovní data.
 
@@ -32,7 +32,7 @@ Nejde o ověření produkčního propojení Sites, které dosud nebylo zapnuto. 
 
 ## Nutné dokončit před aktivací
 
-1. Konzistentní převod nanečisto, zámek zápisů během přepnutí, řízený opakovatelný import Garden dat a kontrola výsledných vazeb. Dosavadní plánovač je kontrolní nástroj, nikoli dokončený importér.
+1. Produkční provedení připraveného převodu nanečisto a importu. Migrace 0049 přidává trvalý zámek zápisů a generaci změn. Úzce vymezené, časově omezené technické připojení umí snímek, kontrolní plán s hashem, transakční import a odstavit starou databázi. Převod a rollback včetně aliasů, původních ID a kolizních tarifů jsou ověřeny izolovaně. Pokud v Garden přibudou pracovní záznamy mimo ověřený rozsah, převod se zastaví a nic nevynechá. Dosavadní samostatný plánovač zůstává pouze kontrolním nástrojem.
 2. Ověření brány na hostingu Sites, přenos změn do přesných zdrojů obou instalací při zachování různých migračních základen, značek a hostingových publik. Nezaměňovat místní test za produkční proof.
 3. Teprve následně aktivovat společný prostor a směrování. Účet Test, ostatní firmy a Super Admin se nepřipojují k pracovní databázi.
 

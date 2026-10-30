@@ -344,6 +344,13 @@
       "when": 1793342715525,
       "tag": "0048_workspace_member_capacity",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "6",
+      "when": 1793347916779,
+      "tag": "0049_workspace_transfer_fence",
+      "breakpoints": true
     }
   ]
 }
