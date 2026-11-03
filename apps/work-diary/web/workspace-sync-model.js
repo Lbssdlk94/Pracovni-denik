@@ -1,49 +1,62 @@
-const wsKinds=['records','gardens','services','serviceWork','defects'];
+const STORES=['records','gardens','services','serviceWork','defects'];
 const wsId=value=>typeof value==='string'&&/^[-\w]{1,100}$/.test(value);
-export function workspaceSameAccount(previous,current){
- if(!previous?.user?.id)return true;
- const oldInstallation=previous.installation?.id,newInstallation=current?.installation?.id;
- if(previous.user.id===current?.user?.id&&oldInstallation===newInstallation)return true;
- const workspace=current?.workspace;
- const bound=workspace?.identityBindings?.some(binding=>binding.userId===previous.user.id&&binding.installationId===oldInstallation);
- return !!bound&&!!workspace.entryInstallations?.some(entry=>entry.id===oldInstallation)&&(!newInstallation||workspace.entryInstallations.some(entry=>entry.id===newInstallation));
+
+export function workspaceSameAccount(previous,next){
+  if(!previous?.user?.id)return true;
+  const previousInstallation=previous.installation?.id,nextInstallation=next?.installation?.id;
+  if(previous.user.id===next?.user?.id&&previousInstallation===nextInstallation)return true;
+  const workspace=next?.workspace;
+  return !!workspace?.identityBindings?.some(binding=>binding.userId===previous.user.id&&binding.installationId===previousInstallation)&&!!workspace.entryInstallations?.some(entry=>entry.id===previousInstallation)&&(!nextInstallation||workspace.entryInstallations.some(entry=>entry.id===nextInstallation));
 }
+
 export function workspaceInventory(caches,seen={}){
- const values={records:[],gardens:[],services:[],serviceWork:[],defects:[]};
- for(const kind of wsKinds){const ids=(caches[kind]||[]).map(row=>kind==='serviceWork'?row.jobId:row.id);values[kind]=[...new Set([...ids,...(seen[kind]||[])].filter(wsId))].sort();}
- return values;
-}
-export function workspaceCanKeepPending(kind,entry,current,manifest,legacyDiscipline){
- if(!current.permissions?.write||manifest.writable===false)return false;
- const features=manifest.features||current.features||{},allowed=manifest.allowed;
- const gardenId=entry.gardenId||entry.payload?.gardenId||entry.snapshot?.gardenId||entry.snapshot?.job?.gardenId;
- const discipline=entry.discipline||entry.payload?.discipline||entry.snapshot?.discipline||entry.snapshot?.job?.discipline||legacyDiscipline;
- const permitsGarden=!gardenId||allowed.gardens.includes(gardenId);
- const scoped=current.workspace.disciplines.includes(discipline);
- if(kind==='records')return features.shafts!==false&&current.workspace.disciplines.includes('irrigation')&&(allowed.records.includes(entry.id)||!entry.version&&permitsGarden);
- if(kind==='services')return features.service!==false&&scoped&&(allowed.services.includes(entry.id)||!entry.version&&permitsGarden&&!!gardenId);
- if(kind==='defects')return features.defects!==false&&scoped&&(allowed.defects.includes(entry.id)||!entry.payload?.version&&permitsGarden&&!!gardenId&&(entry.payload?.version>0||!entry.payload?.sourceJobId||allowed.serviceWork.includes(entry.payload.sourceJobId)));
- if(kind==='serviceWork'){
-  if(features.jobs===false||!allowed.serviceWork.includes(entry.jobId))return false;
-  if(current.user.role!=='owner'&&(entry.payload?.report?.materialItems!==undefined||entry.payload?.report?.workCharges!==undefined))return false;
-  if(!current.permissions.manage&&entry.payload?.deductOverride!==undefined)return false;
-  return true;
- }
- return false;
-}
-export function planWorkspaceReconciliation(previous,current,caches,inventory,manifest){
- if(!workspaceSameAccount(previous,current))throw Object.assign(Error('V zařízení jsou údaje jiného účtu.'),{code:'pending_account'});
- if(!manifest?.completeForRequestedIds||!manifest.allowed||wsKinds.some(kind=>manifest.requestedCounts?.[kind]!==inventory[kind].length||!Array.isArray(manifest.allowed[kind])||manifest.allowed[kind].some(id=>!inventory[kind].includes(id))))throw Error('Server nepotvrdil úplný rozsah ověřovaných místních identifikátorů.');
- const legacyDiscipline=previous?.workspace?.entryInstallations?.find(entry=>entry.id===previous.installation?.id)?.discipline||current.workspace.entryInstallations?.find(entry=>entry.id===previous?.installation?.id)?.discipline;
- const revoked=[],keep={};let reduced=!!previous?.user&&(previous.user.role!==current.user.role||previous.workspace?.authorizationVersion!==undefined&&previous.workspace.authorizationVersion!==current.workspace.authorizationVersion)||previous?.workspace?.disciplines?.some(value=>!current.workspace.disciplines.includes(value));
- for(const kind of wsKinds){keep[kind]=[];for(const id of inventory[kind].filter(value=>!manifest.allowed[kind].includes(value))){const row=(caches[kind]||[]).find(value=>(kind==='serviceWork'?value.jobId:value.id)===id);if(!row||!(row._pending||row.pending)||!workspaceCanKeepPending(kind,row,current,manifest,legacyDiscipline))reduced=true;}
-  for(const row of caches[kind]||[]){const pending=!!(row._pending||row.pending);
-   if(pending){if(workspaceCanKeepPending(kind,row,current,manifest,legacyDiscipline))keep[kind].push({...row,...(row.ownerId?{ownerId:current.user.id}:{}),...(kind==='serviceWork'?{id:current.user.id+'|'+row.jobId}:{}),...(kind!=='records'&&kind!=='serviceWork'?{discipline:row.discipline||row.payload?.discipline||legacyDiscipline}:{} )});else revoked.push({kind,record:row});}
-   else if(manifest.allowed[kind].includes(kind==='serviceWork'?row.jobId:row.id))keep[kind].push(row);
+  const inventory={records:[],gardens:[],services:[],serviceWork:[],defects:[]};
+  for(const store of STORES){
+    const ids=(caches[store]||[]).map(record=>store==='serviceWork'?record.jobId:record.id);
+    inventory[store]=[...new Set([...ids,...seen[store]||[]].filter(wsId))].sort();
   }
- }
- if(previous?.user&&!current.workspace.disciplines.includes('irrigation')&&(previous.workspace?.disciplines?.includes('irrigation')||!previous.workspace&&legacyDiscipline==='irrigation'))reduced=true;
- if(previous?.permissions?.write&&!current.permissions?.write)reduced=true;
- if(reduced){for(const kind of wsKinds)keep[kind]=keep[kind].filter(row=>row._pending||row.pending).map(row=>({...row,...(kind==='serviceWork'||kind==='defects'?{snapshot:null}:{} )}));}
- return {keep,revoked,reduced,legacyDiscipline,resetSettings:!!reduced,stamp:manifest.stamp};
+  return inventory;
+}
+
+export function workspaceCanKeepPending(store,record,next,manifest,legacyDiscipline){
+  if(!next.permissions?.write||manifest.writable===false)return false;
+  const features=manifest.features||next.features||{},allowed=manifest.allowed;
+  const gardenId=record.gardenId||record.payload?.gardenId||record.snapshot?.gardenId||record.snapshot?.job?.gardenId;
+  const discipline=record.discipline||record.payload?.discipline||record.snapshot?.discipline||record.snapshot?.job?.discipline||legacyDiscipline;
+  const gardenAllowed=!gardenId||allowed.gardens.includes(gardenId);
+  const disciplineAllowed=next.workspace.disciplines.includes(discipline);
+  if(store==='records')return features.shafts!==false&&next.workspace.disciplines.includes('irrigation')&&(allowed.records.includes(record.id)||!record.version&&gardenAllowed);
+  if(store==='services')return features.service!==false&&disciplineAllowed&&(allowed.services.includes(record.id)||!record.version&&gardenAllowed&&!!gardenId);
+  if(store==='defects')return features.defects!==false&&disciplineAllowed&&(allowed.defects.includes(record.id)||!record.payload?.version&&gardenAllowed&&!!gardenId&&(record.payload?.version>0||!record.payload?.sourceJobId||allowed.serviceWork.includes(record.payload.sourceJobId)));
+  if(store==='serviceWork')return !(features.jobs===false||!allowed.serviceWork.includes(record.jobId)||next.user.role!=='owner'&&(record.payload?.report?.materialItems!==undefined||record.payload?.report?.workCharges!==undefined)||!next.permissions.manage&&record.payload?.deductOverride!==undefined);
+  return false;
+}
+
+export function planWorkspaceReconciliation(previous,next,caches,inventory,manifest){
+  if(!workspaceSameAccount(previous,next))throw Object.assign(Error('V zařízení jsou údaje jiného účtu.'),{code:'pending_account'});
+  if(!manifest?.completeForRequestedIds||!manifest.allowed||STORES.some(store=>manifest.requestedCounts?.[store]!==inventory[store].length||!Array.isArray(manifest.allowed[store])||manifest.allowed[store].some(id=>!inventory[store].includes(id))))throw Error('Server nepotvrdil úplný rozsah ověřovaných místních identifikátorů.');
+  const legacyDiscipline=previous?.workspace?.entryInstallations?.find(entry=>entry.id===previous.installation?.id)?.discipline||next.workspace.entryInstallations?.find(entry=>entry.id===previous?.installation?.id)?.discipline;
+  const revoked=[];
+  const keep={};
+  let reduced=!!previous?.user&&(previous.user.role!==next.user.role||previous.workspace?.authorizationVersion!==undefined&&previous.workspace.authorizationVersion!==next.workspace.authorizationVersion)||!!previous?.workspace?.disciplines?.some(discipline=>!next.workspace.disciplines.includes(discipline));
+  for(const store of STORES){
+    keep[store]=[];
+    // Referenced and previously seen ids are not stored records. Missing them from
+    // the manifest is normal after a background refresh and must not lock the device.
+    for(const id of inventory[store].filter(candidate=>!manifest.allowed[store].includes(candidate))){
+      const record=(caches[store]||[]).find(item=>(store==='serviceWork'?item.jobId:item.id)===id);
+      if(!record)continue;
+      if(!(record._pending||record.pending)||!workspaceCanKeepPending(store,record,next,manifest,legacyDiscipline))reduced=true;
+    }
+    for(const record of caches[store]||[]){
+      if(record._pending||record.pending){
+        if(workspaceCanKeepPending(store,record,next,manifest,legacyDiscipline))keep[store].push({...record,...record.ownerId?{ownerId:next.user.id}:{},...store==='serviceWork'?{id:next.user.id+'|'+record.jobId}:{},...store!=='records'&&store!=='serviceWork'?{discipline:record.discipline||record.payload?.discipline||legacyDiscipline}:{}});
+        else revoked.push({kind:store,record});
+      }else if(manifest.allowed[store].includes(store==='serviceWork'?record.jobId:record.id))keep[store].push(record);
+    }
+  }
+  if(previous?.user&&!next.workspace.disciplines.includes('irrigation')&&(previous.workspace?.disciplines?.includes('irrigation')||!previous.workspace&&legacyDiscipline==='irrigation'))reduced=true;
+  if(previous?.permissions?.write&&!next.permissions?.write)reduced=true;
+  if(reduced)for(const store of STORES)keep[store]=keep[store].filter(record=>record._pending||record.pending).map(record=>({...record,...store==='serviceWork'||store==='defects'?{snapshot:null}:{}}));
+  return {keep,revoked,reduced:!!reduced,legacyDiscipline,resetSettings:!!reduced,stamp:manifest.stamp};
 }

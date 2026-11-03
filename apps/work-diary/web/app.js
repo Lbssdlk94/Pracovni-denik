@@ -39,7 +39,7 @@ import {gardenTabsMarkup,gardenPanel} from './garden-ui.js?v=workspace-roles-v1'
 import {FEATURE_OPTIONS,featureEnabled} from './features.js?v=fleet-photo-v1';
 import {settingsPage,bindSettings} from './settings-ui.js?v=workspace-controls-v1';
 import {COLORS,DEFAULT_ZONES,clamp,createMarker,normalizedPoint,validateBackup} from './model.js?v=workspace-roles-v1';
-import * as db from './cloud.js?v=connection-recovery-v1';
+import * as db from './cloud.js?v=github-sync-fix-v3';
 import * as legacyDb from './storage.js?v=workspace-roles-v1';
 import {preparePhoto,annotatedPhoto,download,blobToDataURL} from './export.js?v=workspace-roles-v1';
 
@@ -304,7 +304,7 @@ const actions={'sort-gardens-name':()=>nearby.nameOrder(),'sort-gardens-nearest'
 app.addEventListener('click',async e=>{
   const logout=e.target.closest('[data-signout]');if(logout){e.preventDefault();if(!leaveDraft())return;if(planUI.hasAnyChanges()&&!confirm('V plánu jsou neuložené značky. Odhlásit se a zahodit tyto úpravy?'))return;if((await db.pendingSummary()).total&&!confirm('V telefonu jsou změny, které ještě nebyly sdíleny. Odhlášením se jejich místní kopie smaže. Opravdu se odhlásit?'))return;const previousSession=sessionInfo;try{await notificationsUI.detach();}catch{report(new Error('Pro bezpečné odhlášení oznámení se připojte k internetu a zkuste to znovu.'));return;}notificationsUI.clear();vehiclesUI.clear();sessionGeneration++;sessionInfo=null;await db.waitForRefresh();if(previousSession?.user.authMethod==='link'){try{await db.request('/api/access-logout',{method:'POST'});}catch(error){sessionInfo=previousSession;report(new Error('Pro odhlášení se připojte k internetu.'));return;}}await db.forgetSession();subscriptionsUI.clear();serviceWorkUI.clear();customersUI.clear();jobsUI.clear();attendanceUI.clear();planUI.clear();blowoutUI.clear();inviteText='';location.href=logout.href;return;}
   const customerContact=e.target.closest('[data-open-garden-customer]');if(customerContact){await customersUI.open(customerContact.dataset.openGardenCustomer).catch(report);return;}const assignCustomer=e.target.closest('[data-assign-garden-customer]');if(assignCustomer){await customersUI.assignGarden(assignCustomer.dataset.assignGardenCustomer).catch(report);return;}
-  const nav=e.target.closest('[data-page]');if(nav){if(nav.dataset.page==='materials'&&sessionInfo?.user.role!=='owner')return;if(nav.dataset.page==='team'&&!manageable()||nav.dataset.page==='backup'&&!manageable())return;if(nav.dataset.page==='settings'&&navigator.onLine){try{sessionInfo=await db.connect();}catch(error){if([401,403].includes(error.status)){await db.lockSession();sessionInfo=null;clearURLs();showLogin(error);return;}toast('Nastavení týmu se nepodařilo obnovit. Zobrazuje se načtená kopie.',true);}}if(nav.dataset.page==='team'){await loadTeam();}if(nav.dataset.page==='home'){activeGarden=null;searchQuery='';}navigate(nav.dataset.page);return;}
+  const nav=e.target.closest('[data-page]');if(nav){if(nav.dataset.page==='materials'&&sessionInfo?.user.role!=='owner')return;if(nav.dataset.page==='team'&&!manageable()||nav.dataset.page==='backup'&&!manageable())return;if(nav.dataset.page==='settings'&&navigator.onLine){try{sessionInfo=await db.connect();}catch(error){if([401,403].includes(error.status)&&error.code!=='connection_timeout'){await db.lockSession();sessionInfo=null;clearURLs();showLogin(error);return;}toast('Nastavení týmu se nepodařilo obnovit. Zobrazuje se načtená kopie.',true);}}if(nav.dataset.page==='team'){await loadTeam();}if(nav.dataset.page==='home'){activeGarden=null;searchQuery='';}navigate(nav.dataset.page);return;}
   const driverButton=e.target.closest('[data-member-driver]');if(driverButton){await vehiclesUI.editDriver(driverButton.dataset.memberDriver);return;}
   const renew=e.target.closest('[data-member-link]');if(renew){if(!confirm('Vytvořit nový osobní odkaz? Starý odkaz i přístup v zařízeních přihlášených jeho pomocí přestanou fungovat.'))return;try{const generation=sessionGeneration;const result=await db.request('/api/members/'+encodeURIComponent(renew.dataset.memberLink)+'/access-link',{method:'POST'});if(generation===sessionGeneration&&manageable())presentInvite(result);}catch(error){report(error);}return;}
   const pendingLink=e.target.closest('[data-invite-link]');if(pendingLink){if(!confirm('Vytvořit nový odkaz a zneplatnit původní pozvánku?'))return;try{await createInvitation(pendingLink.dataset.inviteLink,pendingLink.dataset.inviteRole,'link');}catch(error){report(error);}return;}
@@ -388,7 +388,7 @@ async function runSynchronization(){
   return true;
  }catch(error){
   if(generation!==sessionGeneration)return false;
-  if([401,403].includes(error.status)){await db.lockSession();sessionInfo=null;clearURLs();inviteText='';showLogin(error);return false;}
+  if([401,403].includes(error.status)&&error.code!=='connection_timeout'){await db.lockSession();sessionInfo=null;clearURLs();inviteText='';showLogin(error);return false;}
   updateConnection(navigator.onLine?'Server nyní neodpovídá · zkouším obnovit spojení':'Offline · neodeslané změny zůstávají v telefonu');
   connectionRecovery.failed();if(synchronizationShow)report(error);return false;
  }
@@ -443,7 +443,7 @@ async function start(){
   if(sessionInfo.user.role==='owner')legacyDb.getRecords().then(rows=>{if(generation===sessionGeneration)legacyRecords=rows.filter(r=>!records.some(other=>other.id===r.id));}).catch(()=>{});
  }catch(error){
   if(generation!==sessionGeneration)return;
-  if([401,403].includes(error.status)){await db.lockSession().catch(()=>{});showLogin(error);return;}
+  if([401,403].includes(error.status)&&error.code!=='connection_timeout'){await db.lockSession().catch(()=>{});showLogin(error);return;}
   if(error.code==='local_storage'){startupError(error);return;}
   try{
    sessionInfo=await db.offlineSession();if(!sessionInfo){startupError(error);return;}page=new URLSearchParams(location.search).has('drive')?'settings':landingPage();

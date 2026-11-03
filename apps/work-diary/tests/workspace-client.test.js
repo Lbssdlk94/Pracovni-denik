@@ -6,6 +6,19 @@ async function keyInfo(){const pair=await crypto.subtle.generateKey({name:'RSA-O
 function session(){return {user:{id:'worker',role:'worker'},installation:{id:'inst-source'},permissions:{write:true},features:{jobs:true,service:true,defects:true},workspace:{workspaceId:'workspace-test',authorizationVersion:1,role:'worker',disciplines:['garden'],entryInstallations:[{id:'inst-source',discipline:'garden'}]}};}
 function manifestSend(current,visible=()=>true){return async(path,options)=>{assert.equal(path,'/api/workspace/manifest');const input=JSON.parse(options.body);if(input.expectedStamp)assert.equal(input.expectedStamp,'w:1:p:1');return {stamp:'w:1:p:1',completeForRequestedIds:true,requestedCounts:Object.fromEntries(Object.keys(empty()).map(k=>[k,input[k].length])),allowed:Object.fromEntries(Object.keys(empty()).map(k=>[k,input[k].filter(id=>visible(k,id))])),workspace:current.workspace,features:current.features,writable:true};};}
 
+test('GitHub fix does not report a completed reduction as recovery failure or navigate twice',async()=>{
+ const current={...session(),recovery:{workspaceId:'workspace-test'}},previous=structuredClone(current);previous.workspace.authorizationVersion=0;
+ let failures=0,replaced=0,navigations=0;const original=globalThis.location;globalThis.location={reload:()=>navigations++};
+ try{const client=createWorkspaceClient({readCaches:async()=>empty(),readSeen:async()=>({}),send:manifestSend(current),captureDrafts:async()=>[],replace:async()=>{replaced++;},onReduced:async()=>{throw Object.assign(Error('Handled by host'),{code:'workspace_reload'});},onFailure:()=>failures++});
+  await assert.rejects(client.reconcile(previous,current),error=>error.code==='workspace_reload');assert.equal(replaced,1);assert.equal(failures,0);assert.equal(navigations,0);
+ }finally{if(original===undefined)delete globalThis.location;else globalThis.location=original;}
+});
+test('GitHub fix completes account removal when the host has handled its intentional reset',async()=>{
+ const current=session();let replaced=0,failures=0;
+ const client=createWorkspaceClient({readCaches:async()=>empty(),captureDrafts:async()=>[],recoveryInfo:async()=>({workspaceId:'workspace-test'}),replace:async()=>{replaced++;},onReduced:async()=>{throw Object.assign(Error('Handled by host'),{code:'workspace_reload'});},onFailure:()=>failures++});
+ assert.equal(await client.revoke(current),true);assert.equal(replaced,1);assert.equal(failures,0);
+});
+
 test('client verifies all requested IDs over multiple bounded pages and a final revision check',async()=>{
  const inventory=empty();inventory.serviceWork=Array.from({length:2305},(_,i)=>'job-'+i);let calls=0;const current=session(),send=manifestSend(current);
  const result=await verifyWorkspaceInventory(async(...args)=>{calls++;return send(...args);},inventory);
