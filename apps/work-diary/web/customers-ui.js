@@ -1,6 +1,6 @@
 import {workspaceBadge,workspaceDisciplineField} from './workspace-ui.js?v=shared-directory-v1';
 import {gardenChoiceLabel} from './garden-choice.js?v=workspace-roles-v1';
-import {attachFormDraft,captureFormFields,restoreFormFields} from './form-drafts.js?v=shared-directory-v1';
+import {attachFormDraft,captureFormFields,restoreFormFields} from './form-drafts.js?v=draft-recovery-v1';
 import {addressNavigationLink} from './map-links.js?v=workspace-roles-v1';
 export const IRRIGATION_ORIGINS={unknown:'Zatím neurčeno',ours:'Dělali jsme my',external:'Cizí závlaha',rebuilt:'Předělávali jsme ji'};
 const navigationButton=(address,city,esc)=>{const url=addressNavigationLink(address,city);return url?`<a class="btn small customer-navigate" data-customer-navigate href="${esc(url)}" target="_blank" rel="noopener noreferrer" aria-label="Navigovat na adresu ${esc([address,city].filter(Boolean).join(', '))}">Navigovat</a>`:'';};

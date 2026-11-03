@@ -1,6 +1,6 @@
 import {createWorkspaceClient} from './workspace-client.js?v=github-sync-fix-v3';
 import {workspaceSameAccount} from './workspace-sync-model.js?v=github-sync-fix-v3';
-import {captureActiveFormDrafts} from './form-drafts.js?v=shared-directory-v1';
+import {captureActiveFormDrafts} from './form-drafts.js?v=draft-recovery-v1';
 import {pendingGardenHistory} from './garden-history-model.js?v=workspace-roles-v1';
 import {packLocalPhotos,unpackLocalPhotos} from './photo-storage.js?v=workspace-roles-v1';
 import {readFromServer,openLocalDatabase,finishLocalTransaction,transientConnectionError} from './io.js?v=connection-recovery-v1';

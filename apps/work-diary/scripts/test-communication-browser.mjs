@@ -38,25 +38,25 @@ try{
  jobsFailures=1;const before=jobsAttempts;await page.locator('[data-page="jobs"]:visible').first().click();await page.locator('[data-job="test-job"]').first().waitFor();assert.ok(jobsAttempts-before>=2,'503 read was not retried');
  await page.locator('[data-page="customers"]:visible').first().click();await page.locator('[data-customer-open="test-contact"]').waitFor();assert.equal(photoRequested,true,'jobs and customers load before stalled photograph');
  // Upload fails after the report/photo are durably queued. Keep the exact IDs.
- const pending=await page.evaluate(async()=>{const db=await import('/cloud.js?v=github-sync-fix-v3');await db.serviceWork('test-job',true);const file=new File([new Uint8Array([255,216,255,219,0,1,2,3])],'original.jpg',{type:'image/jpeg'});const saved=await db.saveServiceWork('test-job',{version:1,report:{date:new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague'}).format(new Date()),work:'Neodeslaná práce',photoIds:['queued-photo']}},[{id:'queued-photo',file}]);return {pending:saved.pending,id:saved.payload.operationId,photos:saved.photos.length};});
+ const pending=await page.evaluate(async()=>{const db=await import('/cloud.js?v=draft-recovery-v1');await db.serviceWork('test-job',true);const file=new File([new Uint8Array([255,216,255,219,0,1,2,3])],'original.jpg',{type:'image/jpeg'});const saved=await db.saveServiceWork('test-job',{version:1,report:{date:new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague'}).format(new Date()),work:'Neodeslaná práce',photoIds:['queued-photo']}},[{id:'queued-photo',file}]);return {pending:saved.pending,id:saved.payload.operationId,photos:saved.photos.length};});
  assert.equal(pending.pending,true);assert.equal(pending.photos,1);assert.equal(writeAttempts,1,'failed write was replayed without outbox ownership');
  // A global identity refresh fails, but it cannot disable independent reads.
- blockMe=true;const fault=await page.evaluate(async()=>{try{await (await import('/cloud.js?v=github-sync-fix-v3')).connect();}catch(e){return e.status;}});assert.equal(fault,504);
+ blockMe=true;const fault=await page.evaluate(async()=>{try{await (await import('/cloud.js?v=draft-recovery-v1')).connect();}catch(e){return e.status;}});assert.equal(fault,504);
  await page.locator('[data-page="jobs"]:visible').first().click();await page.locator('[data-job="test-job"]').first().waitFor();
  blockMe=false;releasePhoto();await page.reload();await page.locator('.shell').waitFor();
- const afterReload=await page.evaluate(async()=>{const db=await import('/cloud.js?v=github-sync-fix-v3');return (await db.cachedServiceWork()).find(e=>e.jobId==='test-job')?.payload?.operationId;});assert.equal(afterReload,pending.id);
- await page.evaluate(async()=>{await (await import('/cloud.js?v=github-sync-fix-v3')).waitForRefresh();});
+ const afterReload=await page.evaluate(async()=>{const db=await import('/cloud.js?v=draft-recovery-v1');return (await db.cachedServiceWork()).find(e=>e.jobId==='test-job')?.payload?.operationId;});assert.equal(afterReload,pending.id);
+ await page.evaluate(async()=>{await (await import('/cloud.js?v=draft-recovery-v1')).waitForRefresh();});
  blockWrites=false;await page.evaluate(()=>window.dispatchEvent(new Event('online')));
- await page.waitForFunction(async()=>{const db=await import('/cloud.js?v=github-sync-fix-v3');return (await db.cachedServiceWork()).find(e=>e.jobId==='test-job')?.pending===false;},{},{timeout:20000});
- const flushed=await page.evaluate(async()=>{const db=await import('/cloud.js?v=github-sync-fix-v3');await db.syncPendingChanges();await db.syncPendingChanges();const entry=(await db.cachedServiceWork()).find(e=>e.jobId==='test-job');return {pending:entry.pending,photos:entry.photos.length};});assert.deepEqual(flushed,{pending:false,photos:0});
+ await page.waitForFunction(async()=>{const db=await import('/cloud.js?v=draft-recovery-v1');return (await db.cachedServiceWork()).find(e=>e.jobId==='test-job')?.pending===false;},{},{timeout:20000});
+ const flushed=await page.evaluate(async()=>{const db=await import('/cloud.js?v=draft-recovery-v1');await db.syncPendingChanges();await db.syncPendingChanges();const entry=(await db.cachedServiceWork()).find(e=>e.jobId==='test-job');return {pending:entry.pending,photos:entry.photos.length};});assert.deepEqual(flushed,{pending:false,photos:0});
  assert.equal((await db.prepare("SELECT count(*) n FROM service_report_history WHERE job_id='test-job'").first()).n,1);
  assert.equal((await db.prepare("SELECT count(*) n FROM service_photos WHERE job_id='test-job'").first()).n,1);
  assert.deepEqual(errors,[]);await context.close();
  const swContext=await browser.newContext({viewport:{width:430,height:900}}),swPage=await swContext.newPage();swPage.on('pageerror',error=>console.log('SW browser error',error.message));
  await swPage.goto(base);await swPage.locator('.shell').waitFor();
  await swPage.evaluate(async()=>{await navigator.serviceWorker.ready;if(!navigator.serviceWorker.controller)await new Promise(resolve=>navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}));});
- const assets=await swPage.evaluate(async()=>{const cache=await caches.open('zavlahovy-denik-github-sync-fix-v3');return (await cache.keys()).map(r=>r.url);});
- assert.ok(assets.some(url=>url.endsWith('/cloud.js?v=github-sync-fix-v3')));assert.ok(assets.some(url=>url.endsWith('/io.js?v=connection-recovery-v1')));
+ const assets=await swPage.evaluate(async()=>{const cache=await caches.open('zavlahovy-denik-draft-recovery-v1');return (await cache.keys()).map(r=>r.url);});
+ assert.ok(assets.some(url=>url.endsWith('/cloud.js?v=draft-recovery-v1')));assert.ok(assets.some(url=>url.endsWith('/io.js?v=connection-recovery-v1')));
  await swContext.setOffline(true);await swPage.reload();await swPage.locator('.shell').waitFor();await swPage.waitForFunction(()=>/Offline|Server nyní neodpovídá/.test(document.querySelector('.top-status')?.textContent||''));
  await swContext.setOffline(false);await swPage.evaluate(()=>window.dispatchEvent(new Event('online')));await swPage.waitForFunction(()=>document.querySelector('.top-status')?.textContent.includes('Spojení obnoveno'));
  await swContext.close();

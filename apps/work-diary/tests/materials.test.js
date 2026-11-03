@@ -5,6 +5,14 @@ const ctx={waitUntil:p=>p.catch(()=>{})},call=(e,path,p=people.owner,method='GET
 async function good(r){assert.equal(r.status,200,await r.clone().text());return r.json();}
 async function setup(){const e=environment();await good(await call(e,'/api/me'));for(const role of ['admin','worker','reader']){await good(await call(e,'/api/invitations',people.owner,'POST',{email:people[role].email,role}));await good(await call(e,'/api/me',people[role]));}await good(await call(e,'/api/jobs/material-job',people.owner,'PUT',{version:0,title:'Protokol s materiálem',assignedTo:people.worker.id,status:'planned'}));return e;}
 const item={version:0,name:'Trubka PE 32',categoryId:'material-category-pipes',sku:'PE32',unit:'m',priceMinor:2501,currency:'CZK',active:true};
+test('Preferred material confirms the exact reviewed rows when D1 counts include trigger writes',async()=>{
+ const e=await setup();try{
+  for(const id of ['count-a','count-b','count-c'])await good(await call(e,'/api/materials/items/'+id,people.owner,'PUT',{...item,sku:id}));
+  const batch=e.DB.batch;e.DB.batch=async statements=>(await batch(statements)).map(result=>({...result,meta:{...result.meta,changes:result.meta.changes?result.meta.changes+3:0}}));
+  const result=await good(await call(e,'/api/materials/preferred',people.owner,'POST',{primaryId:'count-a',items:['count-a','count-b','count-c'].map(id=>({id,version:1}))}));
+  assert.deepEqual(result,{ok:true,primaryId:'count-a',hidden:2});assert.deepEqual(e.sqlite.prepare("SELECT id,active,version FROM material_items WHERE id LIKE 'count-%' ORDER BY id").all().map(row=>({...row})),[{id:'count-a',active:1,version:1},{id:'count-b',active:0,version:2},{id:'count-c',active:0,version:2}]);
+ }finally{e.sqlite.close();}
+});
 test('The entire material prototype is owner-only, including direct category and item requests',async()=>{
  const e=await setup();try{const catalog=await good(await call(e,'/api/materials'));assert.ok(catalog.categories.some(c=>c.name==='Trubky'));assert.ok(catalog.categories.some(c=>c.name==='Elektro'));assert.ok(catalog.items.length>=29);
  for(const person of [people.admin,people.worker,people.reader]){for(const [path,method,value]of [['/api/materials','GET'],['/api/materials/categories/test','PUT',{version:0,name:'Kategorie',sortOrder:1,active:true}],['/api/materials/items/private','PUT',item],['/api/materials/items/private','DELETE',{version:1}]])assert.equal((await call(e,path,person,method,value)).status,403);}

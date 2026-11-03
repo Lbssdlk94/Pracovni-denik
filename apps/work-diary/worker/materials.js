@@ -35,8 +35,13 @@ export async function handleMaterials(request,env,m,h){
   if(!ids.has(primaryId))fail(400,'Vyberte hlavní položku z kontrolované skupiny.');const key=r=>JSON.stringify([r.name.normalize('NFC').trim().toLocaleLowerCase('cs'),r.price_minor,r.currency,r.unit]);if(rows.some(r=>key(r)!==key(rows[0])))fail(400,'Položky nemají shodný název, cenu, měnu a jednotku.');
   const condition=rows.map(()=>'(id=? AND version=? AND active=1 AND deleted=0)').join(' OR '),args=rows.flatMap(r=>[r.id,r.version]),placeholders=rows.map(()=>'?').join(',');
   // One compare-and-set updates the exact reviewed group, never historical snapshots.
-  const r=await env.DB.prepare(`UPDATE material_items SET active=0,version=version+1,updated_at=?,updated_by=? WHERE id IN (${placeholders}) AND id<>? AND ${matOwner} AND (SELECT COUNT(*) FROM material_items WHERE ${condition})=?`).bind(Date.now(),m.user_id,...rows.map(r=>r.id),primaryId,m.user_id,...args,rows.length).run();
-  if(r.meta.changes!==rows.length-1)fail(409,'Katalog nebo oprávnění se změnily. Obnovte kontrolu.');return json({ok:true,primaryId,hidden:rows.length-1});
+  const now=Date.now(),r=await env.DB.prepare(`UPDATE material_items SET active=0,version=version+1,updated_at=?,updated_by=? WHERE id IN (${placeholders}) AND id<>? AND ${matOwner} AND (SELECT COUNT(*) FROM material_items WHERE ${condition})=?`).bind(now,m.user_id,...rows.map(r=>r.id),primaryId,m.user_id,...args,rows.length).run();
+  // D1 changes can include the transfer-generation triggers. Check the reviewed
+  // rows themselves rather than equating that counter with the business rows.
+  if(!r.meta.changes)fail(409,'Katalog nebo oprávnění se změnily. Obnovte kontrolu.');
+  const hidden=await matAll(env.DB,`SELECT id,version,active,updated_at,updated_by FROM material_items WHERE id IN (${placeholders}) AND id<>?`,...rows.map(row=>row.id),primaryId);
+  if(hidden.length!==rows.length-1||hidden.some(row=>row.active!==0||row.version!==rows.find(old=>old.id===row.id).version+1||row.updated_at!==now||row.updated_by!==m.user_id))fail(409,'Katalog nebo oprávnění se změnily. Obnovte kontrolu.');
+  return json({ok:true,primaryId,hidden:hidden.length});
  }
  const match=path.match(/^\/api\/materials\/(categories|items)\/([-\w]{1,100})$/);if(!match)fail(404,'Položka nebyla nalezena.');
  if(!['PUT','DELETE'].includes(method))fail(405,'Nepodporovaná operace.');
