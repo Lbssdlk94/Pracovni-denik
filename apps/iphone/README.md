@@ -1,43 +1,43 @@
 # Pracovní deník pro iPhone
 
-Verze 0.2 má **nativní SwiftUI přehled, seznam zakázek a detail zakázky**. Používá schválené zelené barvy a ikonu. Seznam má hledání, den, stav, stránkování a pro správce volbu vlastních zakázek nebo týmu; respektuje povolení pohledů Můj den a Seznam. Detail rozlišuje plánovanou práci, příjezdové rozmezí a původní neurčený čas, zobrazuje stav protokolu a otevřené závady.
+Verze 0.3 rozšiřuje SwiftUI z přehledu, zakázek a detailu také na zbývající povolené firemní sekce: zákazníky, zahrady, historii, závady, protokoly, materiál, předplatné, docházku, vozidla, tým, nastavení a centrum oznámení. Formuláře, výběry, karty, rozbalovací části, podpis, fotografie s přesouváním značek, MapKit a náhled dokumentů používají nativní ovládací prvky. Zachovává zelenou identitu a názvy jednotlivých firem.
 
-Zákazníci, zahrady, docházka, další moduly i pracovní formuláře zatím používají stávající web. Tlačítka **Jsem na cestě, Změnit stav, Servisní protokol, Fotodokumentace a Úplný detail** předají konkrétní zakázku původnímu webovému postupu. Upravování plánu, potvrzení převzetí, dokončení, materiál, PDF a SMS proto zachovávají současná pravidla a oprávnění. Nejde zatím o přepis všech formulářů do SwiftUI.
+## Co je ve Swiftu a co zůstává společné
 
-Datový most `web/native-client.js` čte přes současný přihlášený `cloud.js`; nepřenáší hesla, přístupové odkazy ani obnovovací klíče do Swiftu. WebView, cookies, IndexedDB i jeho neodeslané formuláře zůstávají během přepnutí připojené. Nativní část nevytváří druhou databázi ani druhou synchronizační frontu. Při odvolání přístupu, změně oboru nebo ztrátě spojení se nativní data zneplatní. Při návratu do popředí a každých 60 sekund aktivního nativního přehledu se přístup znovu ověřuje.
+**Jde o převod uživatelského rozhraní, nikoli úplný přepis veškerého kódu do Swiftu.** Přehled a zakázky používají typované datové modely. Další obrazovky získávají typovaný popis právě dostupných ovládacích prvků z nového `web/native-screens.js` a vykreslují je ve SwiftUI. Nezobrazují HTML firemní aplikace.
 
-Nativní seznamy nyní vyžadují internet, stejně jako dosavadní plán zakázek. **Offline práci otevřete ve webové části**, která zachovává současné podporované ukládání. Přepnutí zpět do nativního přehledu se zablokuje, dokud uživatel neuloží nebo nezavře otevřený webový formulář; nedochází k tichému zahození práce.
+Dosavadní JavaScriptová doménová logika, validace, verzování, koncepty a offline fronty pokračují v připojeném, vizuálně skrytém `WKWebView`. Nativní změny se předávají původním handlerům přes neprůhledné identifikátory živých prvků. To zachovává stejné API, kontroly rolí a oborů, licence, potvrzování, výpočty, oprávnění i konflikty. Backend zůstává současný. Nová část nezakládá druhou databázi ani synchronizační frontu.
 
-Výchozí adresa je Dr. Závlaha. Důvěryhodné adresy jsou explicitně omezené na Dr. Závlahu a Dr. Garden (`Core/EndpointPolicy.swift` a `WKAppBoundDomains` v `project.yml`). Telefon, SMS, e-mail a externí navigace se otevírají systémově; externím stránkám se neposkytuje nativní přístup k údajům deníku. Zdrojové kódy ani IPA neobsahují servisní klíče či přístupové odkazy uživatelů.
+Nejprve se odešlou všechny rozepsané nativní hodnoty ve správném pořadí, teprve pak tlačítko Uložit. Při chybě hodnota zůstane rozepsaná a odeslání formuláře se zastaví. Čísla přijímají českou desetinnou čárku. Při přechodu do pozadí se provede pokus o uložení konceptů do původního úložiště. Obrazovky i soubory se při zneplatnění přístupu uzamknou; staré asynchronní odpovědi se odmítnou.
 
-## Sestavení bez Macu přes GitHub
+Fotografie vybírá systémový PhotosPicker / fotoaparát / Soubory. Přenos do společného enginu probíhá po částech; velké importy ze Souborů se ve Swiftu čtou průběžně. Původní formát a ověřování importu zůstávají rozhodující. Fotografie, podpis, značky a poloha se ukládají původním postupem. Výběr na MapKitu se předává existujícímu mapovému handleru. Nativní mapový podklad je Apple Maps.
 
-1. Otevřete v repozitáři **Actions → iPhone build and IPA**. Push změn v `apps/iphone` spouští sestavení automaticky; po zařazení workflow do výchozí větve je dostupné i ruční **Run workflow**.
-2. Vyčkejte na úspěšné testy simulátoru i sestavení zařízení.
-3. V dokončeném běhu stáhněte artefakt **PracovniDenik-builds-and-logs-UNSIGNED**.
-4. Rozbalte `PracovniDenik-UNSIGNED-REQUIRES-SIGNING.ipa`. Soubor `IPA-SHA256.txt` umožňuje ověřit jeho kontrolní součet.
+PDF a další soubory se otevírají přes QuickLook a lze je sdílet systémovým panelem. Dočasné PDF se předává jako původní Blob, aby nebylo nutné oslabovat bezpečnostní politiku webu. Limit nativního náhledu je 32 MB, stahování má původní streamovací cestu přes WKDownload. Zavření náhledu odstraní jeho dočasnou kopii. Oprávnění ke zdrojovým souborům nadále ověřuje původní API.
 
-Balíček je **nepodepsaný**, stejně jako výstup současného sestavení 3D Scanneru. Nelze jej přímo nainstalovat klepnutím v Safari. Použijte stejný vlastní nástroj pro podepsání a instalaci jako u Scanneru (například Sideloadly na vlastním počítači). Apple přihlášení zadávejte pouze přímo důvěryhodnému instalačnímu nástroji; hesla, certifikáty a privátní klíče neposílejte do chatu ani do GitHubu.
+## Sestavení přes GitHub
 
-TestFlight a App Store vyžadují Apple Developer účet a další nastavení podepisování/distribuce. Tento workflow je nepředstírá a nikam aplikaci automaticky nevydává. Před předložením App Store je třeba posoudit i jeho pravidla minimální funkčnosti pro aplikace používající webové rozhraní.
+1. V repozitáři otevřete **Actions → iPhone build and IPA**. Změny `apps/iphone` spouštějí sestavení automaticky. Ruční spuštění je dostupné po zařazení workflow do výchozí větve.
+2. Po úspěšných testech simulátoru a sestavení zařízení stáhněte artefakt **PracovniDenik-builds-and-logs-UNSIGNED**.
+3. Rozbalte `PracovniDenik-UNSIGNED-REQUIRES-SIGNING.ipa`; kontrolní součet je v `IPA-SHA256.txt`.
 
-Artefakty GitHubu se po 14 dnech smažou; IPA si stáhněte, případně spusťte nový běh. Pro vlastní vývoj: Xcode 26.0.1, XcodeGen 2.44.1, `cd apps/iphone && xcodegen generate`, otevřít vygenerovaný `PracovniDenik.xcodeproj`. Minimální verze iOS je 17.
+Balíček je **nepodepsaný**. Nelze jej přímo nainstalovat klepnutím v Safari. Použijte vlastní nástroj pro podepsání a instalaci jako u 3D Scanneru, například Sideloadly. Apple přihlášení zadávejte pouze důvěryhodnému instalačnímu nástroji, neposílejte hesla, certifikáty ani privátní klíče do chatu či GitHubu. TestFlight / App Store vyžadují Apple Developer účet, podepisování a samostatné ověření distribučních požadavků; toto workflow do nich aplikaci nevydává. Artefakty GitHubu mají životnost 14 dní.
 
-## Přihlášení, rozpracovaná práce a offline režim
+Pro vlastní vývoj: Xcode 26.0.1, XcodeGen 2.44.1, `cd apps/iphone && xcodegen generate`. Minimální iOS je 17. Výchozí instalace je Dr. Závlaha; důvěryhodné domény Dr. Závlaha a Dr. Garden jsou explicitně uvedené v `EndpointPolicy.swift` a `WKAppBoundDomains`. Telefon, připravená SMS, e-mail a externí navigace se otevírají systémově.
 
-- Účet není automaticky přihlášený ze Safari. Aplikace má vlastní trvalé cookies a webové úložiště. Použijte existující přihlášení nebo vložte osobní přístupový odkaz do webového přihlašovacího formuláře. Novou pozvánku vystavuje oprávněný správce; nepoužívejte již spotřebovaný jednorázový odkaz.
-- ChatGPT přihlášení se otevírá odděleně se stejným úložištěm cookies. Jeho funkčnost v zabudovaném prohlížeči závisí na poskytovateli přihlášení a musí se ověřit na skutečném telefonu. Není součástí izolovaných testů.
-- Při návratu z pozadí či krátké ztrátě sítě se `WKWebView` nevytváří znovu ani automaticky neobnovuje. Rozpracovaný formulář zůstává v téže stránce.
-- Při ukončení webového procesu systémem iOS se nabídne výslovné obnovení. Zachovat lze jen práci, kterou web již uložil do svého úložiště/fronty; nelze zaručit obnovu neuložené paměti procesu, souborového vstupu nebo zápisu odmítnutého kvótou zařízení.
-- Offline data a fronta patří do existujícího webového mechanismu. Nativní aplikace nevytváří druhou databázi ani druhou synchronizaci. Pro offline otevření je nejprve nutné online přihlášení a úspěšné naplnění webové cache. Skutečný offline provoz v nainstalované aplikaci zatím není fyzicky ověřený.
-- Neodinstalovávejte aplikaci a nemažte její data, dokud obsahuje neodeslanou práci. Data Safari a nativní aplikace se automaticky neslučují.
+## Přihlášení, offline a známé meze
 
-## Co testy ověřují a co ještě vyžaduje iPhone
+- Aplikace má vlastní trvalé cookies a úložiště, není automaticky přihlášená ze Safari. Přístupový odkaz se vyplňuje nativním zabezpečeným polem. Přihlášení poskytovatele ChatGPT zůstává v odděleném přihlašovacím okně; nejde o firemní obrazovku převedenou do SwiftUI.
+- Návrat z pozadí ani přepnutí nativní sekce neobnovuje hlavní stránku. Při pádu webového procesu se nabídne výslovné obnovení. Zachovat lze jen již uložené koncepty / fronty; neuloženou paměť zaniklého procesu nelze zaručit.
+- Offline zápisy používají původní podporované workflow. Pro offline spuštění je nejdřív nutné online přihlášení a naplnění cache. Typovaný nativní přehled/seznam vyžaduje ověřené připojení; při jeho ztrátě se použijí dostupné původní pracovní obrazovky vykreslené nativně. Nedochází ke slibu, že všechny původně online funkce nově fungují offline.
+- Neodinstalovávejte aplikaci ani nemažte její data, dokud obsahuje neodeslanou práci. Úložiště Safari a aplikace se automaticky neslučují.
+- Centrum oznámení je dostupné. **Nativní APNs ani push na zamčeném telefonu nejsou implementované**. Webový push ve WKWebView nepovažujeme za náhradu APNs. Je potřeba zvláštní integrace a podepsaný profil.
+- Nativní rozhraní je navázané na kompatibilní verzi webového kontraktu. Úpravy jeho DOM struktur je potřeba ověřovat integračními testy. Nejde o nezávislého klienta, který by fungoval bez společného enginu.
+- Na fyzickém iPhonu zbývá ověřit skutečné přihlášení poskytovatele, fotoaparát/fotoknihovnu, GPS, dlouhé uspání a offline spuštění, velké importy, systémové sdílení a SMS. Simulátor tyto zkoušky nenahrazuje.
 
-11 unit testů kontroluje adresy, životní cyklus prohlížeče, plánované časy, skutečný stav protokolu a datový model. 5 UI testů v iOS simulátoru ověřuje původní uchování formuláře a náhled dokumentu i nový nativní přehled, seznam, detail, stránkování a bezpečný návrat z webového formuláře. Používají izolované testovací údaje. Samostatný integrační test mostu běží nad skutečným lokálním Worker/D1/R2 a ověřuje role, přiřazení, oddělení oborů, omezení modulů a zachování formulářů.
+## Ověření
 
-Před širší distribucí je třeba na fyzickém iPhonu ověřit přihlášení, návrat po dlouhém uspání, skutečný offline zápis a synchronizaci, fotoaparát/fotoknihovnu, GPS, export PDF a připravené SMS. Povolení fotoaparátu a polohy nejsou vyžadována při spuštění, ale až při použití příslušné webové funkce. Serverové kontroly a správa modulů zůstávají rozhodující.
+Apple CI sestavuje projekt pro simulátor i zařízení a spouští unit a UI testy. Izolované fixture testy ověřují nativní přehled, seznam, detail, stránkování a nativní formulář bez ztráty textu; původní testy prohlížečového enginu kontrolují zachování stránky po uspání a otevření dokumentu. Nejde o testování přihlášení do provozního účtu.
 
-Centrum oznámení v aplikaci se zachovává. **Nativní APNs ani push oznámení na zamčeném telefonu nejsou implementované**; webový push v `WKWebView` nelze automaticky považovat za podporovaný. Jeho doplnění vyžaduje samostatnou nativní integraci a podepsaný profil.
+`apps/work-diary/scripts/test-native-screens-browser.mjs` používá skutečný lokální Worker, SQLite/D1 a R2 s umělými uživateli a daty. Prochází 10 modulů a ověřuje uložení zákazníka s propojenou zahradou, protokolu, podpisu, fotografie, skutečného PDF, přesunutých značek a polohy, následný offline zápis a synchronizaci bez duplikace. `test-native-client-browser.mjs` kontroluje oddělení oborů, přiřazení, role, omezení modulů a nepovolené navigace. Testy neprovádějí zápisy do provozních databází.
 
-`PrivacyInfo.xcprivacy` popisuje uživatelské údaje deníku bez sledování; před veřejnou distribucí musí být zkontrolován spolu s aktuálními zásadami soukromí a skutečně zapnutými moduly.
+Podrobné výsledky vydání jsou v `docs/IPHONE-NATIVE-ALL-2026-11-04.md`. `PrivacyInfo.xcprivacy` je nutné před veřejnou distribucí zkontrolovat spolu se skutečnými zásadami soukromí.

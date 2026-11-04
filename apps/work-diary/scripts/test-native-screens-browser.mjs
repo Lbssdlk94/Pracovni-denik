@@ -35,7 +35,7 @@ try{
  const flatten=items=>items.flatMap(n=>[n,...flatten(n.children||[])]);
  async function screen(){return execute('screen');}
  async function node(text,kind=null){const value=flatten((await screen()).nodes).find(n=>(n.text||'').includes(text)&&(!kind||n.kind===kind));assert.ok(value,'Native control missing: '+text);return value;}
- async function click(text){const n=await node(text,'button');return execute('control',{handle:n.handle,action:'click'});}
+ async function click(text){for(let attempt=0;;attempt++){const n=await node(text,'button');try{return await execute('control',{handle:n.handle,action:'click'});}catch(error){if(attempt>=2||!error.message.includes('Obrazovka se změnila'))throw error;await page.waitForTimeout(80);}}}
  async function value(text,value){const n=await node(text,'field');return execute('control',{handle:n.handle,action:'value',value});}
  for(const [module,selector] of [['customers','#customers'],['home','.garden-overview'],['defects','#defects'],['attendance','#attendance'],['subscriptions','#subscriptions'],['materials','#materials'],['vehicles','#vehicles'],['team','#team'],['settings','.settings-workspace'],['jobs','#jobs']]){
   await execute('open',{page:module});await page.locator('.nav [data-page="'+module+'"][aria-current=page]').first().waitFor({state:'attached',timeout:12000});const s=await screen();assert.ok(s.nodes.length,module+' empty native descriptor');assert.ok(flatten(s.nodes).some(n=>['button','field','toggle','select'].includes(n.kind)),module+' has no usable native controls');console.log('PASS native contract module',module);
