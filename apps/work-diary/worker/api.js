@@ -54,46 +54,11 @@ const all=(db,sql,...args)=>db.prepare(sql).bind(...args).all().then(r=>r.result
 const one=(db,sql,...args)=>db.prepare(sql).bind(...args).first();
 const execute=(db,sql,...args)=>db.prepare(sql).bind(...args).run();
 const ACCESS_COOKIE='__Host-zavlahy-access';
-const accessToken=()=>Array.from(crypto.getRandomValues(new Uint8Array(32)),v=>v.toString(16).padStart(2,'0')).join('');
 const accessHash=async value=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),v=>v.toString(16).padStart(2,'0')).join('');
-const accessURL=(origin,token)=>origin+'/#access='+token;
 const accessCookie=token=>`${ACCESS_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${token?30*86400:0}`;
-async function linkedMember(env,hash){return one(env.DB,'SELECT m.*,a.expires_at,a.single_use FROM guest_access a JOIN members m ON m.user_id=a.user_id AND m.email=a.email WHERE a.token_hash=? AND a.expires_at>?',hash,Date.now());}
-async function accessRate(request,env,ctx){
- const minute=Math.floor(Date.now()/60000),key=await accessHash(request.headers.get('cf-connecting-ip')||'unknown');
- await execute(env.DB,'INSERT INTO link_attempts(key,window,attempts) VALUES(?,?,1) ON CONFLICT(key) DO UPDATE SET window=excluded.window,attempts=CASE WHEN link_attempts.window=excluded.window THEN link_attempts.attempts+1 ELSE 1 END',key,minute);
- const rate=await one(env.DB,'SELECT attempts FROM link_attempts WHERE key=?',key);if(rate.attempts>60)fail(429,'Příliš mnoho pokusů o otevření odkazu. Zkuste to za minutu.');
- if(rate.attempts===1)ctx.waitUntil(execute(env.DB,'DELETE FROM link_attempts WHERE window<?',minute-1440));
-}
-async function accessInfo(request,env,ctx){
- if(!env.DB||!env.BUCKET||!env.TEAM_OWNER_EMAIL)fail(503,'Týmové úložiště není dostupné.');
- await assertInstallation(env);if(await passwordOnly(env))fail(403,'Použijte přihlašovací jméno a heslo.',{code:'password_login_required'});await accessRate(request,env,ctx);const b=await body(request,2000);if(typeof b.token!=='string'||!/^[a-f0-9]{64}$/.test(b.token))fail(401,'Odkaz není platný nebo už byl zrušen. Požádejte správce o nový.',{code:'link_invalid'});
- const hash=await accessHash(b.token),member=await linkedMember(env,hash),invite=member?null:await one(env.DB,'SELECT * FROM invitations WHERE access_token_hash=? AND expires_at>?',hash,Date.now());
- if(!member&&!invite)fail(401,'Odkaz není platný nebo už byl zrušen. Požádejte správce o nový.',{code:'link_invalid'});
- return {token:b.token,hash,member,invite};
-}
-async function redeemAccess(request,env,ctx,preview=false){
- const info=await accessInfo(request,env,ctx),{hash,invite}=info,now=Date.now();
- if(preview)return json({workspace:info.member?await workspaceActor(env.DB,info.member.user_id):null,installation:await installationInfo(env),userId:info.member?.user_id||invite.guest_user_id,email:info.member?.email||invite.email,role:info.member?.role||invite.role,expiresAt:invite?.expires_at||info.member?.expires_at,oneTime:!!invite||!!info.member?.single_use});
- const sessionToken=accessToken(),sessionHash=await accessHash(sessionToken),sessionId=crypto.randomUUID(),userId=info.member?.user_id||invite.guest_user_id,role=info.member?.role||invite.role,expires=now+(['administrator','admin'].includes(role)?7:30)*86400000,agent=(request.headers.get('user-agent')||'Zařízení').slice(0,240);
- const statements=[];
- if(invite){
- statements.push(env.DB.prepare('INSERT OR IGNORE INTO members(user_id,email,name,role,created_at) SELECT guest_user_id,email,email,role,? FROM invitations WHERE access_token_hash=? AND expires_at>?').bind(now,hash,now));
- statements.push(...await workspaceInvitationStatements(env,invite.email,invite.guest_user_id));
- statements.push(env.DB.prepare('INSERT INTO access_sessions(id,user_id,token_hash,created_at,expires_at,last_seen_at,agent) SELECT ?,i.guest_user_id,?,?,?,?,? FROM invitations i JOIN members m ON m.user_id=i.guest_user_id AND m.email=i.email WHERE i.access_token_hash=? AND i.expires_at>?').bind(sessionId,sessionHash,now,expires,now,agent,hash,now));
- statements.push(env.DB.prepare('INSERT INTO guest_access(user_id,email,token_hash,created_at,expires_at,single_use) SELECT i.guest_user_id,i.email,NULL,?,NULL,1 FROM invitations i WHERE i.access_token_hash=? AND EXISTS(SELECT 1 FROM access_sessions WHERE id=?) ON CONFLICT(user_id) DO UPDATE SET token_hash=NULL,expires_at=NULL,single_use=1').bind(now,hash,sessionId));
- statements.push(env.DB.prepare('DELETE FROM invitations WHERE access_token_hash=? AND EXISTS(SELECT 1 FROM access_sessions WHERE id=?)').bind(hash,sessionId));
- }else{
- statements.push(env.DB.prepare('INSERT INTO access_sessions(id,user_id,token_hash,created_at,expires_at,last_seen_at,agent) SELECT ?,a.user_id,?,?,?,?,? FROM guest_access a JOIN members m ON m.user_id=a.user_id AND m.email=a.email WHERE a.token_hash=? AND a.expires_at>?').bind(sessionId,sessionHash,now,expires,now,agent,hash,now));
- statements.push(env.DB.prepare('UPDATE guest_access SET token_hash=NULL,expires_at=NULL WHERE token_hash=? AND single_use=1 AND EXISTS(SELECT 1 FROM access_sessions WHERE id=?)').bind(hash,sessionId));
- }
- await env.DB.batch(statements);
- if(!await sessionMember(env,sessionHash))fail(401,'Pozvánka už byla použita, vypršela nebo byla zrušena. Požádejte správce o novou.',{code:'link_invalid'});
- const response=json({ok:true});response.headers.set('set-cookie',accessCookie(sessionToken));return response;
-}
 function userFrom(request){
   const id=request.headers.get('oai-authenticated-user-id'),email=request.headers.get('oai-authenticated-user-email')?.trim().toLowerCase();
-  if(!id||!email)fail(401,'Přihlaste se nebo otevřete osobní odkaz od správce.');
+  if(!id||!email)fail(401,'Přihlaste se svým přihlašovacím jménem a heslem.');
   let name=request.headers.get('oai-authenticated-user-full-name')||email;
   if(request.headers.get('oai-authenticated-user-full-name-encoding')==='percent-encoded-utf-8'){try{name=decodeURIComponent(name);}catch{name=email;}}
   return {id,email,name:name.slice(0,160)};
@@ -103,7 +68,7 @@ async function memberFor(request,env){
   await assertInstallation(env);await ensureInitialAdministrator(env);
   const cookie=(request.headers.get('cookie')||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(ACCESS_COOKIE+'='));
   const onlyPassword=await passwordOnly(env);
-  if(cookie!==undefined){const token=cookie.slice(ACCESS_COOKIE.length+1),hash=await accessHash(token),guest=/^[a-f0-9]{64}$/.test(token)?await sessionMember(env,hash)||(!onlyPassword?await linkedMember(env,hash):null):null;if(!guest||onlyPassword&&guest.session_auth_method!=='password')fail(401,'Přihlaste se svým přihlašovacím jménem a heslem.',{code:'session_expired'});return {...guest,_authMethod:guest.session_auth_method||'link',_mustChange:guest.session_auth_method==='password'&&!!guest.password_must_change,_sessionHash:hash};}
+  if(cookie!==undefined){const token=cookie.slice(ACCESS_COOKIE.length+1),hash=await accessHash(token),guest=/^[a-f0-9]{64}$/.test(token)?await sessionMember(env,hash):null;if(!guest||guest.session_auth_method!=='password')fail(401,'Přihlaste se svým přihlašovacím jménem a heslem.',{code:'session_expired'});return {...guest,_authMethod:'password',_mustChange:guest.session_auth_method==='password'&&!!guest.password_must_change,_sessionHash:hash};}
   if(onlyPassword)fail(401,'Přihlaste se svým přihlašovacím jménem a heslem.',{code:'password_login_required'});
   const user=userFrom(request),workspaceIdentity=await workspaceIdentityMember(env,user);
   if(workspaceIdentity.member)return workspaceIdentity.member;
@@ -241,7 +206,7 @@ async function workspaceRawApi(request,env,ctx){
       ctx.waitUntil(dispatchNotifications(env).catch(()=>{}));return response;
     }
     if(path==='/api/service-reminders/run'){await assertInstallation(env);const policy=await tenantPolicy(env),shared=await one(env.DB,"SELECT id FROM workspaces WHERE state IN ('active','read_only') LIMIT 1");if(!shared&&policy&&!policy.active)fail(403,'Licence firmy není aktivní.',{code:'license_inactive'});if(!shared&&policy&&!policy.modules.notifications)fail(403,'Upozornění nejsou v licenci.',{code:'module_not_licensed'});ctx.waitUntil(tenantHeartbeat(env).catch(()=>{}));if(await one(env.DB,"SELECT id FROM system_backups WHERE state='restoring' LIMIT 1"))fail(503,'Probíhá obnova instalace.');return await handleServiceReminders(request,env,null,{json,fail,boundedBytes,body});}
-    if(path==='/api/access-info'&&method==='POST')return await redeemAccess(request,env,ctx,true);
+    if(['/api/access-info','/api/access-link'].includes(path))fail(403,'Přihlášení osobním odkazem bylo zrušeno. Použijte přihlašovací jméno a heslo.',{code:'access_link_disabled'});
     if(path==='/api/platform-initialize'&&method==='POST'){Object.assign(env,await workspaceRequestContext(env,request));
       const supplied=request.headers.get('authorization')?.match(/^Bearer ([A-Za-z0-9_-]{43})$/)?.[1],expected=env.PLATFORM_SERVICE_TOKEN;
       if(!supplied||!expected)fail(401,'Neplatné technické připojení.');
@@ -249,9 +214,8 @@ async function workspaceRawApi(request,env,ctx){
       await assertInstallation(env);const policy=await tenantPolicy(env,{refresh:true});if(!policy)fail(409,'Instalace není propojená s platformou.');await tenantHeartbeat(env,null);
       return json({ready:true,installationId:policy.installationId,companyId:policy.companyId,policyRevision:policy.revision,licensedActive:policy.active});
     }
-    if(path==='/api/access-link'&&method==='POST')return await redeemAccess(request,env,ctx);
     if(path==='/api/access-logout'&&method==='POST'){const c=(request.headers.get('cookie')||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(ACCESS_COOKIE+'='));if(c)await execute(env.DB,'UPDATE access_sessions SET revoked_at=? WHERE token_hash=?',Date.now(),await accessHash(c.slice(ACCESS_COOKIE.length+1)));const response=json({ok:true});response.headers.set('set-cookie',accessCookie(''));return response;}
-    if(['/api/workspace/identity-invite','/api/workspace/link-identity'].includes(path)&&await passwordOnly(env))fail(403,'Původní způsob přihlašování je vypnutý.');
+    if(['/api/workspace/identity-invite','/api/workspace/link-identity'].includes(path))fail(403,'Propojení přes osobní přístupový odkaz bylo zrušeno.',{code:'access_link_disabled'});
     const m=await memberFor(request,env);Object.assign(env,await workspaceRequestContext(env,request,m));
     if(m._mustChange&&!['/api/auth/account','/api/auth/password'].includes(path))fail(403,'Před prvním použitím si změňte dočasné heslo.',{code:'password_change_required'});
     await workspaceResourceAccess(request,env,m,fail);env._workspaceScope=m._workspace||null;
@@ -302,18 +266,18 @@ async function workspaceRawApi(request,env,ctx){
     }
     if(path==='/api/team'&&method==='GET'){checkManage(m);return json({members:(await all(env.DB,'SELECT user_id,email,name,role,created_at,(SELECT json_group_array(md.discipline) FROM member_disciplines md WHERE md.user_id=members.user_id) AS disciplines,(SELECT version FROM workspace_entity_versions v WHERE v.entity=\'member\' AND v.entity_id=members.user_id) AS membership_version,EXISTS(SELECT 1 FROM guest_access a WHERE a.user_id=members.user_id) AS personal_link FROM members ORDER BY created_at')).map(v=>({id:v.user_id,email:v.email,name:v.name,role:v.role,createdAt:v.created_at,personalLink:!!v.personal_link,...(m._workspace?{disciplines:JSON.parse(v.disciplines||'[]'),membershipVersion:v.membership_version||0}:{})})),invitations:await all(env.DB,'SELECT email,role,created_at,access_token_hash IS NOT NULL AS personal_link FROM invitations ORDER BY created_at')});}
     if(path==='/api/invitations'&&method==='POST'){
-      checkManage(m);if(await passwordOnly(env))fail(403,'Použijte vytvoření účtu jménem a heslem.');const b=await body(request,1000),email=validEmail(b.email),role=validRole(b.role),mode=b.mode??'chatgpt';if(!['chatgpt','link'].includes(mode))fail(400,'Vyberte způsob připojení kolegy.');
+      checkManage(m);if(await passwordOnly(env))fail(403,'Použijte vytvoření účtu jménem a heslem.');const b=await body(request,1000),email=validEmail(b.email),role=validRole(b.role),mode=b.mode??'chatgpt';if(!['chatgpt','link'].includes(mode))fail(400,'Vyberte způsob připojení kolegy.');if(mode==='link')fail(403,'Přihlášení osobním odkazem bylo zrušeno. Vytvořte účet jménem a heslem.',{code:'access_link_disabled'});
       let disciplines=[];if(m._workspace){try{disciplines=normalizeDisciplines(b.disciplines||[m._workspace.selectedDiscipline]);}catch(error){fail(400,error.message);}}const originOrganization=m._workspace?await one(env.DB,'SELECT id FROM workspace_organizations WHERE workspace_id=? AND discipline=?',m._workspace.workspaceId,disciplines.includes(m._workspace.selectedDiscipline)?m._workspace.selectedDiscipline:disciplines[0]):null;
       if(!canAssignTeamRole(m.role,role))fail(403,'Toto oprávnění nemůžete přidělit.');
       const existingInvitation=await one(env.DB,'SELECT * FROM invitations WHERE email=?',email);if(existingInvitation&&!canAssignTeamRole(m.role,existingInvitation.role))fail(403,'Tuto pozvánku nemůžete měnit.');
       if(await one(env.DB,'SELECT 1 FROM members WHERE email=?',email))fail(409,'Tento kolega už je členem týmu.');
       const count=await one(env.DB,'SELECT (SELECT COUNT(*) FROM members)+(SELECT COUNT(*) FROM invitations) AS total');const maxUsers=m._workspace?10000:platformPolicy?.maxUsers||100;if(!existingInvitation&&count.total>=maxUsers)fail(400,'Licence dovoluje nejvýše '+maxUsers+' členů a pozvánek.');
-      const token=mode==='link'?accessToken():null,hash=token?await accessHash(token):null,known=mode==='link'?await one(env.DB,'SELECT user_id FROM guest_access WHERE email=?',email):null,guestId=token?(known?.user_id||existingInvitation?.guest_user_id||'guest_'+crypto.randomUUID()):null;
-      const invitedResult=await execute(env.DB,'INSERT INTO invitations(disciplines,origin_organization_id,email,role,created_by,created_at,access_token_hash,guest_user_id,expires_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND actor.role=?) AND NOT EXISTS(SELECT 1 FROM invitations WHERE email=? AND role<>?) AND ((SELECT COUNT(*) FROM members)+(SELECT COUNT(*) FROM invitations)<? OR EXISTS(SELECT 1 FROM invitations WHERE email=?)) ON CONFLICT(email) DO UPDATE SET role=excluded.role,created_by=excluded.created_by,created_at=excluded.created_at,access_token_hash=excluded.access_token_hash,guest_user_id=excluded.guest_user_id,expires_at=excluded.expires_at,disciplines=excluded.disciplines,origin_organization_id=excluded.origin_organization_id',JSON.stringify(disciplines),originOrganization?.id||null,email,role,m.user_id,Date.now(),hash,guestId,Date.now()+(['administrator','admin'].includes(role)?1:7)*86400000,m.user_id,m.role,email,existingInvitation?.role||role,maxUsers,email);if(!invitedResult.meta.changes)fail(409,'Pozvánku nebo oprávnění mezitím někdo změnil. Obnovte tým.');return json({email,role,mode,url:token?accessURL(env.WORKSPACE_ENTRY_ORIGIN||url.origin,token):url.origin});
+      const hash=null,guestId=null;
+      const invitedResult=await execute(env.DB,'INSERT INTO invitations(disciplines,origin_organization_id,email,role,created_by,created_at,access_token_hash,guest_user_id,expires_at) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND actor.role=?) AND NOT EXISTS(SELECT 1 FROM invitations WHERE email=? AND role<>?) AND ((SELECT COUNT(*) FROM members)+(SELECT COUNT(*) FROM invitations)<? OR EXISTS(SELECT 1 FROM invitations WHERE email=?)) ON CONFLICT(email) DO UPDATE SET role=excluded.role,created_by=excluded.created_by,created_at=excluded.created_at,access_token_hash=excluded.access_token_hash,guest_user_id=excluded.guest_user_id,expires_at=excluded.expires_at,disciplines=excluded.disciplines,origin_organization_id=excluded.origin_organization_id',JSON.stringify(disciplines),originOrganization?.id||null,email,role,m.user_id,Date.now(),hash,guestId,Date.now()+(['administrator','admin'].includes(role)?1:7)*86400000,m.user_id,m.role,email,existingInvitation?.role||role,maxUsers,email);if(!invitedResult.meta.changes)fail(409,'Pozvánku nebo oprávnění mezitím někdo změnil. Obnovte tým.');return json({email,role,mode,url:url.origin});
     }
     if(path==='/api/invitations'&&method==='DELETE'){checkManage(m);const b=await body(request,1000),email=validEmail(b.email),old=await one(env.DB,'SELECT role FROM invitations WHERE email=?',email);if(old&&!canAssignTeamRole(m.role,old.role))fail(403,'Tuto pozvánku nemůžete zrušit.');await execute(env.DB,'DELETE FROM invitations WHERE email=? AND role=? AND EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND actor.role=?)',email,old?.role||'',m.user_id,m.role);return json({ok:true});}
     const renew=path.match(/^\/api\/members\/([-a-zA-Z0-9_]{1,100})\/(access-link|device-invite)$/);
-    if(renew&&method==='POST'){checkManage(m);if(await passwordOnly(env))fail(403,'Použijte nastavení přihlášení jménem a heslem.');const target=await one(env.DB,'SELECT m.* FROM members m JOIN guest_access a ON a.user_id=m.user_id WHERE m.user_id=?',renew[1]);if(!target)fail(404,'Kolega s osobním odkazem nebyl nalezen.');if(!canEditTeamMember(m,target))fail(403,'Nemůžete obnovit přístup tohoto kolegy.');const token=accessToken();const renewed=await execute(env.DB,'UPDATE guest_access SET token_hash=?,expires_at=?,single_use=1 WHERE user_id=? AND EXISTS(SELECT 1 FROM members target WHERE target.user_id=guest_access.user_id AND target.role=?) AND EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND actor.role=?)',await accessHash(token),Date.now()+(['administrator','admin'].includes(target.role)?1:7)*86400000,target.user_id,target.role,m.user_id,m.role);if(!renewed.meta.changes)fail(409,'Oprávnění mezitím někdo změnil. Obnovte tým.');if(renew[2]==='access-link')await execute(env.DB,'UPDATE access_sessions SET revoked_at=? WHERE user_id=?',Date.now(),target.user_id);return json({email:target.email,role:target.role,mode:'link',url:accessURL(env.WORKSPACE_ENTRY_ORIGIN||url.origin,token)});}
+    if(renew)fail(403,'Přihlášení osobním odkazem bylo zrušeno. Použijte účet jménem a heslem.',{code:'access_link_disabled'});
     if(path.startsWith('/api/members/')&&['PATCH','DELETE'].includes(method)){
       checkManage(m);const id=decodeURIComponent(path.slice('/api/members/'.length));const target=await one(env.DB,'SELECT * FROM members WHERE user_id=?',id);if(!target)fail(404,'Člen nebyl nalezen.');if(!canEditTeamMember(m,target))fail(403,'Nemůžete měnit oprávnění tohoto kolegy.');
       if(method==='DELETE'){const gate='EXISTS(SELECT 1 FROM members target WHERE target.user_id=? AND target.role=?) AND EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND actor.role=?)',args=[id,target.role,m.user_id,m.role],now=Date.now();const result=await env.DB.batch([env.DB.prepare('UPDATE access_sessions SET revoked_at=? WHERE user_id=? AND '+gate).bind(now,id,...args),env.DB.prepare('UPDATE guest_access SET token_hash=NULL,expires_at=NULL WHERE user_id=? AND '+gate).bind(id,...args),env.DB.prepare('DELETE FROM members WHERE user_id=? AND '+gate).bind(id,...args)]);if(!result[2].meta.changes)fail(409,'Oprávnění mezitím někdo změnil. Obnovte tým.');return json({ok:true});}

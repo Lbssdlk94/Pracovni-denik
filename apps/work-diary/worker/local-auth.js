@@ -33,7 +33,7 @@ async function passwordSession(env,userId,version,request){
 export async function handleLocalPublicAuth(request,env,h){
  const {body,json,fail}=h,path=new URL(request.url).pathname;
  if(path==='/api/auth/recover')fail(403,'Zapomenuté heslo může obnovit pouze administrátor firmy.',{code:'administrator_reset_required'});
- if(path==='/api/auth/options'&&request.method==='GET')return json({password:true,legacyAllowed:!await passwordOnly(env)});
+ if(path==='/api/auth/options'&&request.method==='GET')return json({password:true,linkAllowed:false,legacyAllowed:!await passwordOnly(env)});
  if(request.method!=='POST')fail(405,'Nepodporovaná operace.');
  const b=await body(request,2500);let username;try{username=localUsername(b.username);}catch{badLogin(fail);}
  await authRate(request,env,username,fail);
@@ -49,7 +49,7 @@ export async function handleLocalPublicAuth(request,env,h){
 export async function handleLocalSelf(request,env,m,h){
  const {body,json,fail}=h,path=new URL(request.url).pathname,creds=await authOne(env,'SELECT * FROM local_credentials WHERE user_id=?',m.user_id);
  if(path==='/api/auth/account'&&request.method==='GET'){
-  const policy=await authOne(env,"SELECT value,version FROM settings WHERE key='local-auth-mode'");return json({username:creds?.username||'',hasPassword:!!creds,version:creds?.version||0,mustChange:!!creds?.must_change,legacyAllowed:policy?.value!=='password',policyVersion:policy?.version||0,canManagePolicy:m.role==='owner'});
+  const policy=await authOne(env,"SELECT value,version FROM settings WHERE key='local-auth-mode'");return json({username:creds?.username||'',hasPassword:!!creds,version:creds?.version||0,mustChange:!!creds?.must_change,linkAllowed:false,legacyAllowed:policy?.value!=='password',policyVersion:policy?.version||0,canManagePolicy:m.role==='owner'});
  }
  if(path==='/api/auth/password'&&request.method==='PUT'){
   const b=await body(request,3000);if(Object.keys(b).some(k=>!['username','password','currentPassword','version'].includes(k))||b.version!==(creds?.version||0))fail(409,'Účet se mezitím změnil. Obnovte nastavení.');

@@ -255,29 +255,11 @@ test('new invited colleague receives explicit discipline and source identity ato
   } finally { e.sqlite.close(); }
 });
 
-test('linking another hosting identity requires an explicit confirmation plus a valid personal session of the same account', async () => {
-  const e = await setup();
-  try {
-    const link = await e.call('/api/workspace/identity-invite', people.owner, 'POST', {memberId:people.worker.id});
-    const token = new URL(link.url).hash.slice('#access='.length);
-    const redeemed = await api(request('/api/access-link', undefined, 'POST', {token}), e, context);
-    assert.equal(redeemed.status, 200, await redeemed.clone().text());
-    const cookie = redeemed.headers.get('set-cookie').split(';')[0];
-    const hosted = {id: 'second-browser-worker-id', email: people.worker.email};
-    assert.equal((await api(request('/api/me', hosted), e, context)).status, 403);
-    assert.equal((await api(request('/api/workspace/link-identity', hosted, 'POST', {confirm: 'PROPOJIT'}), e, context)).status, 403);
-    const response = await api(request('/api/workspace/link-identity', hosted, 'POST', {confirm: 'PROPOJIT'}, {cookie}), e, context);
-    assert.equal(response.status, 200, await response.clone().text());
-    const current = await e.call('/api/me', hosted);
-    assert.equal(current.user.id, people.worker.id);
-    assert.equal(current.user.role, 'worker');
-    assert.deepEqual(current.workspace.disciplines, ['irrigation']);
-    assert.equal(e.sqlite.prepare('SELECT count(*) n FROM workspace_identity_events').get().n, 1);
-    assert.equal(e.sqlite.prepare("SELECT count(*) n FROM workspace_member_grants WHERE user_id=? AND original_role='owner'").get(people.worker.id).n, 0);
-    const wrong = {id: 'wrong-account-id', email: people.owner.email};
-    assert.equal((await api(request('/api/workspace/link-identity', wrong, 'POST', {confirm: 'PROPOJIT'}, {cookie}), e, context)).status, 403);
-  } finally { e.sqlite.close(); }
-});
+test('removed identity links cannot add a second hosting alias or broaden team access',async()=>{const e=await setup();try{
+ const before=e.sqlite.prepare('SELECT * FROM workspace_identity_aliases').all();
+ for(const path of ['/api/workspace/identity-invite','/api/workspace/link-identity']){const response=await api(request(path,people.owner,'POST',{memberId:people.worker.id,confirm:'PROPOJIT'}),e,context);assert.equal(response.status,403);assert.equal((await response.json()).code,'access_link_disabled');}
+ assert.deepEqual(e.sqlite.prepare('SELECT * FROM workspace_identity_aliases').all(),before);assert.equal((await api(request('/api/me',{id:'another-host-id',email:people.worker.email}),e,context)).status,403);
+ }finally{e.sqlite.close();}});
 
 test('offline manifest authorizes exactly requested IDs and refuses a stale assignment revision',async()=>{
  const e=await setup();
@@ -325,12 +307,11 @@ test('reassignment during job list loading never returns a former worker private
  }finally{e.sqlite.close();}
 });
 
-test('deleting and explicitly re-inviting a member keeps all old personal sessions revoked',async()=>{
+test('deleting and explicitly re-inviting a member keeps all old password sessions revoked',async()=>{
  const e=await setup();
  try{
-  const link=await e.call('/api/workspace/identity-invite',people.owner,'POST',{memberId:people.worker.id});
-  const redeemed=await api(request('/api/access-link',undefined,'POST',{token:new URL(link.url).hash.slice('#access='.length)}),e,context);
-  assert.equal(redeemed.status,200);const cookie=redeemed.headers.get('set-cookie').split(';')[0];
+  const configured=await api(request('/api/auth/password',people.worker,'PUT',{username:'retired-worker',password:'Isolated-worker-password-123',version:0}),e,context);
+  assert.equal(configured.status,200);const cookie=configured.headers.get('set-cookie').split(';')[0];
   assert.equal((await api(request('/api/me',undefined,'GET',undefined,{cookie}),e,context)).status,200);
   await e.call('/api/members/'+people.worker.id,people.owner,'DELETE');
   assert.equal(e.sqlite.prepare('SELECT count(*) n FROM workspace_identity_aliases WHERE canonical_user_id=?').get(people.worker.id).n,0);
