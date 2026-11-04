@@ -1,0 +1,5 @@
+PracovniDenik.xcodeproj/
+Info.plist
+build/
+*.xcresult
+*.ipa
