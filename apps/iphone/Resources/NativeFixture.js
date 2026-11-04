@@ -2,6 +2,7 @@
 document.body.className='shell';document.body.innerHTML='<div id=app><main class=main>Testovací deník</main></div>';
 const screens=createNativeScreens({db:{session:()=>fixture.context,offlineSession:async()=>fixture.context},getSession:()=>fixture.context});
 window.__workDiaryNative={execute:async(command,payload={})=>{
+ if(command==='nativePush')return {configured:false,enabled:true,missing:['APNS_TEAM_ID','APNS_KEY_ID','APNS_PRIVATE_KEY','APNS_BUNDLE_ID'],userId:fixture.context.user.id,registered:false};
  if(command==='screen')return screens.snapshot();
  if(command==='control')return screens.action(payload);
  if(command==='asset')return screens.asset(payload);

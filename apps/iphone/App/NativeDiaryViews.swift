@@ -229,6 +229,7 @@ struct NativeMore: View {
                 }
             }
             Section {
+                if context.enabled("notifications") {Button("Push upozornění v iPhonu"){NativePushController.shared.showSettings=true}.frame(minHeight:44).accessibilityIdentifier("native-push-settings")}
                 Button("Otevřít celý deník") { Task { await store.openWeb() } }.frame(minHeight: 44)
                 Text("Všechny povolené části vašeho pracovního deníku.").font(.footnote).foregroundStyle(.secondary)
             }

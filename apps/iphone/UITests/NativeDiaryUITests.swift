@@ -36,6 +36,14 @@ final class NativeDiaryUITests: XCTestCase {
         XCTAssertTrue(app.tabBars.buttons["Přehled"].waitForExistence(timeout: 15))
     }
     @MainActor
+    func testNativePushSettingsExplainMissingAppleConfigurationWithoutRequestingPermission() {
+        let app=launch();app.tabBars.buttons["Více"].tap();app.swipeUp()
+        let settings=app.buttons["native-push-settings"];XCTAssertTrue(settings.waitForExistence(timeout:10));settings.tap()
+        XCTAssertTrue(app.staticTexts["native-push-not-configured"].waitForExistence(timeout:15))
+        XCTAssertFalse(app.buttons["Zapnout oznámení"].isEnabled)
+        let image=XCTAttachment(screenshot:app.screenshot());image.name="SwiftUI-native-push-settings";image.lifetime = .keepAlways;add(image)
+    }
+    @MainActor
     func testNativePaginationShowsTheExistingJobsOnce() {
         let app = launch(); app.tabBars.buttons["Zakázky"].tap()
         let more = app.buttons["Načíst další zakázky"]

@@ -3,6 +3,7 @@ import UIKit
 
 struct HybridDiaryScreen: View {
     @ObservedObject var session: BrowserSession
+    @ObservedObject private var push = NativePushController.shared
     @StateObject private var store: NativeDiaryStore
     @StateObject private var screens: NativeScreenStore
     @Environment(\.scenePhase) private var scenePhase
@@ -47,9 +48,12 @@ struct HybridDiaryScreen: View {
                     HStack { Text(error).font(.callout); Button("Zavřít") { store.error = nil }.frame(minHeight: 44) }.padding().background(.background)
                 }
             }
-            .onChange(of: session.nativeSignal) { _, signal in Task { await store.receive(signal) } }
+            .sheet(isPresented:$push.showSettings){NativePushSettings(push:push)}
+            .safeAreaInset(edge:.bottom){if push.pendingInbox {Button("Otevřít nové upozornění"){Task{await openPushInbox()}}.buttonStyle(.bordered).padding().background(.regularMaterial)}}
+            .onChange(of:push.inboxRequest){_,_ in Task{await openPushInbox()}}
+            .onChange(of: session.nativeSignal) { _, signal in Task { await store.receive(signal);if signal.kind == .ready {await push.refresh();await openPushInbox()} } }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { Task { await store.resumed() } }
+                if phase == .active { Task { await store.resumed(); await push.refresh();await openPushInbox() } }
                 else {
                     store.verifiedInForeground = false
                     if phase == .background {
@@ -59,10 +63,16 @@ struct HybridDiaryScreen: View {
                 }
             }
             .task {
+                push.attach(session)
                 while !Task.isCancelled {
                     do { try await Task.sleep(for: .seconds(60)); try Task.checkCancellation() } catch { break }
                     if scenePhase == .active && nativeVisible { await store.activate(); if store.tab == 1 { await store.reloadJobs() } }
                 }
             }
+    }
+    private func openPushInbox() async {
+        guard push.pendingInbox,store.context != nil,scenePhase == .active else{return}
+        await store.openWeb(page:"notifications")
+        if store.error == nil {push.pendingInbox=false}
     }
 }

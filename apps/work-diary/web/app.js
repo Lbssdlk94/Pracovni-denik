@@ -1,4 +1,4 @@
-import {installNativeClient} from './native-client.js?v=native-all-v1';
+import {installNativeClient} from './native-client.js?v=native-push-v1';
 import {transientConnectionError} from './io.js?v=connection-recovery-v1';
 import {createConnectionRecovery} from './connection-recovery.js?v=connection-recovery-v1';
 import {createWorkspaceUI,workspaceFilterMarkup,workspaceBadge,workspaceDisciplineField} from './workspace-ui.js?v=shared-directory-v1';
@@ -25,7 +25,7 @@ import {closeDialog} from './dialog.js?v=workspace-roles-v1';
 import {createSubscriptionsUI} from './subscriptions-ui.js?v=workspace-roles-v1';
 import {createServiceWorkUI} from './service-work-ui.js?v=draft-recovery-v1';
 import {createCustomersUI} from './customers-ui.js?v=draft-recovery-v1';
-import {createNotificationsUI} from './notifications-ui.js?v=workspace-controls-v1';
+import {createNotificationsUI} from './notifications-ui.js?v=native-push-v1';
 import {createDriveUI} from './drive-ui.js?v=workspace-controls-v1';
 import {createJobsUI} from './jobs-ui.js?v=draft-recovery-v1';
 import {createBlowoutUI} from './blowout-ui.js?v=workspace-controls-v1';

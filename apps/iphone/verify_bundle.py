@@ -6,6 +6,7 @@ import sys
 bundle = pathlib.Path(sys.argv[1])
 with (bundle / 'Info.plist').open('rb') as stream:
     info = plistlib.load(stream)
+assert info['NativePushEnvironment'] == 'production', 'Release APNs environment missing'
 assert info['CFBundleIdentifier'] == 'cz.pracovnidenik.app'
 assert info['CFBundleDisplayName'] == 'Pracovní deník'
 assert set(info['WKAppBoundDomains']) == {

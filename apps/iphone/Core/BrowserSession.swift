@@ -39,6 +39,7 @@ final class BrowserSession: NSObject, ObservableObject, WKNavigationDelegate, WK
         config.limitsNavigationsToAppBoundDomains = !testing || nativeTesting
         config.defaultWebpagePreferences.preferredContentMode = .mobile
         config.userContentController.add(relay, name: "workDiaryState")
+        config.userContentController.add(relay, name: "workDiaryPush")
         webView = WKWebView(frame: .zero, configuration: config)
         super.init()
         relay.owner = self

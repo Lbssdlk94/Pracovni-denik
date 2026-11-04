@@ -6,6 +6,9 @@ const states=new Set(['all','active','planned','on_way','in_progress','incomplet
 const validId=v=>typeof v==='string'&&/^[-\w]{1,100}$/.test(v);
 export function nativeIdentityKey(s){return JSON.stringify([s?.installation?.id,s?.user?.id,s?.user?.role,s?.workspace?.authorizationVersion,s?.workspace?.selectedDiscipline,s?.workspace?.disciplines,s?.features]);}
 export function createNativeClient({db,getName,onSession,openTarget,canResume,isOnline=()=>navigator.onLine,screens=null,today=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Prague'}).format(new Date())}){
+ let nativeFlight=null,nativeBinding=null;
+ const readBinding=()=>{try{return nativeBinding||JSON.parse(globalThis.localStorage?.getItem('native-push-binding')||'null');}catch{return nativeBinding;}};
+ const writeBinding=value=>{nativeBinding=value;try{if(value)globalThis.localStorage?.setItem('native-push-binding',JSON.stringify(value));else globalThis.localStorage?.removeItem('native-push-binding');}catch{}};
  const current=()=>{const s=db.session();if(!s?.user||!isOnline())throw Error('Přehled vyžaduje ověřené připojení. Offline práci otevřete.');return s;};
  const guard=(key)=>{if(nativeIdentityKey(current())!==key)throw Error('Oprávnění nebo pracovní obor se změnily. Obnovte přehled.');};
  const jobsAllowed=(s,day)=>{if(s.features?.jobs===false||s.features?.[day?'jobDay':'jobList']===false)throw Error('Tento pohled zakázek je pro firmu vypnutý.');};
@@ -14,6 +17,19 @@ export function createNativeClient({db,getName,onSession,openTarget,canResume,is
   const result=await db.request('/api/jobs?'+params);guard(key);return result;
  }
  return Object.freeze({async execute(command,input={}){
+  if(command==='nativePush'){
+   const s=current(),userId=s.user.id,binding=readBinding(),deviceId=binding?.userId===userId?binding.deviceId:null;
+   const send=(path,method='GET',value)=>db.request('/api/notifications/native'+path,{method,...(value?{body:JSON.stringify(value),headers:{'content-type':'application/json'}}:{})});
+   if(input.action==='config'){const config=await send('/config');const status=deviceId?await send('?deviceId='+encodeURIComponent(deviceId)):{};return {...config,...status,userId,deviceId:status.registered?deviceId:null};}
+   if(input.action==='register'){
+    if(nativeFlight)await nativeFlight;
+    const task=(async()=>{const result=await send('','POST',{token:input.token,environment:input.environment,bundleId:input.bundleId});if(db.session()?.user.id!==userId)throw Error('Přihlášený účet se změnil.');writeBinding({userId,deviceId:result.deviceId});return result;})();nativeFlight=task;try{return await task;}finally{if(nativeFlight===task)nativeFlight=null;}
+   }
+   if(input.action==='detach'){await nativeFlight?.catch(()=>{});const active=readBinding();if(active?.userId===userId)await send('','DELETE',{deviceId:active.deviceId});writeBinding(null);return {ok:true};}
+   if(input.action==='test'){if(!deviceId)throw Error('Nejdříve zapněte oznámení.');return send('/test','POST',{deviceId});}
+   if(input.action==='received'){globalThis.document?.dispatchEvent(new Event('native-push-refresh'));return {ok:true};}
+   throw Error('Nepodporovaná operace oznámení.');
+  }
   if(command==='screen')return screens?.snapshot();
   if(command==='flushDrafts')return screens?.flush();
   if(command==='control')return screens?.action(input);

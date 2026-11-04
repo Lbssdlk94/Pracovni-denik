@@ -351,6 +351,13 @@
       "when": 1793347916779,
       "tag": "0049_workspace_transfer_fence",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "6",
+      "when": 1793797678967,
+      "tag": "0050_native_push_transport",
+      "breakpoints": true
     }
   ]
 }

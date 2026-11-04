@@ -6,9 +6,15 @@ settings:
   base:
     SWIFT_VERSION: '5.0'
     TARGETED_DEVICE_FAMILY: '1'
-    CURRENT_PROJECT_VERSION: 3
-    MARKETING_VERSION: 0.3.0
+    CURRENT_PROJECT_VERSION: 4
+    MARKETING_VERSION: 0.4.0
     CODE_SIGN_STYLE: Automatic
+    APNS_ENVIRONMENT: development
+  configs:
+    Debug:
+      APNS_ENVIRONMENT: development
+    Release:
+      APNS_ENVIRONMENT: production
 targets:
   PracovniDenik:
     type: application
@@ -16,11 +22,13 @@ targets:
     sources: [App, Core, Resources]
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: cz.pracovnidenik.app
+      CODE_SIGN_ENTITLEMENTS: Resources/PracovniDenik.entitlements
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: Info.plist
       properties:
         CFBundleDisplayName: Pracovní deník
+        NativePushEnvironment: $(APNS_ENVIRONMENT)
         CFBundleDevelopmentRegion: cs
         CFBundleLocalizations: [cs]
         CFBundleShortVersionString: $(MARKETING_VERSION)
