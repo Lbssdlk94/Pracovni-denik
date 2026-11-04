@@ -90,3 +90,18 @@ node scripts/build.mjs
 node --input-type=module -e 'import "./tests/local-auth.test.js"'
 node scripts/test-local-auth-browser.mjs
 ```
+
+### Výsledek publikace
+
+- Dr. Závlaha: verze **113**, zdroj `b99b144e526e4bbf967b2dd451e5f55835564441`,
+  publikace `appgdep_6aeb50fd7c5881918955f6ae102d4bf9` úspěšná.
+  https://zavlahovy-denik.purplecedar.chatgpt.site/
+- Dr. Garden: verze **34**, zdroj `4db8232e78d77d8a5f87e48fa715e933aa24dd8a`,
+  publikace `appgdep_6aeb514a2ed8819183f6608c5a775c3c` úspěšná.
+  https://dr-garden.purplecedar.chatgpt.site/
+- Veřejná kontrola curl: Dr. Závlaha `/api/auth/options` 200 s
+  `password:true,legacyAllowed:true`; `/api/me` bez přihlášení 401.
+  Garden `/api/auth/options` 401 na vstupní bráně hostingu — publikum zůstalo
+  beze změny `custom`, otevření přihlašovací stránky nebylo potvrzeno.
+- Provozní chybové logy Dr. Závlahy po první publikaci bez záznamu chyby.
+  Nebyly vytvářeny skutečné účty ani měněny provozní zakázky či hesla.
