@@ -25,12 +25,12 @@ final class NativeDiaryUITests: XCTestCase {
     @MainActor
     func testWebFallbackDoesNotDiscardAnOpenForm() {
         let app = launch(); app.tabBars.buttons["Více"].tap(); app.buttons["Zákazníci"].tap()
-        let field = app.webViews.textFields["Poznámka"]
+        let field = app.textFields["Poznámka"]
         XCTAssertTrue(field.waitForExistence(timeout: 15)); field.tap(); field.typeText("Zachovat zapis")
-        app.buttons["Nativní přehled"].tap()
+        app.buttons["Přehled"].tap()
         XCTAssertTrue(field.waitForExistence(timeout: 10)); XCTAssertEqual(field.value as? String, "Zachovat zapis")
-        app.webViews.buttons["Zavřít formulář"].tap()
-        app.buttons["Nativní přehled"].tap()
+        app.buttons["Zavřít formulář"].tap()
+        app.buttons["Přehled"].tap()
         XCTAssertTrue(app.tabBars.buttons["Přehled"].waitForExistence(timeout: 15))
     }
     @MainActor

@@ -15,9 +15,9 @@ struct HybridDiaryScreen: View {
         ZStack {
             // The web form, DOM, Files, IndexedDB, cookies and outboxes remain
             // mounted when covered by native screens. Never reload to switch UI.
-            DiaryScreen(session: session).opacity(0).allowsHitTesting(false).accessibilityHidden(true)
+            DiaryScreen(session: session).opacity(ProcessInfo.processInfo.arguments.contains("--ui-testing") ? 1 : 0).allowsHitTesting(ProcessInfo.processInfo.arguments.contains("--ui-testing")).accessibilityHidden(!ProcessInfo.processInfo.arguments.contains("--ui-testing"))
             NativeScreenView(store: screens)
-                .opacity(nativeVisible ? 0 : 1).allowsHitTesting(!nativeVisible).accessibilityHidden(nativeVisible)
+                .opacity(nativeVisible || ProcessInfo.processInfo.arguments.contains("--ui-testing") ? 0 : 1).allowsHitTesting(!nativeVisible && !ProcessInfo.processInfo.arguments.contains("--ui-testing")).accessibilityHidden(nativeVisible || ProcessInfo.processInfo.arguments.contains("--ui-testing"))
                 .safeAreaInset(edge: .top) {
                     if !nativeVisible && store.wasActivated {
                         HStack {

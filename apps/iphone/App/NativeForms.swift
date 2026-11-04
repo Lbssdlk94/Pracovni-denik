@@ -45,7 +45,7 @@ struct NativeControlView: View {
             Button(role: control.danger == true ? .destructive : nil) { Task { await store.perform(control) } } label: { Text(control.label).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading) }
                 .buttonStyle(.bordered).disabled(control.disabled == true || store.busy)
         case "card": VStack(alignment: .leading, spacing: 12) { NativeControlList(controls: control.children ?? [], store: store) }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(.background, in: RoundedRectangle(cornerRadius: 20))
-        case "disclosure": DisclosureGroup(control.label) { NativeControlList(controls: control.children ?? [], store: store).padding(.vertical, 12) }.font(.headline)
+        case "disclosure": NativeDisclosure(control: control, store: store)
         case "grid": LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7)) { NativeControlList(controls: control.children ?? [], store: store) }
         case "progress": ProgressView(value: Double(control.value ?? "0") ?? 0)
         case "image": NativeAssetImage(handle: control.handle, label: control.label, store: store)
@@ -98,4 +98,13 @@ struct NativeField: View {
     func formatter() -> DateFormatter { let f=DateFormatter(); f.locale=Locale(identifier:"en_US_POSIX"); f.timeZone=TimeZone(identifier:"Europe/Prague"); f.dateFormat=dateFormat; return f }
     func date(_ value: String) -> Date { formatter().date(from: value) ?? Date() }
     func format(_ date: Date) -> String { formatter().string(from: date) }
+}
+
+struct NativeDisclosure: View {
+ let control: NativeControl
+ @ObservedObject var store: NativeScreenStore
+ @State private var open = false
+ var body: some View {
+  DisclosureGroup(control.label,isExpanded:Binding(get:{open},set:{open=$0;let next=$0;Task{await store.perform(control,action:"toggle",extra:["checked":next])}})) { NativeControlList(controls:control.children ?? [],store:store).padding(.vertical,12) }.font(.headline).onAppear{open=control.expanded ?? false}
+ }
 }
