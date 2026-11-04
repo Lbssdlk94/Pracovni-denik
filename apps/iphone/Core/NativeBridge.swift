@@ -24,9 +24,7 @@ extension BrowserSession {
           return JSON.stringify({data});
         } catch(error) { return JSON.stringify({error:error.message||'Operace se nepodařila.',status:error.status||0,code:error.code||null}); }
         """
-        let result: Any = try await withCheckedThrowingContinuation { continuation in
-            webView.callAsyncJavaScript(script, arguments: ["command": command, "payload": arguments], in: nil, contentWorld: .page) { result in continuation.resume(with: result) }
-        }
+        let result = try await webView.callAsyncJavaScript(script, arguments: ["command": command, "payload": arguments], in: nil, contentWorld: .page)
         guard let text = result as? String, let data = text.data(using: .utf8) else { throw DiaryBridgeError(message: "Neplatná odpověď deníku.") }
         let reply = try JSONDecoder().decode(BridgeReply<T>.self, from: data)
         guard let value = reply.data else { throw DiaryBridgeError(message: reply.error ?? "Deník není dostupný.", code: reply.code) }

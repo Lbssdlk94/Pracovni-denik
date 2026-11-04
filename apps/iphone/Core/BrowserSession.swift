@@ -98,6 +98,9 @@ final class BrowserSession: NSObject, ObservableObject, WKNavigationDelegate, WK
         hasDocument = true
         initialLoading = false
         problem = nil
+        webView.evaluateJavaScript("Boolean(window.__workDiaryNative && document.querySelector('.shell'))") { [weak self] value, _ in
+            if value as? Bool == true { self?.nativeSignal = NativeSignal(kind: .ready) }
+        }
     }
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         if webView === self.webView { navigationFailed(error) }
