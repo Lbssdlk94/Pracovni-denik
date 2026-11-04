@@ -54,8 +54,9 @@ final class BrowserSession: NSObject, ObservableObject, WKNavigationDelegate, WK
             do {
                 let url = Bundle.main.url(forResource: "NativeFixture", withExtension: "json")!
                 let data = try String(contentsOf: url, encoding: .utf8)
+                let sdk = try String(contentsOf: Bundle.main.url(forResource: "NativeScreensFixture", withExtension: "js")!, encoding: .utf8)
                 let script = try String(contentsOf: Bundle.main.url(forResource: "NativeFixture", withExtension: "js")!, encoding: .utf8)
-                webView.loadHTMLString("<html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'></head><body><h1>Webová část – izolovaný test</h1><script>const fixture=\(data);\(script)</script></body></html>", baseURL: EndpointPolicy.home)
+                webView.loadHTMLString("<html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'></head><body><h1>Webová část – izolovaný test</h1><script>const fixture=\(data);\(sdk);\(script)</script></body></html>", baseURL: EndpointPolicy.home)
             } catch { navigationFailed(error) }
         } else if testing {
             webView.loadHTMLString("""

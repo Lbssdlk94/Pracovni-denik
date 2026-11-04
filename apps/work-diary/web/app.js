@@ -1,4 +1,4 @@
-import {installNativeClient} from './native-client.js?v=native-swiftui-v1';
+import {installNativeClient} from './native-client.js?v=native-all-v1';
 import {transientConnectionError} from './io.js?v=connection-recovery-v1';
 import {createConnectionRecovery} from './connection-recovery.js?v=connection-recovery-v1';
 import {createWorkspaceUI,workspaceFilterMarkup,workspaceBadge,workspaceDisciplineField} from './workspace-ui.js?v=shared-directory-v1';

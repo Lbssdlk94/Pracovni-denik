@@ -3,22 +3,25 @@ import SwiftUI
 struct HybridDiaryScreen: View {
     @ObservedObject var session: BrowserSession
     @StateObject private var store: NativeDiaryStore
+    @StateObject private var screens: NativeScreenStore
     @Environment(\.scenePhase) private var scenePhase
     init(session: BrowserSession) {
         self.session = session
         _store = StateObject(wrappedValue: NativeDiaryStore(browser: session))
+        _screens = StateObject(wrappedValue: NativeScreenStore(browser: session))
     }
     var nativeVisible: Bool { !store.webVisible && store.context != nil }
     var body: some View {
         ZStack {
             // The web form, DOM, Files, IndexedDB, cookies and outboxes remain
             // mounted when covered by native screens. Never reload to switch UI.
-            DiaryScreen(session: session)
+            DiaryScreen(session: session).opacity(0).allowsHitTesting(false).accessibilityHidden(true)
+            NativeScreenView(store: screens)
                 .opacity(nativeVisible ? 0 : 1).allowsHitTesting(!nativeVisible).accessibilityHidden(nativeVisible)
                 .safeAreaInset(edge: .top) {
                     if !nativeVisible && store.wasActivated {
                         HStack {
-                            Button { Task { await store.activate() } } label: { Label("Nativní přehled", systemImage: "chevron.left") }.frame(minHeight: 44)
+                            Button { Task { await store.activate() } } label: { Label("Přehled", systemImage: "chevron.left") }.frame(minHeight: 44)
                             Spacer()
                             if store.loading { ProgressView() }
                         }.padding(.horizontal).background(.regularMaterial)

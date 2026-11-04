@@ -75,7 +75,7 @@ struct NativeOverview: View {
                 if context.nativeJobsAvailable {
                     DiaryTile(title: "Zakázky", subtitle: "Přehled a plánování práce", symbol: "list.clipboard") { store.tab = 1 }
                 } else if context.enabled("jobs") {
-                    DiaryTile(title: "Zakázky", subtitle: "Otevřít povolené webové pohledy", symbol: "calendar") { Task { await store.openWeb(page: "jobs") } }
+                    DiaryTile(title: "Zakázky", subtitle: "Další pohledy zakázek", symbol: "calendar") { Task { await store.openWeb(page: "jobs") } }
                 }
                 if context.enabled("customers") {
                     DiaryTile(title: "Zákazníci", subtitle: "Kontakty a jejich zahrady", symbol: "person.crop.rectangle") { Task { await store.openWeb(page: "customers") } }
@@ -230,7 +230,7 @@ struct NativeMore: View {
             }
             Section {
                 Button("Otevřít celý deník") { Task { await store.openWeb() } }.frame(minHeight: 44)
-                Text("Tyto části používají stávající webové formuláře a jejich ukládání.").font(.footnote).foregroundStyle(.secondary)
+                Text("Všechny povolené části vašeho pracovního deníku.").font(.footnote).foregroundStyle(.secondary)
             }
         }.scrollContentBackground(.hidden).background(DiaryStyle.background).navigationTitle("Více")
     }

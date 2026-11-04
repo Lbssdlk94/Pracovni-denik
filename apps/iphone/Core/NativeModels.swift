@@ -81,7 +81,7 @@ struct DiaryBridgeError: LocalizedError {
     var errorDescription: String? { message }
 }
 struct NativeSignal: Equatable {
-    enum Kind { case ready, invalidated }
+    enum Kind { case ready, invalidated, screen }
     let id = UUID()
     let kind: Kind
 }

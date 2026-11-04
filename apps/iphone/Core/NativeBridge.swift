@@ -10,7 +10,8 @@ final class NativeStateRelay: NSObject, WKScriptMessageHandler {
         guard let owner, message.webView === owner.webView, message.frameInfo.isMainFrame,
               let url = message.frameInfo.request.url, EndpointPolicy.isDiary(url),
               let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
-        if type == "ready" { owner.nativeSignal = NativeSignal(kind: .ready) }
+        if type == "screen" { owner.nativeSignal = NativeSignal(kind: .screen) }
+        else if type == "ready" { owner.nativeSignal = NativeSignal(kind: .ready) }
         else if type == "invalidated" { owner.nativeSignal = NativeSignal(kind: .invalidated) }
     }
 }

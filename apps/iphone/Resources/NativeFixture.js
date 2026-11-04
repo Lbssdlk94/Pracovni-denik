@@ -1,6 +1,10 @@
 // Isolated native UI-test fixture. No production requests or credentials.
-document.body.className='shell';
+document.body.className='shell';document.body.innerHTML='<div id=app><main class=main>Testovací deník</main></div>';
+const screens=createNativeScreens({db:{session:()=>fixture.context,offlineSession:async()=>fixture.context},getSession:()=>fixture.context});
 window.__workDiaryNative={execute:async(command,payload={})=>{
+ if(command==='screen')return screens.snapshot();
+ if(command==='control')return screens.action(payload);
+ if(command==='asset')return screens.asset(payload);
  if(command==='context'){
   if(document.querySelector('#fixture-form'))throw Object.assign(Error('Nejdříve uložte nebo zavřete otevřený formulář ve webové části.'),{code:'native_form_open'});
   return fixture.context;
@@ -12,7 +16,7 @@ window.__workDiaryNative={execute:async(command,payload={})=>{
  }
  if(command==='job')return {job:fixture.jobs.find(j=>j.id===payload.id),defects:fixture.defects};
  if(command==='open'){
-  document.body.innerHTML='<h1>Webová část – izolovaný test</h1><form id="fixture-form"><label>Poznámka <input aria-label="Poznámka"></label><button type="button" onclick="this.closest(\'form\').remove()">Zavřít formulář</button></form>';
+  document.querySelector('#app').innerHTML='<main class=main><h1>Webová část – izolovaný test</h1><form id="fixture-form"><label>Poznámka <input aria-label="Poznámka"></label><button type="button" onclick="this.closest(\'form\').remove()">Zavřít formulář</button></form></main>';
   return {opened:true};
  }
  throw Error('Unsupported isolated fixture operation');

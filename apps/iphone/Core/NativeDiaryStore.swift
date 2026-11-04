@@ -30,6 +30,7 @@ final class NativeDiaryStore: ObservableObject {
         webVisible = true; loading = false
     }
     func receive(_ signal: NativeSignal) async {
+        if signal.kind == .screen { return }
         if signal.kind == .invalidated { invalidate(); return }
         if !activated || context == nil { await activate() }
     }
