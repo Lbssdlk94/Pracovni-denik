@@ -35,7 +35,7 @@ final class BrowserSession: NSObject, ObservableObject, WKNavigationDelegate, WK
         self.nativeRelay = relay
         let config = WKWebViewConfiguration()
         config.websiteDataStore = testing ? .nonPersistent() : .default()
-        config.limitsNavigationsToAppBoundDomains = !testing
+        config.limitsNavigationsToAppBoundDomains = !testing || nativeTesting
         config.defaultWebpagePreferences.preferredContentMode = .mobile
         config.userContentController.add(relay, name: "workDiaryState")
         webView = WKWebView(frame: .zero, configuration: config)

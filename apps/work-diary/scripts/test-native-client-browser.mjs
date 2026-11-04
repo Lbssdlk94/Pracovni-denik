@@ -38,6 +38,8 @@ try{
  page.on('dialog',d=>d.accept());await page.locator('#modal [data-close]').click();await page.evaluate(()=>window.__workDiaryNative.execute('context'));
  assert.equal((await db.prepare('SELECT status FROM jobs WHERE id=?').bind('irrigation-job').first()).status,'planned','opening/cancelling native handoff mutated a job');
  await db.prepare("UPDATE settings SET value=json_set(value,'$.jobDay',json('false'),'$.jobList',json('true')),version=version+1 WHERE key='features'").run();
+ const revoked=await page.evaluate(async()=>{try{await window.__workDiaryNative.execute('context');return false;}catch{return true;}}).catch(()=>true);assert.equal(revoked,true,'reducing modules must invalidate the old bridge');
+ await context.close();({context,page}=await nativePage());
  const policy=await page.evaluate(()=>window.__workDiaryNative.execute('context'));assert.equal(policy.features.jobDay,false);
  assert.equal(await page.evaluate(async()=>{try{await window.__workDiaryNative.execute('jobs',{day:'2026-10-30'});return false;}catch{return true;}}),true);
  await context.close();actor=people.worker;({context,page}=await nativePage());
