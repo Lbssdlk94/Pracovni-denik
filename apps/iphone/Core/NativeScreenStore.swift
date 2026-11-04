@@ -11,12 +11,12 @@ final class NativeScreenStore: ObservableObject {
     @Published var fileRequest: NativeFileRequest?
     @Published var preview: NativePreviewFile?
     private var epoch = 0
-    private var pending: [String: [String: Any]] = [:]
+    private var pending = NativeEditQueue()
     private var flushTask: Task<Void, Never>?
     private var loadingImages = Set<String>()
     init(browser: BrowserSession) { self.browser = browser }
     func invalidate() {
-        epoch += 1; error = nil; pending = [:]; flushTask?.cancel(); screen = nil; images = [:]; loadingImages = []
+        epoch += 1; error = nil; pending.clear(); flushTask?.cancel(); screen = nil; images = [:]; loadingImages = []
         fileRequest = nil; preview = nil; busy = false
     }
     private func accept(_ value: NativeScreenSnapshot, generation: Int) {
@@ -32,7 +32,7 @@ final class NativeScreenStore: ObservableObject {
     func change(_ control: NativeControl, value: String? = nil, checked: Bool? = nil, values: [String]? = nil, commit: Bool = false) {
         var args: [String: Any] = ["action":"value", "commit":commit]
         args["value"] = value; args["checked"] = checked; args["values"] = values; args["_label"] = control.label; args["_kind"] = control.kind
-        pending[control.id] = args
+        pending.set(control.id, args)
         flushTask?.cancel()
         flushTask = Task {
             do { try await Task.sleep(for: .milliseconds(180)); try Task.checkCancellation() } catch { return }
@@ -43,12 +43,11 @@ final class NativeScreenStore: ObservableObject {
         guard !busy else { return }
         let generation = epoch; busy = true
         defer { if generation == epoch { busy = false } }
-        while let entry = pending.first, generation == epoch {
-            pending.removeValue(forKey: entry.key)
-            guard let target = screen?.find(entry.key), target.label == entry.value["_label"] as? String, target.kind == entry.value["_kind"] as? String else { pending[entry.key] = entry.value; error = "Formulář se změnil. Poslední úprava zůstává rozepsaná; před uložením ji zkontrolujte."; break }
+        while generation == epoch, let entry = pending.takeFirst() {
+            guard let target = screen?.find(entry.key), target.label == entry.value["_label"] as? String, target.kind == entry.value["_kind"] as? String else { pending.restoreFirst(entry.key, entry.value); error = "Formulář se změnil. Poslední úprava zůstává rozepsaná; před uložením ji zkontrolujte."; break }
             var args = entry.value; args.removeValue(forKey: "_label"); args.removeValue(forKey: "_kind"); args["handle"] = target.handle
             do { let value: NativeScreenSnapshot = try await browser.nativeCall("control", args); accept(value, generation: generation); error = nil }
-            catch { pending[entry.key] = entry.value; self.error = error.localizedDescription; break }
+            catch { pending.restoreFirst(entry.key, entry.value); self.error = error.localizedDescription; break }
         }
     }
     func perform(_ control: NativeControl, action: String = "click", extra: [String: Any] = [:]) async {
