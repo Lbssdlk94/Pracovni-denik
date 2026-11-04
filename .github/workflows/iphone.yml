@@ -14,8 +14,8 @@ on:
         description: 'Standard Mac runner with pinned Xcode 26.0.1'
         required: false
         type: choice
-        default: macos-26
-        options: [macos-26, macos-15-intel, macos-15]
+        default: macos-15-intel
+        options: [macos-15-intel, macos-26, macos-15]
       sign_ipa:
         description: 'Build a signed IPA using configured Apple certificate and APNs provisioning profile'
         required: false
@@ -28,7 +28,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   ios:
-    runs-on: ${{ inputs.runner || 'macos-26' }}
+    runs-on: ${{ inputs.runner || 'macos-15-intel' }}
     timeout-minutes: 45
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer

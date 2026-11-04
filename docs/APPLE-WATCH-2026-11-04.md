@@ -178,3 +178,20 @@ https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/41883677167
 Při kontrole 4. 11. 2026 v 18:09 UTC byl stále `queued` bez spuštěných kroků.
 IPA, Swift XCTest a watchOS náhledy proto stále nejsou ověřené. Tento záznam
 nenahrazuje skutečný výsledek sestavení.
+
+### Potvrzená příčina fronty a návrat na Intel
+
+Druhý pokus běhu 41883677167 skončil 4. 11. 2026 v 18:40 UTC bez přiděleného
+runneru. K obecnému `The job was not acquired by Runner of type hosted even
+after multiple attempts` GitHub nově přidal výslovné vysvětlení:
+`Due to capacity constraints, jobs targeting macOS arm64 runners may experience
+longer queue times.` Kompilace, XCTest ani balení IPA tedy stále neproběhly.
+
+Na tento nový důkaz navazuje ruční běh na standardním Intel Macu:
+https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/41897398036
+
+Používá dosavadní Xcode 26.0.1 a nepodepsané sestavení, nikoli placený větší
+runner. Výchozí volba workflow byla také vrácena na `macos-15-intel`, aby další
+změny kódu automaticky nepoužívaly právě omezenou ARM frontu. Aktuální ruční běh
+měl stejnou hodnotu runneru výslovně v parametru; úprava výchozí volby jej
+nemění. Zdrojový Swift, oprávnění a podniková data zůstávají beze změny.
