@@ -37,6 +37,12 @@ struct HybridDiaryScreen: View {
             }
         }.tint(DiaryStyle.accent)
             .safeAreaInset(edge: .top) {
+                if let problem = session.problem {
+                    VStack(alignment:.leading,spacing:10) {
+                        Text(problem).font(.callout)
+                        Button("Znovu načíst",action:session.retry).buttonStyle(.bordered).frame(minHeight:44)
+                    }.padding().frame(maxWidth:.infinity,alignment:.leading).background(.background)
+                }
                 if let error = store.error {
                     HStack { Text(error).font(.callout); Button("Zavřít") { store.error = nil }.frame(minHeight: 44) }.padding().background(.background)
                 }

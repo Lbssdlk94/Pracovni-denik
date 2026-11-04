@@ -58,7 +58,7 @@ struct NativeFilePanel: View {
                 Button { importing=true } label: { Label("Vybrat ze Souborů", systemImage: "folder") }
                 if loading { ProgressView("Připravuji soubory…") }
                 if let error { Text(error).foregroundStyle(.red) }
-            }.navigationTitle(request.label).navigationBarTitleDisplayMode(.inline)
+            }.disabled(loading).navigationTitle(request.label).navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Zrušit") { Task { await store.cancelFile(request) } } } }
         }.interactiveDismissDisabled()
             .onChange(of: selection) { _, items in Task {
@@ -79,7 +79,7 @@ struct NativeFilePanel: View {
             } }
             .sheet(isPresented: $camera) { NativeCamera { image in
                 camera=false
-                if let data=image?.jpegData(compressionQuality:0.9) { Task { await store.attach(request,files:[NativePickedFile(data:data,name:"Fotografie.jpg",type:"image/jpeg")]) } }
+                if let data=image?.jpegData(compressionQuality:0.9) { Task { loading=true;defer{loading=false};do { try await store.prepareFile(request,data:data,name:"Fotografie.jpg",type:"image/jpeg",last:true) } catch { self.error=error.localizedDescription } } }
             } }
     }
 }

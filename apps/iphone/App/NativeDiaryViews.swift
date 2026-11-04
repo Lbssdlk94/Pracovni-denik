@@ -219,7 +219,7 @@ struct NativeMore: View {
         var items: [(String,String,String)] = [("customers","Zákazníci","person.crop.rectangle"),("home","Zahrady","leaf"),("attendance","Docházka","clock"),("defects","Závady","exclamationmark.triangle"),("subscriptions","Předplatné","checkmark.seal"),("vehicles","Vozidla","car"),("settings","Nastavení","gearshape")]
         if context.permissions.manage { items.append(("team","Náš tým","person.2")) }
         if context.user.role == "owner" { items.append(("materials","Materiál","shippingbox")) }
-        return items.filter { key,_,_ in context.enabled(["home":"gardens","team":"teamManagement"][key] ?? key) }
+        return items.filter { key,_,_ in (key == "home" ? context.enabled("gardens") || context.enabled("shafts") : context.enabled(["team":"teamManagement"][key] ?? key)) }
     }
     var body: some View {
         List {

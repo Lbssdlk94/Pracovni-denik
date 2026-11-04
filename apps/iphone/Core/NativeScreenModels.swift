@@ -3,8 +3,14 @@ import Foundation
 struct NativeOption: Decodable, Identifiable { let id: String; let text: String; let disabled: Bool?; let selected: Bool? }
 struct NativePin: Decodable, Identifiable {
     let id: String; let handle: String; let text: String
+    let color: String?
     let x: Double?; let y: Double?; let latitude: Double?; let longitude: Double?
 }
+struct NativeSurfaceLine: Decodable, Identifiable {
+    let id: String; let x1: Double; let y1: Double; let x2: Double; let y2: Double; let color: String?
+}
+struct NativeMapCoordinate: Decodable { let latitude: Double; let longitude: Double }
+struct NativeMapPath: Decodable, Identifiable { let id: String; let points: [NativeMapCoordinate] }
 struct NativeControl: Decodable, Identifiable {
     let id: String; let handle: String; let kind: String
     let text: String?; let value: String?; let fieldType: String?
@@ -12,6 +18,7 @@ struct NativeControl: Decodable, Identifiable {
     let multiple: Bool?; let primary: Bool?; let danger: Bool?; let expanded: Bool?
     let level: Int?; let width: Double?; let height: Double?
     let latitude: Double?; let longitude: Double?; let zoom: Double?
+    let lines: [NativeSurfaceLine]?; let paths: [NativeMapPath]?
     let imageHandle: String?; let options: [NativeOption]?; let children: [NativeControl]?; let pins: [NativePin]?
     var label: String { text ?? "" }
     func find(_ key: String) -> NativeControl? {

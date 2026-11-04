@@ -1,6 +1,10 @@
 import SwiftUI
 import MapKit
 
+private func annotationColor(_ hex: String?) -> Color {
+    guard let hex, hex.hasPrefix("#"), hex.count == 7, let rgb = UInt32(hex.dropFirst(),radix:16) else { return DiaryStyle.accent }
+    return Color(red:Double((rgb>>16)&255)/255,green:Double((rgb>>8)&255)/255,blue:Double(rgb&255)/255)
+}
 struct NativeDrawingSurface: View {
     let control: NativeControl
     @ObservedObject var store: NativeScreenStore
@@ -14,6 +18,11 @@ struct NativeDrawingSurface: View {
                 ZStack(alignment: .topLeading) {
                     Color.white
                     if let data=store.images[imageHandle], let image=UIImage(data:data) { Image(uiImage:image).resizable().scaledToFit().frame(width:size.width,height:size.height) }
+                    Canvas { context,_ in
+                        for line in control.lines ?? [] {
+                            var path=Path();path.move(to:CGPoint(x:line.x1*size.width,y:line.y1*size.height));path.addLine(to:CGPoint(x:line.x2*size.width,y:line.y2*size.height));context.stroke(path,with:.color(annotationColor(line.color)),lineWidth:2)
+                        }
+                    }.allowsHitTesting(false)
                     if control.kind == "canvas" {
                         Canvas { context,_ in
                             guard let first=points.first else { return };var path=Path();path.move(to:first);for point in points.dropFirst() { path.addLine(to:point) };context.stroke(path,with:.color(DiaryStyle.accent),lineWidth:2.4)
@@ -27,7 +36,7 @@ struct NativeDrawingSurface: View {
                             if control.disabled != true { Task { await store.perform(control,action:"point",extra:["x":point.x/size.width,"y":point.y/size.height]) } }
                         }
                         ForEach(control.pins ?? []) { pin in
-                            Text(pin.text).font(.caption.bold()).padding(8).background(DiaryStyle.soft,in:Capsule())
+                            Text(pin.text).font(.caption.bold()).padding(8).foregroundStyle(annotationColor(pin.color)).background(.white,in:Capsule()).overlay(Capsule().stroke(annotationColor(pin.color)))
                                 .position(x:(pin.x ?? 0.5)*size.width,y:(pin.y ?? 0.5)*size.height)
                                 .onTapGesture { Task { await store.perform(pinControl(pin)) } }
                                 .gesture(DragGesture(minimumDistance:4,coordinateSpace:.named(control.handle)).onEnded { value in
@@ -56,6 +65,9 @@ struct NativeMapSurface: View {
             Text(control.label).font(.headline)
             MapReader { proxy in
                 Map(position:$position) {
+                    ForEach(control.paths ?? []) { path in
+                        MapPolyline(coordinates:path.points.map{CLLocationCoordinate2D(latitude:$0.latitude,longitude:$0.longitude)}).stroke(DiaryStyle.accent,lineWidth:3)
+                    }
                     ForEach(control.pins ?? []) { pin in
                         Annotation(pin.text,coordinate:CLLocationCoordinate2D(latitude:pin.latitude ?? center.latitude,longitude:pin.longitude ?? center.longitude)) {
                             Button { Task { await store.perform(control,action:"map",extra:["latitude":pin.latitude ?? center.latitude,"longitude":pin.longitude ?? center.longitude,"pin":pin.handle]) } } label: { Image(systemName:"mappin.circle.fill").font(.title).foregroundStyle(DiaryStyle.accent).background(.white,in:Circle()) }.accessibilityLabel(pin.text)

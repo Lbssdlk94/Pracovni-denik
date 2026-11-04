@@ -20,7 +20,7 @@ struct NativeScreenView: View {
                 .refreshable { await store.flush(); await store.refresh() }
         }.tint(DiaryStyle.accent)
             .task { for _ in 0..<60 { if store.browser.hasDocument { break }; try? await Task.sleep(for: .milliseconds(200)) }; await store.refresh() }
-            .onChange(of: store.browser.nativeSignal) { _, signal in
+            .onReceive(store.browser.$nativeSignal) { signal in
                 if signal.kind == .invalidated { store.invalidate() }
                 Task { await store.refresh() }
             }
