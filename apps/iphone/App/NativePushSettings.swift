@@ -11,6 +11,7 @@ struct NativePushSettings: View {
                 Section("Oznámení v tomto iPhonu") {
                     Label(push.status?.registered == true && allowed ? "Zapnuto pro přihlášený účet" : "Zatím nezapnuto",systemImage:"bell.badge")
                     if push.status?.enabled == false {Text("Upozornění jsou pro firmu vypnutá.")}
+                    else if push.status == nil {Text("Nastavení oznámení zatím není ověřené.")}
                     else if push.status?.configured != true { Text("Nativní push čeká na nastavení Apple Developer klíče na serveru.").accessibilityIdentifier("native-push-not-configured") }
                     if push.permission == .denied {
                         Text("Oznámení jsou zakázaná v nastavení iPhonu.")

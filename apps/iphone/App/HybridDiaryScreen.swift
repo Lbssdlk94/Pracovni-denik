@@ -51,7 +51,7 @@ struct HybridDiaryScreen: View {
             .sheet(isPresented:$push.showSettings){NativePushSettings(push:push)}
             .safeAreaInset(edge:.bottom){if push.pendingInbox {Button("Otevřít nové upozornění"){Task{await openPushInbox()}}.buttonStyle(.bordered).padding().background(.regularMaterial)}}
             .onChange(of:push.inboxRequest){_,_ in Task{await openPushInbox()}}
-            .onChange(of: session.nativeSignal) { _, signal in Task { await store.receive(signal);if signal.kind == .ready {await push.refresh();await openPushInbox()} } }
+            .onChange(of: session.nativeSignal) { _, signal in Task { if signal.kind == .invalidated {push.invalidatePresentation()};await store.receive(signal);if signal.kind == .ready {await push.refresh();await openPushInbox()} } }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { Task { await store.resumed(); await push.refresh();await openPushInbox() } }
                 else {

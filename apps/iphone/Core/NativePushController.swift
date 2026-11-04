@@ -30,6 +30,7 @@ final class NativePushController: ObservableObject {
     private var generation = 0
     private var desired: Bool { actorKey.map { UserDefaults.standard.bool(forKey:"native-push-enabled:"+$0) } ?? false }
     private func desire(_ value: Bool) { if let actorKey { UserDefaults.standard.set(value,forKey:"native-push-enabled:"+actorKey) } }
+    func invalidatePresentation() { generation+=1;status=nil;actorKey=nil;message=nil;showSettings=false }
     func attach(_ browser: BrowserSession) { self.browser=browser }
     private func call(_ action: String, extra: [String:Any] = [:]) async throws -> NativePushStatus {
         guard let browser else { throw DiaryBridgeError(message:"Nejdříve se přihlaste do deníku.") }
@@ -37,10 +38,11 @@ final class NativePushController: ObservableObject {
     }
     func refresh() async {
         guard !busy, let browser, !browser.usesIsolatedNativeFixture || browser.hasDocument else { return }
-        busy=true;defer{busy=false}
+        busy=true;let ticket=generation;defer{busy=false}
         permission=await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
         do {
             let config=try await call("config")
+            guard generation == ticket else{return}
             let key=(browser.webView.url?.host ?? "")+"|"+(config.userId ?? "")
             if key != actorKey { generation+=1;actorKey=key;status=nil;message=nil }
             status=config
@@ -48,7 +50,7 @@ final class NativePushController: ObservableObject {
                 // Re-register at launch/foreground; APNs tokens are never persisted.
                 UIApplication.shared.registerForRemoteNotifications()
             }
-        } catch { message=error.localizedDescription }
+        } catch { if generation == ticket {status=nil;message=error.localizedDescription} }
     }
     func enable() async {
         guard !busy,status?.configured == true,status?.enabled != false else{return}
@@ -73,7 +75,7 @@ final class NativePushController: ObservableObject {
             let result=try await call("register",extra:["token":token,"environment":environment,"bundleId":Bundle.main.bundleIdentifier ?? ""])
             guard generation == ticket else{return}
             guard result.registered == true else{throw DiaryBridgeError(message:"Telefon nebyl přihlášený k oznámením.")}
-            message="Oznámení jsou zapnutá pro tento účet.";status=try await call("config")
+            let next=try await call("config");guard generation == ticket else{return};message="Oznámení jsou zapnutá pro tento účet.";status=next
         }catch{if generation == ticket{message=error.localizedDescription}}
     }
     func failed(_ error: Error) { message="Registrace APNs se nezdařila. Aplikace musí být podepsaná profilem s Push Notifications. "+error.localizedDescription }
@@ -102,7 +104,7 @@ final class PushAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         Task{@MainActor in await NativePushController.shared.received(open:false)};completionHandler([.banner,.list,.sound])
     }
     func userNotificationCenter(_ center:UNUserNotificationCenter,didReceive response:UNNotificationResponse,withCompletionHandler completionHandler:@escaping()->Void){
-        if NativePushPolicy.opensInbox(response.notification.request.content.userInfo){Task{@MainActor in await NativePushController.shared.received(open:true)}}
+        if response.actionIdentifier == UNNotificationDefaultActionIdentifier && NativePushPolicy.opensInbox(response.notification.request.content.userInfo){Task{@MainActor in await NativePushController.shared.received(open:true)}}
         completionHandler()
     }
 }
