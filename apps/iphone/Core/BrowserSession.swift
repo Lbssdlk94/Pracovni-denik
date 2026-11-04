@@ -44,13 +44,13 @@ final class BrowserSession: NSObject, ObservableObject, WKNavigationDelegate, WK
     func loadInitialContent() {
         if testing {
             webView.loadHTMLString("""
-            <!doctype html><html lang="cs"><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+            <!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
             <body style="font:18px -apple-system;background:#f7f9f6;color:#183f35"><h1>Test deníku</h1>
             <label>Poznámka <input aria-label="Poznámka" id="note"></label>
             <script>
             const link = document.createElement('a');
             link.textContent = 'Zobrazit dokument'; link.target = '_blank';
-            link.href = URL.createObjectURL(new Blob(['<h1>Náhled záznamu</h1>'], {type:'text/html'}));
+            link.href = URL.createObjectURL(new Blob(['<meta charset="utf-8"><h1>Náhled záznamu</h1>'], {type:'text/html;charset=utf-8'}));
             document.body.append(link);
             </script></body></html>
             """, baseURL: EndpointPolicy.home)
@@ -70,6 +70,7 @@ final class BrowserSession: NSObject, ObservableObject, WKNavigationDelegate, WK
         problem = "Deník se nepodařilo načíst. Zkontrolujte připojení. Neodeslanou práci ponechte v aplikaci."
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if testing { print("UI_TEST navigation finished: \(webView === self.webView ? "main" : "document")") }
         if webView !== self.webView {
             if authentication?.webView === webView, let url = webView.url,
                EndpointPolicy.isDiary(url), !EndpointPolicy.isSignIn(url) {
