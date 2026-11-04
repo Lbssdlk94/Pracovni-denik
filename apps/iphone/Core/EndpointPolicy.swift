@@ -13,7 +13,8 @@ enum EndpointPolicy {
     }
     static func isExternal(_ url: URL) -> Bool {
         guard url.user == nil && url.password == nil else { return false }
-        return ["https", "tel", "sms", "mailto", "maps"].contains(url.scheme?.lowercased() ?? "")
+        if url.scheme?.lowercased() == "https" { return !(url.host ?? "").isEmpty }
+        return ["tel", "sms", "mailto", "maps"].contains(url.scheme?.lowercased() ?? "")
     }
 }
 

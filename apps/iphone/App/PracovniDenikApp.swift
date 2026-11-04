@@ -50,5 +50,13 @@ struct DiaryScreen: View {
             }
         }
         .sheet(item: $session.sharedFile) { file in FileShare(url: file.url) }
+        .sheet(item: $session.document) { page in
+            NavigationStack {
+                DiaryWebView(webView: page.webView)
+                    .navigationTitle("Dokument")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Zavřít") { session.document = nil } } }
+            }
+        }
     }
 }

@@ -2,7 +2,7 @@ import SwiftUI
 import WebKit
 import UIKit
 
-struct AuthenticationPage: Identifiable {
+struct BrowserPage: Identifiable {
     let id = UUID()
     let webView: WKWebView
 }
@@ -18,7 +18,8 @@ final class BrowserSession: NSObject, ObservableObject, WKNavigationDelegate, WK
     let webView: WKWebView
     @Published var initialLoading = true
     @Published var problem: String?
-    @Published var authentication: AuthenticationPage?
+    @Published var authentication: BrowserPage?
+    @Published var document: BrowserPage?
     @Published var sharedFile: SharedFile?
     private(set) var hasDocument = false
     private var downloadURLs: [ObjectIdentifier: URL] = [:]
@@ -45,7 +46,13 @@ final class BrowserSession: NSObject, ObservableObject, WKNavigationDelegate, WK
             webView.loadHTMLString("""
             <!doctype html><html lang="cs"><head><meta name="viewport" content="width=device-width,initial-scale=1"></head>
             <body style="font:18px -apple-system;background:#f7f9f6;color:#183f35"><h1>Test deníku</h1>
-            <label>Poznámka <input aria-label="Poznámka" id="note"></label></body></html>
+            <label>Poznámka <input aria-label="Poznámka" id="note"></label>
+            <script>
+            const link = document.createElement('a');
+            link.textContent = 'Zobrazit dokument'; link.target = '_blank';
+            link.href = URL.createObjectURL(new Blob(['<h1>Náhled záznamu</h1>'], {type:'text/html'}));
+            document.body.append(link);
+            </script></body></html>
             """, baseURL: EndpointPolicy.home)
         } else { webView.load(URLRequest(url: EndpointPolicy.home)) }
     }
@@ -64,7 +71,8 @@ final class BrowserSession: NSObject, ObservableObject, WKNavigationDelegate, WK
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         if webView !== self.webView {
-            if let url = webView.url, EndpointPolicy.isDiary(url), !EndpointPolicy.isSignIn(url) {
+            if authentication?.webView === webView, let url = webView.url,
+               EndpointPolicy.isDiary(url), !EndpointPolicy.isSignIn(url) {
                 let root = URL(string: "https://" + url.host! + "/")!
                 authentication = nil
                 self.webView.load(URLRequest(url: root))
@@ -93,14 +101,17 @@ final class BrowserSession: NSObject, ObservableObject, WKNavigationDelegate, WK
         let browser = WKWebView(frame: .zero, configuration: config)
         browser.navigationDelegate = self
         browser.uiDelegate = self
-        authentication = AuthenticationPage(webView: browser)
+        authentication = BrowserPage(webView: browser)
         if configuration == nil { browser.load(URLRequest(url: url)) }
         return browser
     }
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = action.request.url else { decisionHandler(.cancel); return }
-        if action.shouldPerformDownload { decisionHandler(.download); return }
-        if webView !== self.webView {
+        if action.shouldPerformDownload {
+            decisionHandler(EndpointPolicy.isDiary(url) || EndpointPolicy.isEmbeddedDocument(url) ? .download : .cancel)
+            return
+        }
+        if authentication?.webView === webView {
             decisionHandler(url.scheme == "https" || EndpointPolicy.isEmbeddedDocument(url) ? .allow : .cancel)
             return
         }
@@ -118,15 +129,25 @@ final class BrowserSession: NSObject, ObservableObject, WKNavigationDelegate, WK
     }
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         guard let url = action.request.url else { return nil }
+        if authentication?.webView === webView { return showAuthentication(url, configuration: configuration) }
         if EndpointPolicy.isEmbeddedDocument(url) || EndpointPolicy.isDiary(url) && !EndpointPolicy.isSignIn(url) {
-            webView.load(action.request)
-            return nil
+            // Preserve the original form when opening a PDF/photo/new window.
+            // WebKit must supply this configuration so blob URLs and openers
+            // keep their original process relationship.
+            let browser = WKWebView(frame: .zero, configuration: configuration)
+            browser.navigationDelegate = self
+            browser.uiDelegate = self
+            document = BrowserPage(webView: browser)
+            return browser
         }
-        if EndpointPolicy.isSignIn(url) || webView !== self.webView { return showAuthentication(url, configuration: configuration) }
+        if EndpointPolicy.isSignIn(url) { return showAuthentication(url, configuration: configuration) }
         if EndpointPolicy.isExternal(url) { UIApplication.shared.open(url) }
         return nil
     }
-    func webViewDidClose(_ webView: WKWebView) { if webView !== self.webView { authentication = nil } }
+    func webViewDidClose(_ webView: WKWebView) {
+        if authentication?.webView === webView { authentication = nil }
+        if document?.webView === webView { document = nil }
+    }
     private func presenter() -> UIViewController? {
         let window = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows).first { $0.isKeyWindow }
         var controller = window?.rootViewController
@@ -155,7 +176,11 @@ final class BrowserSession: NSObject, ObservableObject, WKNavigationDelegate, WK
         host.present(alert, animated: true)
     }
     func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) {
-        decisionHandler(EndpointPolicy.hosts.contains(origin.host) && frame.isMainFrame ? .prompt : .deny)
+        // Only the camera is used by the diary. Do not request microphone
+        // access without an implemented feature and a matching usage purpose.
+        let trustedCamera = origin.protocol == "https" && EndpointPolicy.hosts.contains(origin.host)
+            && frame.isMainFrame && type == .camera
+        decisionHandler(trustedCamera ? .prompt : .deny)
     }
     func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) { download.delegate = self }
     func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) { download.delegate = self }

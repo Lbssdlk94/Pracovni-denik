@@ -24,7 +24,7 @@ final class EndpointPolicyTests: XCTestCase {
         for text in ["tel:+420123456789", "sms:+420123456789", "mailto:user@example.test", "https://maps.apple.com/?q=test"] {
             XCTAssertTrue(EndpointPolicy.isExternal(URL(string: text)!))
         }
-        for text in ["javascript:alert(1)", "file:///etc/passwd", "data:text/html,test"] {
+        for text in ["javascript:alert(1)", "file:///etc/passwd", "data:text/html,test", "https:missing-host"] {
             XCTAssertFalse(EndpointPolicy.isExternal(URL(string: text)!))
         }
     }

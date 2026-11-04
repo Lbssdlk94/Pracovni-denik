@@ -13,8 +13,7 @@ targets:
   PracovniDenik:
     type: application
     platform: iOS
-    sources: [App, Core]
-    resources: [Resources]
+    sources: [App, Core, Resources]
     settings:
       PRODUCT_BUNDLE_IDENTIFIER: cz.pracovnidenik.app
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

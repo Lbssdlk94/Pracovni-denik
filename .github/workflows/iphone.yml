@@ -44,6 +44,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild -project apps/iphone/PracovniDenik.xcodeproj -scheme PracovniDenik -configuration Release -destination 'generic/platform=iOS' -derivedDataPath build/device build CODE_SIGNING_ALLOWED=NO | tee build/device.log
+          python3 apps/iphone/verify_bundle.py build/device/Build/Products/Release-iphoneos/PracovniDenik.app
           mkdir -p build/package/Payload
           cp -R build/device/Build/Products/Release-iphoneos/PracovniDenik.app build/package/Payload/
           cd build/package
