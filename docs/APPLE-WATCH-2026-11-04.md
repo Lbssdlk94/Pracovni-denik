@@ -158,3 +158,23 @@ https://github.com/actions/runner-images/blob/main/images/macos/macos-15-Readme.
   Workflow je připravené je vytvořit po přidělení stroje, pokud kompilace a testy
   projdou. Výchozí balíček bude nepodepsaný; přímou instalaci do hodinek nelze
   slibovat bez Apple podpisu. Fyzické zařízení ani profily zde nebyly použity.
+
+### Opětovné ověření GitHub Actions
+
+Původní běh 41879309267 skončil 4. 11. 2026 v 17:54 UTC ještě před prvním
+krokem. Anotace GitHubu: `The job was not acquired by Runner of type hosted
+even after multiple attempts`. Nešlo o doloženou chybu Swiftu: kompilace
+a testy se vůbec nespustily, běh nevytvořil žádný artefakt.
+
+Po zprávě uživatele, že GitHub opět funguje, bylo sestavení obnoveno. Nově
+je ve workflow k dispozici standardní `macos-26` a je jeho výchozí volbou;
+obě předchozí možnosti zůstaly pro ruční spuštění. Oficiální inventář obrazu
+potvrzuje připnutý Xcode 26.0.1 také na tomto stroji. Nevolíme větší placený
+runner ani neměníme podepisování či podniková data.
+
+Aktuální běh pro commit `e7e8700e9b079e81938813e4e08f42ad58ecd32e`:
+https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/41883677167
+
+Při kontrole 4. 11. 2026 v 18:09 UTC byl stále `queued` bez spuštěných kroků.
+IPA, Swift XCTest a watchOS náhledy proto stále nejsou ověřené. Tento záznam
+nenahrazuje skutečný výsledek sestavení.
