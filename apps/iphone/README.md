@@ -1,6 +1,6 @@
 # Pracovní deník pro iPhone
 
-Verze 0.4 přidává podporu APNs a navazuje na převod rozhraní ve verzi 0.3. Ten rozšiřuje SwiftUI z přehledu, zakázek a detailu také na zbývající povolené firemní sekce: zákazníky, zahrady, historii, závady, protokoly, materiál, předplatné, docházku, vozidla, tým, nastavení a centrum oznámení. Formuláře, výběry, karty, rozbalovací části, podpis, fotografie s přesouváním značek, MapKit a náhled dokumentů používají nativní ovládací prvky. Zachovává zelenou identitu a názvy jednotlivých firem.
+Verze 0.5 přidává doprovodnou aplikaci pro Apple Watch (watchOS 10+) s dnešními přidělenými zakázkami, převzetím, přesným příjezdem a změnami stavu. Podrobnosti, instalace a ověřené hranice jsou v `docs/APPLE-WATCH-2026-11-04.md`. Verze 0.4 přidala podporu APNs a navazuje na převod rozhraní ve verzi 0.3. Ten rozšiřuje SwiftUI z přehledu, zakázek a detailu také na zbývající povolené firemní sekce: zákazníky, zahrady, historii, závady, protokoly, materiál, předplatné, docházku, vozidla, tým, nastavení a centrum oznámení. Formuláře, výběry, karty, rozbalovací části, podpis, fotografie s přesouváním značek, MapKit a náhled dokumentů používají nativní ovládací prvky. Zachovává zelenou identitu a názvy jednotlivých firem.
 
 ## Co je ve Swiftu a co zůstává společné
 
@@ -16,8 +16,8 @@ PDF a další soubory se otevírají přes QuickLook a lze je sdílet systémov�
 
 ## Sestavení přes GitHub
 
-1. V repozitáři otevřete **Actions → iPhone build and IPA**. Změny `apps/iphone` spouštějí sestavení automaticky. Ruční spuštění je dostupné po zařazení workflow do výchozí větve.
-2. Po úspěšných testech simulátoru a sestavení zařízení stáhněte artefakt **PracovniDenik-builds-and-logs-UNSIGNED**.
+1. V repozitáři otevřete **Actions → iPhone and Apple Watch build and IPA**. Změny `apps/iphone` spouštějí sestavení automaticky. Ruční spuštění je dostupné po zařazení workflow do výchozí větve.
+2. Po úspěšných testech simulátoru a sestavení zařízení včetně vložené Watch aplikace stáhněte artefakt **PracovniDenik-builds-and-logs-UNSIGNED**.
 3. Rozbalte `PracovniDenik-UNSIGNED-REQUIRES-SIGNING.ipa`; kontrolní součet je v `IPA-SHA256.txt`.
 
 Balíček je **nepodepsaný**. Nelze jej přímo nainstalovat klepnutím v Safari. Použijte vlastní nástroj pro podepsání a instalaci jako u 3D Scanneru, například Sideloadly. Apple přihlášení zadávejte pouze důvěryhodnému instalačnímu nástroji, neposílejte hesla, certifikáty ani privátní klíče do chatu či GitHubu. TestFlight / App Store vyžadují Apple Developer účet, podepisování a samostatné ověření distribučních požadavků; toto workflow do nich aplikaci nevydává. Artefakty GitHubu mají životnost 14 dní.
