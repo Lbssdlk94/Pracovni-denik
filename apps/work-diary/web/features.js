@@ -52,7 +52,7 @@ export const FEATURE_OPTIONS=[
  {key:'shafts',label:'Šachty a popisky ventilů',description:'Seznam šachet, jejich fotografie a počty u zahrad. Vypnutí skryje šachty i v nově založených zahradách.'},
  {key:'gardenHistory',label:'Historie zahrady',description:'Společný přehled návštěv a servisních zásahů.',requires:['gardens']},
  {key:'defects',label:'Evidence závad',description:'Sledované závady, jejich řešení a upozornění u zahrad a zakázek.',requires:['gardens']},
- {key:'materials',label:'Katalog materiálu',description:'Prototyp seznamu materiálu a výběru do protokolu. Pouze vlastník.',ownerOnly:true},
+ {key:'materials',label:'Katalog materiálu',description:'Sdílený katalog a výběr materiálu do protokolu. Úpravy katalogu a cen provádí správce.'},
  {key:'subscriptions',label:'Servisní předplatné',description:'Tarify, sjednaná období, servisní plány a platby.',requires:['jobs','customers']},
  {key:'customers',label:'Seznam zákazníků',description:'Jména, více telefonů a adres. Kolega vidí jen zákazníky svých přiřazených zakázek.'},
  {key:'notifications',label:'Upozornění',description:'Soukromé centrum upozornění a volitelná push oznámení na telefonech kolegů.'},
