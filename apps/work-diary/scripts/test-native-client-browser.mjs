@@ -26,7 +26,8 @@ try{
  server=createServer(async(req,res)=>{try{const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=Buffer.concat(chunks),h=new Headers(req.headers);h.set('oai-authenticated-user-id',actor.id);h.set('oai-authenticated-user-email',actor.email);const url='http://127.0.0.1:'+server.address().port+req.url;const response=await mf.dispatchFetch(url,{method:req.method,headers:h,...(['GET','HEAD'].includes(req.method)?{}:{body})});res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));}catch(error){res.statusCode=500;res.end(error.message);}});
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const base=origin+':'+server.address().port;
  browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
- async function nativePage(){const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});await context.addInitScript(()=>{window.__nativeSignals=[];window.webkit={messageHandlers:{workDiaryState:{postMessage:value=>window.__nativeSignals.push(value.type)}}};});const page=await context.newPage();await page.goto(base);await page.locator('.shell').waitFor();await page.waitForFunction(()=>!!window.__workDiaryNative);return {context,page};}
+ const nativeSignals=[];
+ async function nativePage(){const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});await context.addInitScript(()=>{window.__nativeSignals=[];window.webkit={messageHandlers:{workDiaryState:{postMessage:value=>{window.__nativeSignals.push(value.type);window.__recordNativeSignal(value.type);}}}};});const page=await context.newPage();await page.exposeFunction('__recordNativeSignal',type=>nativeSignals.push(type));await page.goto(base);await page.locator('.shell').waitFor();await page.waitForFunction(()=>!!window.__workDiaryNative);return {context,page};}
  let {context,page}=await nativePage();
  const snapshot=await page.evaluate(()=>window.__workDiaryNative.execute('context'));
  assert.equal(snapshot.user.role,'owner');assert.equal(snapshot.recovery,undefined);assert.equal(snapshot.installation,undefined);assert.ok((await page.evaluate(()=>window.__nativeSignals)).includes('ready'));
@@ -38,7 +39,9 @@ try{
  page.on('dialog',d=>d.accept());await page.locator('#modal [data-close]').click();await page.evaluate(()=>window.__workDiaryNative.execute('context'));
  assert.equal((await db.prepare('SELECT status FROM jobs WHERE id=?').bind('irrigation-job').first()).status,'planned','opening/cancelling native handoff mutated a job');
  await db.prepare("UPDATE settings SET value=json_set(value,'$.jobDay',json('false'),'$.jobList',json('true')),version=version+1 WHERE key='features'").run();
- const revoked=await page.evaluate(async()=>{try{await window.__workDiaryNative.execute('context');return false;}catch{return true;}}).catch(()=>true);assert.equal(revoked,true,'reducing modules must invalidate the old bridge');
+ const beforeSignals=nativeSignals.length;await page.evaluate(()=>{window.__workDiaryNative.execute('context').catch(()=>{});});
+ for(let attempt=0;attempt<100&&!nativeSignals.slice(beforeSignals).includes('invalidated');attempt++)await new Promise(resolve=>setTimeout(resolve,100));
+ assert.ok(nativeSignals.slice(beforeSignals).includes('invalidated'),'reducing modules must invalidate native views even during document replacement');
  await context.close();({context,page}=await nativePage());
  const policy=await page.evaluate(()=>window.__workDiaryNative.execute('context'));assert.equal(policy.features.jobDay,false);
  assert.equal(await page.evaluate(async()=>{try{await window.__workDiaryNative.execute('jobs',{day:'2026-10-30'});return false;}catch{return true;}}),true);
@@ -49,4 +52,4 @@ try{
  const settingsError=await page.evaluate(async()=>{try{await window.__workDiaryNative.execute('open',{page:'materials'});return false;}catch{return true;}});assert.equal(settingsError,true);
  await context.setOffline(true);await page.waitForFunction(()=>window.__nativeSignals.includes('invalidated'));assert.equal(await page.evaluate(async()=>{try{await window.__workDiaryNative.execute('context');return false;}catch{return true;}}),true);
  await context.close();console.log('PASS native bridge + real isolated Worker/D1/R2: scoped lists/details, no private recovery metadata, feature-disabled day rejected, arbitrary navigation rejected, form text preserved, cancel creates no write, assigned worker cannot read other department or materials, offline invalidates native snapshots.');
-}finally{await browser?.close();if(server)await new Promise(resolve=>server.close(resolve));await mf?.dispose();}
+}finally{await browser?.close();if(server){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}await mf?.dispose();}

@@ -1,6 +1,12 @@
 # Pracovní deník pro iPhone
 
-Samostatná iOS aplikace používá existující webové obrazovky v persistentním `WKWebView`. Barvy, ikony, navigace, formuláře i obchodní logika proto odpovídají nasazenému webu. Nejde o přepis pracovních obrazovek do SwiftUI. Serverové role, přiřazení zakázek, omezení oborů a synchronizace zůstávají v současné aplikaci.
+Verze 0.2 má **nativní SwiftUI přehled, seznam zakázek a detail zakázky**. Používá schválené zelené barvy a ikonu. Seznam má hledání, den, stav, stránkování a pro správce volbu vlastních zakázek nebo týmu; respektuje povolení pohledů Můj den a Seznam. Detail rozlišuje plánovanou práci, příjezdové rozmezí a původní neurčený čas, zobrazuje stav protokolu a otevřené závady.
+
+Zákazníci, zahrady, docházka, další moduly i pracovní formuláře zatím používají stávající web. Tlačítka **Jsem na cestě, Změnit stav, Servisní protokol, Fotodokumentace a Úplný detail** předají konkrétní zakázku původnímu webovému postupu. Upravování plánu, potvrzení převzetí, dokončení, materiál, PDF a SMS proto zachovávají současná pravidla a oprávnění. Nejde zatím o přepis všech formulářů do SwiftUI.
+
+Datový most `web/native-client.js` čte přes současný přihlášený `cloud.js`; nepřenáší hesla, přístupové odkazy ani obnovovací klíče do Swiftu. WebView, cookies, IndexedDB i jeho neodeslané formuláře zůstávají během přepnutí připojené. Nativní část nevytváří druhou databázi ani druhou synchronizační frontu. Při odvolání přístupu, změně oboru nebo ztrátě spojení se nativní data zneplatní. Při návratu do popředí a každých 60 sekund aktivního nativního přehledu se přístup znovu ověřuje.
+
+Nativní seznamy nyní vyžadují internet, stejně jako dosavadní plán zakázek. **Offline práci otevřete ve webové části**, která zachovává současné podporované ukládání. Přepnutí zpět do nativního přehledu se zablokuje, dokud uživatel neuloží nebo nezavře otevřený webový formulář; nedochází k tichému zahození práce.
 
 Výchozí adresa je Dr. Závlaha. Důvěryhodné adresy jsou explicitně omezené na Dr. Závlahu a Dr. Garden (`Core/EndpointPolicy.swift` a `WKAppBoundDomains` v `project.yml`). Telefon, SMS, e-mail a externí navigace se otevírají systémově; externím stránkám se neposkytuje nativní přístup k údajům deníku. Zdrojové kódy ani IPA neobsahují servisní klíče či přístupové odkazy uživatelů.
 
@@ -28,7 +34,7 @@ Artefakty GitHubu se po 14 dnech smažou; IPA si stáhněte, případně spusťt
 
 ## Co testy ověřují a co ještě vyžaduje iPhone
 
-Unit testy kontrolují povolené adresy, odmítnutí podvržených domén a místních/spustitelných URL, zachování jediné instance prohlížeče a absenci automatického resetu při selhání. UI test v iOS simulátoru ověřuje zachování napsaného textu po odchodu na plochu a návratu. Používá lokální testovací HTML, nikoli provozní zakázky; neověřuje tím celé webové pracovní postupy.
+11 unit testů kontroluje adresy, životní cyklus prohlížeče, plánované časy, skutečný stav protokolu a datový model. 5 UI testů v iOS simulátoru ověřuje původní uchování formuláře a náhled dokumentu i nový nativní přehled, seznam, detail, stránkování a bezpečný návrat z webového formuláře. Používají izolované testovací údaje. Samostatný integrační test mostu běží nad skutečným lokálním Worker/D1/R2 a ověřuje role, přiřazení, oddělení oborů, omezení modulů a zachování formulářů.
 
 Před širší distribucí je třeba na fyzickém iPhonu ověřit přihlášení, návrat po dlouhém uspání, skutečný offline zápis a synchronizaci, fotoaparát/fotoknihovnu, GPS, export PDF a připravené SMS. Povolení fotoaparátu a polohy nejsou vyžadována při spuštění, ale až při použití příslušné webové funkce. Serverové kontroly a správa modulů zůstávají rozhodující.
 
