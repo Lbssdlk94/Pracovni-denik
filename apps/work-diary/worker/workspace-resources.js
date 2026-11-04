@@ -138,7 +138,7 @@ export async function workspaceFilterResponse(response, request, env) {
   const path = new URL(request.url).pathname;
   const ownMetadataChange = !['GET','HEAD'].includes(request.method) && (
     /^\/api\/workspace\/(?:members|customers|gardens)\/[-\w]+\/disciplines$/.test(path) ||
-    /^\/api\/members\/[-\w]+$/.test(path) || path === '/api/workspace/link-identity'||['owner','administrator','admin'].includes(initial.role)&&/^\/api\/(?:gardens|customers)\/[-\w]+(?:\/customer)?$/.test(path));
+    /^\/api\/members\/[-\w]+$/.test(path) || path === '/api/workspace/link-identity'||path==='/api/local-accounts'&&['owner','administrator','admin'].includes(initial.role)||['owner','administrator','admin'].includes(initial.role)&&/^\/api\/(?:gardens|customers)\/[-\w]+(?:\/customer)?$/.test(path));
   const sameAccess = current => current && current.workspaceId === initial.workspaceId &&
     current.state === initial.state && current.role === initial.role &&
     JSON.stringify(current.disciplines) === JSON.stringify(initial.disciplines);

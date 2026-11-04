@@ -1,6 +1,6 @@
 import {canEditTeamMember} from '../web/team-roles.js';
 const SESSION_TTL=30*86400000,LINK_GRACE=90*86400000;
-export async function sessionMember(env,hash){return env.DB.prepare('SELECT m.*,s.id AS access_session_id FROM access_sessions s JOIN members m ON m.user_id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND s.revoked_at IS NULL').bind(hash,Date.now()).first();}
+export async function sessionMember(env,hash){return env.DB.prepare("SELECT m.*,s.id AS access_session_id,s.auth_method AS session_auth_method,c.must_change AS password_must_change,c.username FROM access_sessions s JOIN members m ON m.user_id=s.user_id LEFT JOIN local_credentials c ON c.user_id=m.user_id WHERE s.token_hash=? AND s.expires_at>? AND s.revoked_at IS NULL AND (s.auth_method='link' OR (s.auth_method='password' AND s.password_version=c.version))").bind(hash,Date.now()).first();}
 export async function createAccessSession(env,member,hash,request){const now=Date.now(),id=crypto.randomUUID(),agent=(request.headers.get('user-agent')||'Zařízení').slice(0,240);await env.DB.prepare('INSERT INTO access_sessions(id,user_id,token_hash,created_at,expires_at,last_seen_at,agent) SELECT ?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM members WHERE user_id=?)').bind(id,member.user_id,hash,now,now+(['administrator','admin'].includes(member.role)?7*86400000:SESSION_TTL),now,agent,member.user_id).run();return id;}
 export async function handleAccessSessions(request,env,m,h){
  const path=new URL(request.url).pathname,manager=['owner','administrator','admin'].includes(m.role),id=path.split('/')[3];

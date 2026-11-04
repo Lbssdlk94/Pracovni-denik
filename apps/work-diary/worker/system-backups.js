@@ -2,7 +2,7 @@ import {makeRecoveryKit,openRecoveryKit} from './recovery-kit.js';
 import {driveUnbase64,driveSeal,driveOpen} from './drive-core.js';
 import {installationInfo} from './installation.js';
 import {makeBackupTar,backupStream} from '../web/backup-archive.js';
-const BACKUP_EXCLUDED=new Set(['system_backups','backup_rows','access_sessions','link_attempts']);
+const BACKUP_EXCLUDED=new Set(['system_backups','backup_rows','access_sessions','link_attempts','local_auth_rates']);
 const backupQuote=s=>'"'+s.replaceAll('"','""')+'"';
 const backupHash=async bytes=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
 const backupKey=(id,path)=>'system-backups/'+id+'/'+path;

@@ -1,3 +1,4 @@
+import {createPasswordUI} from './local-auth-ui.js?v=local-auth-v1';
 import {DEFAULT_APP_NAME} from './app-brand.js?v=app-brand-v2';
 const roles={owner:'Vlastník',administrator:'Administrátor',admin:'Správce',worker:'Pracovník',reader:'Čtenář'};
 export function accessTokenFrom(value){
@@ -8,7 +9,7 @@ export function accessTokenFrom(value){
 export function createAccessUI({app,esc,db,onReady,onBeforeSwitch=async()=>{}}){
  const brand=()=>`<img src="./logo-dr-zavlaha.jpg" alt="${esc(DEFAULT_APP_NAME)}"><h1>${esc(DEFAULT_APP_NAME)}</h1>`;
  async function chatGPT(e){e.preventDefault();const link=e.currentTarget;try{await db.checkChatGPTSwitch();await onBeforeSwitch(null);await db.request('/api/access-logout',{method:'POST'});window.open(link.href,'_top');}catch(error){app.querySelector('.access-error').textContent=error.message;}}
- function login(error){
+ function legacyLogin(error){
   app.innerHTML=`<main class="login-page">${brand()}<p>${esc(['pending_account','workspace_recovery_failed','client_update_required'].includes(error?.code)?error.message:error?.code==='link_invalid'?error.message:error?.status===403?'Tento účet zatím nemá přístup do týmu. Požádejte správce o pozvánku.':'Otevřete svůj osobní odkaz od správce, nebo se přihlaste přes ChatGPT.')}</p><form id="access-form"><label class="field">Osobní přístupový odkaz<input id="access-link" type="text" maxlength="2000" required autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Vložte odkaz od správce"></label><button type="submit" class="btn primary">Otevřít osobní přístup</button></form><p class="mini-empty">Kolegové s osobním odkazem nepotřebují ChatGPT ani heslo.</p><p class="access-error form-message" role="alert"></p><div class="access-divider">nebo</div><a class="btn" href="/signin-with-chatgpt?return_to=%2F" target="_top" id="access-chatgpt">Přihlásit se přes ChatGPT</a></main>`;
   app.querySelector('#access-chatgpt').onclick=chatGPT;
   app.querySelector('#access-form').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;try{await open(accessTokenFrom(app.querySelector('#access-link').value));}catch(error){app.querySelector('.access-error').textContent=error.message;}finally{button.disabled=false;}};
@@ -25,5 +26,7 @@ export function createAccessUI({app,esc,db,onReady,onBeforeSwitch=async()=>{}}){
    catch(error){if(app.querySelector('.access-error'))app.querySelector('.access-error').textContent=error.message;button.disabled=false;}
   };
  }
+ const passwordUI=createPasswordUI({app,esc,db,brand,onReady,onBeforeSwitch,legacyLogin});
+ function login(error){return passwordUI.login(error);}
  return {login,open};
 }
