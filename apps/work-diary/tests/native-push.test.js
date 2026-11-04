@@ -33,7 +33,7 @@ test('APNs uses the existing atomic queue, concurrent claims and preferences wit
   const d=await register(env);addJob(env);await Promise.all([dispatchNotifications(env),dispatchNotifications(env)]);await dispatchNotifications(env);assert.equal(sent.length,1);
   assert.ok(sent[0].url.startsWith('https://api.sandbox.push.apple.com/3/device/'));assert.equal(sent[0].options.headers['apns-push-type'],'alert');assert.equal(sent[0].options.headers['apns-topic'],config.APNS_BUNDLE_ID);assert.equal(sent[0].options.redirect,'manual');assert.equal(sent[0].options.body,JSON.stringify(apnsPayload()));
   assert.equal(env.sqlite.prepare('SELECT state FROM push_deliveries').get().state,'sent');
-  await call(env,'/api/notifications/preferences',people.worker,'PUT',{jobs:false,attendance:true});addJob(env,'b');await dispatchNotifications(env);assert.equal(sent.length,1);
+  await call(env,'/api/notifications/preferences',people.worker,'PUT',{jobs:false,attendance:true});assert.equal((await(await call(env,'/api/notifications/native/config')).json()).preferences.jobs,false);addJob(env,'b');await dispatchNotifications(env);assert.equal(sent.length,1);
   await call(env,'/api/notifications/native',people.worker,'DELETE',{deviceId:d.deviceId});assert.equal(env.sqlite.prepare('SELECT count(*) n FROM push_subscriptions').get().n,0);assert.equal(env.sqlite.prepare('SELECT count(*) n FROM push_deliveries').get().n,0);
  }finally{globalThis.fetch=original;}
 });

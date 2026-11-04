@@ -83,7 +83,7 @@ export async function handleNotifications(request,env,m,h){
 // delivery queue. They never create a second stream of business notifications.
 async function handleNativeNotifications(request,env,m,h){
  const {body,fail,json,one,execute}=h,path=new URL(request.url).pathname,method=request.method,config=apnsConfiguration(env);
- if(path==='/api/notifications/native/config'&&method==='GET')return json({...config,enabled:h.features?.notifications!==false});
+ if(path==='/api/notifications/native/config'&&method==='GET'){const p=await one(env.DB,'SELECT jobs,attendance FROM notification_preferences WHERE user_id=?',m.user_id);return json({...config,enabled:h.features?.notifications!==false,preferences:{jobs:p?.jobs!==0,attendance:p?.attendance!==0}});}
  const idValue=value=>{if(typeof value!=='string'||!/^[a-f0-9]{64}$/.test(value))fail(400,'Neplatné přihlášení telefonu.');return value;};
  if(path==='/api/notifications/native'&&method==='GET'){
   const id=idValue(new URL(request.url).searchParams.get('deviceId')),device=await one(env.DB,"SELECT id,updated_at FROM push_subscriptions WHERE id=? AND user_id=? AND transport='apns'",id,m.user_id);

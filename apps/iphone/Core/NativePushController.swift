@@ -2,7 +2,9 @@ import SwiftUI
 import UIKit
 import UserNotifications
 
+struct NativeNotificationPreferences: Decodable, Equatable {let jobs:Bool;let attendance:Bool}
 struct NativePushStatus: Decodable {
+    let preferences: NativeNotificationPreferences?
     let configured: Bool?; let enabled: Bool?; let topic: String?; let code: String?
     let missing: [String]?; let userId: String?; let registered: Bool?; let deviceId: String?
     let accepted: Bool?; let ok: Bool?
@@ -80,8 +82,12 @@ final class NativePushController: ObservableObject {
     }
     func failed(_ error: Error) { message="Registrace APNs se nezdařila. Aplikace musí být podepsaná profilem s Push Notifications. "+error.localizedDescription }
     func disable() async {
-        guard !busy else{return};busy=true;defer{busy=false}
-        do {let _=try await call("detach");desire(false);UIApplication.shared.unregisterForRemoteNotifications();token=nil;status=try await call("config");message="Oznámení jsou v tomto telefonu vypnutá."}catch{message=error.localizedDescription}
+        guard !busy else{return};busy=true;let ticket=generation;defer{busy=false}
+        do {let _=try await call("detach");guard generation == ticket else{return};desire(false);UIApplication.shared.unregisterForRemoteNotifications();token=nil;let next=try await call("config");guard generation == ticket else{return};status=next;message="Oznámení jsou v tomto telefonu vypnutá."}catch{if generation == ticket{message=error.localizedDescription}}
+    }
+    func preferences(jobs: Bool, attendance: Bool) async {
+        guard !busy else{return};busy=true;let ticket=generation;defer{busy=false}
+        do{let _=try await call("preferences",extra:["jobs":jobs,"attendance":attendance]);let next=try await call("config");guard generation == ticket else{return};status=next;message="Výběr oznámení je uložený pro váš účet."}catch{if generation == ticket{message=error.localizedDescription}}
     }
     func test() async {
         guard !busy else{return};busy=true;defer{busy=false}

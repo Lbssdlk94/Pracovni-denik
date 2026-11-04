@@ -26,6 +26,7 @@ export function createNativeClient({db,getName,onSession,openTarget,canResume,is
     const task=(async()=>{const result=await send('','POST',{token:input.token,environment:input.environment,bundleId:input.bundleId});if(db.session()?.user.id!==userId)throw Error('Přihlášený účet se změnil.');writeBinding({userId,deviceId:result.deviceId});return result;})();nativeFlight=task;try{return await task;}finally{if(nativeFlight===task)nativeFlight=null;}
    }
    if(input.action==='detach'){await nativeFlight?.catch(()=>{});const active=readBinding();if(active?.userId===userId)await send('','DELETE',{deviceId:active.deviceId});writeBinding(null);return {ok:true};}
+   if(input.action==='preferences'){await db.request('/api/notifications/preferences',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({jobs:input.jobs,attendance:input.attendance})});return {ok:true};}
    if(input.action==='test'){if(!deviceId)throw Error('Nejdříve zapněte oznámení.');return send('/test','POST',{deviceId});}
    if(input.action==='received'){globalThis.document?.dispatchEvent(new Event('native-push-refresh'));return {ok:true};}
    throw Error('Nepodporovaná operace oznámení.');
