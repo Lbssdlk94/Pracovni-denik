@@ -81,11 +81,11 @@ struct NativeField: View {
                 }
             } else {
                 Text(control.label + (control.required == true ? " *" : "")).font(.subheadline.weight(.semibold))
-                if control.secure == true { SecureField(control.label, text: input).textContentType(.password).focused($focused).textFieldStyle(.roundedBorder) }
-                else if control.fieldType == "textarea" { TextEditor(text: input).frame(minHeight: 110).padding(6).overlay(RoundedRectangle(cornerRadius: 10).stroke(.secondary.opacity(0.2))).focused($focused) }
+                if control.secure == true { SecureField(control.label, text: input).accessibilityIdentifier("native-field-"+control.id).textContentType(.password).focused($focused).textFieldStyle(.roundedBorder) }
+                else if control.fieldType == "textarea" { TextEditor(text: input).accessibilityIdentifier("native-field-"+control.id).frame(minHeight: 110).padding(6).overlay(RoundedRectangle(cornerRadius: 10).stroke(.secondary.opacity(0.2))).focused($focused) }
                 else if ["date","time","datetime-local"].contains(control.fieldType ?? "") {
                     DatePicker(control.label, selection: Binding(get: { date(value) }, set: { value = format($0); store.change(control, value: value, commit: true) }), displayedComponents: control.fieldType == "time" ? [.hourAndMinute] : control.fieldType == "date" ? [.date] : [.date,.hourAndMinute]).labelsHidden().environment(\.locale, Locale(identifier: "cs_CZ")).environment(\.timeZone, TimeZone(identifier: "Europe/Prague")!)
-                } else { TextField(control.label, text: input).textFieldStyle(.roundedBorder).focused($focused).keyboardType(keyboard).textInputAutocapitalization(control.fieldType == "email" || control.fieldType == "url" ? .never : .sentences) }
+                } else { TextField(control.label, text: input).accessibilityIdentifier("native-field-"+control.id).textFieldStyle(.roundedBorder).focused($focused).keyboardType(keyboard).textInputAutocapitalization(control.fieldType == "email" || control.fieldType == "url" ? .never : .sentences) }
             }
         }.frame(maxWidth: .infinity, alignment: .leading).disabled(control.disabled == true)
             .onAppear { sync() }.onChange(of: control.value) { _, _ in if !focused { sync() } }.onChange(of: control.checked) { _, next in checked = next ?? false }

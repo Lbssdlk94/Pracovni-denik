@@ -15,6 +15,7 @@ export function createNativeClient({db,getName,onSession,openTarget,canResume,is
  }
  return Object.freeze({async execute(command,input={}){
   if(command==='screen')return screens?.snapshot();
+  if(command==='flushDrafts')return screens?.flush();
   if(command==='control')return screens?.action(input);
   if(command==='asset')return screens?.asset(input);
   if(command==='context'){
@@ -46,9 +47,9 @@ export function createNativeClient({db,getName,onSession,openTarget,canResume,is
 }
 export function installNativeClient(options){
  const handler=globalThis.webkit?.messageHandlers?.workDiaryState;if(!handler)return;
- const screens=createNativeScreens({db:options.db,getSession:options.db.session});const client=createNativeClient({...options,screens});Object.defineProperty(window,'__workDiaryNative',{value:client,configurable:false});
+ const screens=createNativeScreens({db:options.db,getSession:options.db.session,captureDrafts:options.captureDrafts});const client=createNativeClient({...options,screens});Object.defineProperty(window,'__workDiaryNative',{value:client,configurable:false});
  let ready=false;const notify=type=>handler.postMessage({type});const check=()=>{const next=!!document.querySelector('.shell')&&!!options.db.session()?.user;if(next!==ready){ready=next;notify(next?'ready':'invalidated');}};
- let timer;new MutationObserver(()=>{check();clearTimeout(timer);timer=setTimeout(()=>notify('screen'),150);}).observe(document.querySelector('#app'),{subtree:true,childList:true});
+ let timer;new MutationObserver(()=>{check();clearTimeout(timer);timer=setTimeout(()=>notify('screen'),150);}).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['open','hidden','disabled','value','checked','aria-expanded','aria-pressed','style','src']});
  for(const event of ['workspace-access-freeze','workspace-access-reset','workspace-recovery-failed','offline'])window.addEventListener(event,()=>{ready=false;notify('invalidated');});
  window.addEventListener('online',()=>{check();if(ready)notify('ready');});
  document.addEventListener('click',event=>{if(event.target.closest('[data-signout]')){ready=false;notify('invalidated');}},true);

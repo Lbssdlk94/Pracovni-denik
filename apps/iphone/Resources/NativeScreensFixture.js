@@ -1,11 +1,11 @@
 // Native screen contract: SwiftUI renders controls; the existing domain/client
 // logic owns validation, role gates, version checks, drafts and offline outboxes.
 // Opaque handles are bound to live DOM nodes, never arbitrary JS or API paths.
-function createNativeScreens({db,getSession}){
+function createNativeScreens({db,getSession,captureDrafts=()=>[]}){
  let serial=0,revision=0,gestureAt=0,pendingFile=null,locked=false,boundIdentity=null;const ids=new WeakMap(),nodes=new Map(),maps=new Map(),assets=new Map();
  const id=node=>{if(!ids.has(node)){const key='n'+(++serial);ids.set(node,key);nodes.set(key,node);}return ids.get(node);};
  const text=node=>String(node?.textContent||'').replace(/\s+/g,' ').trim();
- const visible=node=>!node.hidden&&getComputedStyle(node).display!=='none'&&getComputedStyle(node).visibility!=='hidden';
+ const visible=node=>!node.hidden&&getComputedStyle(node).display!=='none'&&getComputedStyle(node).visibility!=='hidden'&&getComputedStyle(node).opacity!=='0'&&node.getAttribute('aria-hidden')!=='true';
  const live=key=>{const n=nodes.get(key);if(!n?.isConnected)throw Error('Obrazovka se změnila. Obnovte ji před další úpravou.');return n;};
  const notify=()=>globalThis.webkit?.messageHandlers?.workDiaryState?.postMessage({type:'screen'});
  const permitted=async()=>{if(locked)throw Error('Přístup se změnil. Neodeslanou práci nejdříve zabezpečte a obnovte aplikaci.');const s=db.session();const identity=s?.user?JSON.stringify([s.user.id,s.user.role,s.workspace?.authorizationVersion,s.features]):null;if(boundIdentity&&identity!==boundIdentity){locked=true;nodes.clear();assets.clear();throw Error('Přístup se změnil. Obnovte aplikaci.');}if(identity)boundIdentity=identity;if(!s?.user){if(document.querySelector('.shell'))throw Error('Obnovte přihlášení.');return;}if(!navigator.onLine&&!await db.offlineSession())throw Error('Platnost offline přístupu vypršela. Připojte se a ověřte účet.');};
@@ -81,5 +81,5 @@ function createNativeScreens({db,getSession}){
   const response=await fetch(url,{credentials:'same-origin'});if(!response.ok)throw Error('Soubor nelze načíst.');const blob=await response.blob();if(blob.size>32000000)throw Error('Soubor je příliš velký pro mobilní náhled.');
   const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=reject;reader.onload=()=>resolve(reader.result.split(',')[1]);reader.readAsDataURL(blob);});return {data,type:blob.type,name:remembered?.name||'Dokument'};
  }
- return {snapshot,action,asset};
+ return {snapshot,action,asset,flush:async()=>{await permitted();let written=0;for(const entry of captureDrafts()){if(entry.ownerId===db.session()?.user.id){await db.putFormDraft(entry.key,entry.baseVersion,entry.value);written++;}}return {written};}};
 }

@@ -22,3 +22,5 @@ window.__workDiaryNative={execute:async(command,payload={})=>{
  throw Error('Unsupported isolated fixture operation');
 }};
 setTimeout(()=>window.webkit.messageHandlers.workDiaryState.postMessage({type:'ready'}),250);
+
+let fixturePaintTimer;new MutationObserver(()=>{clearTimeout(fixturePaintTimer);fixturePaintTimer=setTimeout(()=>window.webkit.messageHandlers.workDiaryState.postMessage({type:'screen'}),80);}).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['open','hidden','disabled','style']});

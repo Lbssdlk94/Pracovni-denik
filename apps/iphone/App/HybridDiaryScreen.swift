@@ -43,7 +43,13 @@ struct HybridDiaryScreen: View {
             .onChange(of: session.nativeSignal) { _, signal in Task { await store.receive(signal) } }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { Task { await store.resumed() } }
-                else { store.verifiedInForeground = false }
+                else {
+                    store.verifiedInForeground = false
+                    if phase == .background {
+                        let background = UIApplication.shared.beginBackgroundTask(withName: "Uchovat rozepsaný formulář")
+                        Task { await screens.flush(); let _: BridgeAcknowledgement? = try? await session.nativeCall("flushDrafts"); UIApplication.shared.endBackgroundTask(background) }
+                    }
+                }
             }
             .task {
                 while !Task.isCancelled {

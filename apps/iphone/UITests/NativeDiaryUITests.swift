@@ -23,9 +23,9 @@ final class NativeDiaryUITests: XCTestCase {
         let detail = XCTAttachment(screenshot: app.screenshot()); detail.name = "SwiftUI-detail"; detail.lifetime = .keepAlways; add(detail)
     }
     @MainActor
-    func testWebFallbackDoesNotDiscardAnOpenForm() {
+    func testNativeFormHandoffDoesNotDiscardAnOpenForm() {
         let app = launch(); app.tabBars.buttons["Více"].tap(); app.buttons["Zákazníci"].tap()
-        let field = app.textFields["Poznámka"]
+        let field = app.textFields.matching(NSPredicate(format: "identifier BEGINSWITH %@", "native-field-")).firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 15)); field.tap(); field.typeText("Zachovat zapis")
         app.buttons["Přehled"].tap()
         XCTAssertTrue(field.waitForExistence(timeout: 10)); XCTAssertEqual(field.value as? String, "Zachovat zapis")

@@ -16,7 +16,7 @@ import {createRecordLinksUI} from './record-links-ui.js?v=workspace-roles-v1';
 import {navigationIcon} from './navigation-icons.js?v=workspace-controls-v1';
 import {createGardenHistoryUI} from './garden-history-ui.js?v=workspace-platform-v1';
 import {createDevicePermissionsUI} from './device-permissions-ui.js?v=workspace-roles-v1';
-import {attachFormDraft,captureFormFields,restoreFormFields} from './form-drafts.js?v=draft-recovery-v1';
+import {attachFormDraft,captureFormFields,restoreFormFields,captureActiveFormDrafts} from './form-drafts.js?v=draft-recovery-v1';
 import {createEmailSettingsUI} from './email-settings-ui.js?v=workspace-controls-v1';
 import {createInvoiceSettingsUI} from './invoice-settings-ui.js?v=workspace-controls-v1';
 import {createMaterialsUI} from './materials-ui.js?v=workspace-roles-v1';
@@ -487,7 +487,7 @@ window.addEventListener('workspace-recovery-failed',event=>{app.innerHTML='<main
 window.addEventListener('workspace-capture-extra',event=>{if(dirty&&draft)event.detail.push({key:'shaft-editor:'+draft.id,record:{...draft,markers:draft.markers.map(value=>({...value}))}});for(const value of planUI.recoveryDrafts())event.detail.push({key:'plan-markers:'+value.gardenId,record:value});});
 
 // Only installed inside the iPhone WebKit host; normal browsers retain their UI.
-installNativeClient({db,getName:appDisplayName,onSession:current=>{sessionInfo=current;},
+installNativeClient({db,getName:appDisplayName,captureDrafts:captureActiveFormDrafts,onSession:current=>{sessionInfo=current;},
  canResume:()=>!document.querySelector('dialog[open]')&&!dirty&&!planUI.hasAnyChanges(),
  openTarget:async target=>{
   if(target.jobId){

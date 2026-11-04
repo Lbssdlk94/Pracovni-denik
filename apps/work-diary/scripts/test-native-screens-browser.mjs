@@ -39,7 +39,7 @@ try{
   await execute('open',{page:module});await page.locator('.nav [data-page="'+module+'"][aria-current=page]').first().waitFor({state:'attached',timeout:12000});const s=await screen();assert.ok(s.nodes.length,module+' empty native descriptor');assert.ok(flatten(s.nodes).some(n=>['button','field','toggle','select'].includes(n.kind)),module+' has no usable native controls');console.log('PASS native contract module',module);
  }
  await execute('open',{page:'customers'});await page.locator('#customers-new').waitFor();await click('Nový zákazník');await page.locator('#customer-form').waitFor();
- await value('Jméno nebo název','Nativní zákazník');await value('Telefonní číslo','+420777123456');await value('Ulice, číslo','Ukázková 12');await value('Město / obec','Blatná');await click('Uložit zákazníka');await page.locator('#customer-form').waitFor({state:'detached'});
+ await value('Jméno nebo název','Nativní zákazník');await value('Telefonní číslo','+420777123456');await value('Ulice, číslo','Ukázková 12');await value('Město / obec','Blatná');await click('Uložit zákazníka');await page.locator('#customer-form').waitFor({state:'hidden'});
  assert.equal((await db.prepare("SELECT count(*) n FROM customers WHERE name='Nativní zákazník'").first()).n,1);assert.equal((await db.prepare("SELECT count(*) n FROM gardens WHERE customer_id IN (SELECT id FROM customers WHERE name='Nativní zákazník')").first()).n,1);
  await execute('open',{jobId:'irrigation-job',action:'protocol'});await page.locator('#service-work-form').waitFor();
  await value('Provedené práce','Nativní ovládací prvky – servis systému');
@@ -48,10 +48,10 @@ try{
  const gallery=await node('Vybrat fotografie','file');const selection=await execute('control',{handle:gallery.handle,action:'click'});assert.ok(selection.file,'Native picker was not requested');
  const png=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=100;c.height=80;const x=c.getContext('2d');x.fillStyle='#183f35';x.fillRect(0,0,100,80);return c.toDataURL('image/png').split(',')[1];});
  await execute('control',{handle:selection.file.id,action:'file',files:[{name:'Ukazka.png',type:'image/png',data:png}]});await page.locator('#service-photo-list img').waitFor();
- await click('Uložit rozpracovaný protokol');await page.locator('#service-work-form').waitFor({state:'detached'});
+ await click('Uložit rozpracovaný protokol');await page.locator('#service-work-form').waitFor({state:'hidden'});
  const saved=await call('/api/jobs/irrigation-job/service');assert.equal(saved.report.work,'Nativní ovládací prvky – servis systému');assert.ok(saved.report.customerSignature.startsWith('data:image/png;base64,'));assert.equal(saved.photos.length,1);assert.equal(saved.job.status,'planned');
  console.log('PASS native controls save customer + paired garden, protocol, signature and a photograph through existing real Worker/D1/R2');
- await execute('open',{jobId:'irrigation-job',action:'protocol'});await page.locator('#service-work-form').waitFor();await context.setOffline(true);await value('Provedené práce','Nativní zápis offline');await click('Uložit rozpracovaný protokol');await page.locator('#service-work-form').waitFor({state:'detached'});
+ await execute('open',{jobId:'irrigation-job',action:'protocol'});await page.locator('#service-work-form').waitFor();await context.setOffline(true);await value('Provedené práce','Nativní zápis offline');await click('Uložit rozpracovaný protokol');await page.locator('#service-work-form').waitFor({state:'hidden'});
  const pending=await page.evaluate(async()=> (await import('/cloud.js?v=draft-recovery-v1')).pendingSummary());assert.ok(pending.total>0);
  await context.setOffline(false);await page.waitForFunction(async()=>{const r=await fetch('/api/jobs/irrigation-job/service',{headers:{'x-workspace-client-version':'shared-directory-v1'}});const v=await r.json();return v.report?.work==='Nativní zápis offline';},{},{timeout:30000});
  assert.equal((await db.prepare("SELECT count(*) n FROM service_reports WHERE job_id='irrigation-job'").first()).n,1);assert.equal((await db.prepare("SELECT count(*) n FROM service_photos WHERE job_id='irrigation-job'").first()).n,1);
