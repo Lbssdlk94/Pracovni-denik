@@ -25,6 +25,7 @@ final class BrowserSession: NSObject, ObservableObject, WKNavigationDelegate, WK
     private var downloadURLs: [ObjectIdentifier: URL] = [:]
     private let testing: Bool
     private let nativeTesting: Bool
+    var usesIsolatedNativeFixture: Bool { testing && nativeTesting }
     private var nativeRelay: NativeStateRelay?
     @Published var nativeSignal = NativeSignal(kind: .invalidated)
 

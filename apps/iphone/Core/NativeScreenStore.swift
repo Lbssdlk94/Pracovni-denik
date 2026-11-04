@@ -9,7 +9,9 @@ final class NativeScreenStore: ObservableObject {
     @Published var busy = false
     @Published var images: [String: Data] = [:]
     @Published var fileRequest: NativeFileRequest?
-    @Published var preview: NativePreviewFile?
+    @Published var preview: NativePreviewFile? {
+        didSet { if let oldValue, oldValue.id != preview?.id { try? FileManager.default.removeItem(at: oldValue.url.deletingLastPathComponent()) } }
+    }
     private var epoch = 0
     private var pending = NativeEditQueue()
     private var flushTask: Task<Void, Never>?
@@ -22,6 +24,14 @@ final class NativeScreenStore: ObservableObject {
     private func accept(_ value: NativeScreenSnapshot, generation: Int) {
         guard epoch == generation else { return }
         screen = value; fileRequest = value.file
+        func imageKeys(_ controls: [NativeControl]) -> Set<String> {
+            controls.reduce(into: Set<String>()) { keys, control in
+                if ["image","canvas","picture"].contains(control.kind) { keys.insert(control.imageHandle ?? control.handle) }
+                keys.formUnion(imageKeys(control.children ?? []))
+            }
+        }
+        let currentImages = imageKeys(value.nodes)
+        images = images.filter { currentImages.contains($0.key) }
     }
     func refresh() async {
         guard !busy, pending.isEmpty, browser.hasDocument else { return }

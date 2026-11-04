@@ -17,7 +17,7 @@ window.__workDiaryNative={execute:async(command,payload={})=>{
  if(command==='job')return {job:fixture.jobs.find(j=>j.id===payload.id),defects:fixture.defects};
  if(command==='open'){
   document.querySelector('#app').innerHTML='<main class=main><h1>Webová část – izolovaný test</h1><form id="fixture-form"><label>Poznámka <input aria-label="Poznámka"></label><button type="button" onclick="this.closest(\'form\').remove()">Zavřít formulář</button></form></main>';
-  document.querySelector('#app').insertAdjacentHTML('beforeend','<p>Engine visibility: '+document.visibilityState+'</p>');
+  document.querySelector('#app .main').insertAdjacentHTML('beforeend','<p>Engine visibility: '+document.visibilityState+'</p>');
   return {opened:true};
  }
  throw Error('Unsupported isolated fixture operation');

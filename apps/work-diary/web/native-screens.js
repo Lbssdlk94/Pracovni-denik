@@ -2,7 +2,7 @@
 // logic owns validation, role gates, version checks, drafts and offline outboxes.
 // Opaque handles are bound to live DOM nodes, never arbitrary JS or API paths.
 export function createNativeScreens({db,getSession,captureDrafts=()=>[]}){
- let serial=0,revision=0,gestureAt=0,pendingFile=null,fileBuilder=null,preparedFiles=[],locked=false,boundIdentity=null;const ids=new WeakMap(),nodes=new Map(),maps=new Map(),assets=new Map();
+ let serial=0,revision=0,gestureAt=0,pendingFile=null,fileBuilder=null,preparedFiles=[],locked=false,boundIdentity=null;const ids=new WeakMap(),nodes=new Map(),maps=new Map(),assets=new Map(),objectBlobs=new Map();
  const id=node=>{if(!ids.has(node)){const key='n'+(++serial);ids.set(node,key);nodes.set(key,node);}return ids.get(node);};
  const text=node=>String(node?.textContent||'').replace(/\s+/g,' ').trim();
  const visible=node=>!node.hidden&&getComputedStyle(node).display!=='none'&&getComputedStyle(node).visibility!=='hidden'&&getComputedStyle(node).opacity!=='0'&&node.getAttribute('aria-hidden')!=='true';
@@ -11,7 +11,12 @@ export function createNativeScreens({db,getSession,captureDrafts=()=>[]}){
  const permitted=async()=>{if(locked)throw Error('Přístup se změnil. Neodeslanou práci nejdříve zabezpečte a obnovte aplikaci.');const s=db.session();const identity=s?.user?JSON.stringify([s.user.id,s.user.role,s.workspace?.authorizationVersion,s.features]):null;if(boundIdentity&&identity!==boundIdentity){locked=true;nodes.clear();assets.clear();throw Error('Přístup se změnil. Obnovte aplikaci.');}if(identity)boundIdentity=identity;if(!s?.user){if(document.querySelector('.shell'))throw Error('Obnovte přihlášení.');return;}if(!navigator.onLine&&!await db.offlineSession())throw Error('Platnost offline přístupu vypršela. Připojte se a ověřte účet.');};
  function mapProxy(){if(!globalThis.L||L.map.__nativeScreens)return;const factory=L.map;const wrapped=(...args)=>{const map=factory(...args);maps.set(map.getContainer(),map);return map;};wrapped.__nativeScreens=true;L.map=wrapped;}
  mapProxy();
- for(const event of ['workspace-access-freeze','workspace-access-reset','workspace-recovery-failed'])window.addEventListener(event,()=>{locked=true;nodes.clear();assets.clear();maps.clear();pendingFile=null;fileBuilder=null;preparedFiles=[];});
+ for(const event of ['workspace-access-freeze','workspace-access-reset','workspace-recovery-failed'])window.addEventListener(event,()=>{locked=true;nodes.clear();assets.clear();maps.clear();objectBlobs.clear();pendingFile=null;fileBuilder=null;preparedFiles=[];});
+ // Keep only original Blob references, never duplicate bytes or relax connect-src.
+ // blob: fetch is correctly blocked by the web CSP on some WebKit/Chromium builds.
+ const createURL=URL.createObjectURL.bind(URL),revokeURL=URL.revokeObjectURL.bind(URL);
+ URL.createObjectURL=blob=>{const url=createURL(blob);objectBlobs.set(url,blob);return url;};
+ URL.revokeObjectURL=url=>{objectBlobs.delete(String(url).split('#')[0]);return revokeURL(url);};
  const originalFileClick=HTMLInputElement.prototype.click;
  HTMLInputElement.prototype.click=function(){if(this.type==='file'&&Date.now()-gestureAt<30000){fileBuilder=null;preparedFiles=[];pendingFile={id:id(this),label:this.closest('label')?text(this.closest('label')):'Vybrat soubor',accept:this.accept,multiple:this.multiple,camera:!!this.capture};notify();return;}return originalFileClick.call(this);};
  function label(el){if(el.getAttribute('aria-label'))return el.getAttribute('aria-label');if(el.labels?.length)return [...el.labels].map(l=>{const copy=l.cloneNode(true);copy.querySelectorAll('input,textarea,select,svg').forEach(n=>n.remove());return text(copy);}).filter(Boolean).join(' ');return el.title||el.placeholder||el.name||el.id||'Údaj';}
@@ -87,7 +92,7 @@ export function createNativeScreens({db,getSession,captureDrafts=()=>[]}){
  async function asset(input){await permitted();const el=nodes.get(input.handle),remembered=assets.get(input.handle);if(!remembered&&!el?.isConnected)throw Error('Soubor již není dostupný.');
   if(el?.tagName==='CANVAS')return {data:el.toDataURL('image/png').split(',')[1],type:'image/png',name:'podpis.png'};
   const url=remembered?.url||el?.src||el?.data||el?.href;if(!url)throw Error('Soubor chybí.');const parsed=new URL(url,location.href);if(!['blob:','data:'].includes(parsed.protocol)&&parsed.origin!==location.origin)throw Error('Externí dokument otevřete ve své službě.');
-  const response=await fetch(url,{credentials:'same-origin'});if(!response.ok)throw Error('Soubor nelze načíst.');const blob=await response.blob();if(blob.size>32000000)throw Error('Soubor je příliš velký pro mobilní náhled.');
+  parsed.hash='';let blob=objectBlobs.get(parsed.href);if(!blob){const response=await fetch(parsed.href,{credentials:'same-origin'});if(!response.ok)throw Error('Soubor nelze načíst.');blob=await response.blob();}if(blob.size>32000000)throw Error('Soubor je příliš velký pro mobilní náhled.');
   const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onerror=reject;reader.onload=()=>resolve(reader.result.split(',')[1]);reader.readAsDataURL(blob);});return {data,type:blob.type,name:remembered?.name||'Dokument'};
  }
  return {snapshot,action,asset,flush:async()=>{await permitted();let written=0;for(const entry of captureDrafts()){if(entry.ownerId===db.session()?.user.id){await db.putFormDraft(entry.key,entry.baseVersion,entry.value);written++;}}return {written};}};

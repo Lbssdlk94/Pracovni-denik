@@ -37,7 +37,7 @@ struct NativeDrawingSurface: View {
                         }
                     }
                 }.coordinateSpace(name:control.handle).clipShape(RoundedRectangle(cornerRadius:14)).overlay(RoundedRectangle(cornerRadius:14).stroke(.secondary.opacity(0.3)))
-            }.frame(height:control.kind == "canvas" ? 160 : max(200,min(500,340*(control.height ?? 700)/max(1,control.width ?? 1000))))
+            }.aspectRatio(max(1,control.width ?? 1000)/max(1,control.height ?? 700), contentMode: .fit)
         }.task(id:imageHandle) { await store.image(imageHandle) }
     }
     func pinControl(_ pin: NativePin) -> NativeControl {

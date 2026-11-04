@@ -83,9 +83,17 @@ struct NativeField: View {
                 Text(control.label + (control.required == true ? " *" : "")).font(.subheadline.weight(.semibold))
                 if control.secure == true { SecureField(control.label, text: input).textInputAutocapitalization(.never).autocorrectionDisabled().accessibilityIdentifier("native-field-"+control.id).textContentType(.password).focused($focused).textFieldStyle(.roundedBorder) }
                 else if control.fieldType == "textarea" { TextEditor(text: input).accessibilityIdentifier("native-field-"+control.id).frame(minHeight: 110).padding(6).overlay(RoundedRectangle(cornerRadius: 10).stroke(.secondary.opacity(0.2))).focused($focused) }
-                else if ["date","time","datetime-local"].contains(control.fieldType ?? "") {
-                    DatePicker(control.label, selection: Binding(get: { date(value) }, set: { value = format($0); store.change(control, value: value, commit: true) }), displayedComponents: control.fieldType == "time" ? [.hourAndMinute] : control.fieldType == "date" ? [.date] : [.date,.hourAndMinute]).labelsHidden().environment(\.locale, Locale(identifier: "cs_CZ")).environment(\.timeZone, TimeZone(identifier: "Europe/Prague")!)
+                else if ["date","time","datetime-local","month"].contains(control.fieldType ?? "") {
+                    DatePicker(control.label, selection: Binding(get: { date(value) }, set: { value = format($0); store.change(control, value: value, commit: true) }), displayedComponents: control.fieldType == "time" ? [.hourAndMinute] : ["date","month"].contains(control.fieldType ?? "") ? [.date] : [.date,.hourAndMinute]).labelsHidden().environment(\.locale, Locale(identifier: "cs_CZ")).environment(\.timeZone, TimeZone(identifier: "Europe/Prague")!)
                 } else { TextField(control.label, text: input).accessibilityIdentifier("native-field-"+control.id).textFieldStyle(.roundedBorder).focused($focused).keyboardType(keyboard).textInputAutocapitalization(control.fieldType == "email" || control.fieldType == "url" ? .never : .sentences) }
+                if ["date","time","datetime-local","month"].contains(control.fieldType ?? "") {
+                    if value.isEmpty {
+                        Text("Hodnota zatím není vyplněná").font(.caption).foregroundStyle(.secondary)
+                        Button(control.fieldType == "time" ? "Použít aktuální čas" : "Použít dnešní datum") { value = format(Date()); store.change(control,value:value,commit:true) }.frame(minHeight:44)
+                    } else if control.required != true {
+                        Button("Vymazat údaj") { value="";store.change(control,value:"",commit:true) }.font(.callout).frame(minHeight:44)
+                    }
+                }
             }
         }.frame(maxWidth: .infinity, alignment: .leading).disabled(control.disabled == true)
             .onAppear { sync() }.onChange(of: control.value) { _, _ in if !focused { sync() } }.onChange(of: control.checked) { _, next in checked = next ?? false }
@@ -94,7 +102,7 @@ struct NativeField: View {
     var input: Binding<String> { Binding(get: { value }, set: { value = $0; store.change(control, value: $0) }) }
     var keyboard: UIKeyboardType { ["email":.emailAddress,"tel":.phonePad,"number":.decimalPad,"url":.URL][control.fieldType ?? ""] ?? .default }
     func sync() { value = control.multiple == true ? (control.options ?? []).filter { $0.selected == true }.map(\.id).joined(separator: "\n") : control.value ?? ""; checked = control.checked ?? false }
-    var dateFormat: String { control.fieldType == "time" ? "HH:mm" : control.fieldType == "date" ? "yyyy-MM-dd" : "yyyy-MM-dd'T'HH:mm" }
+    var dateFormat: String { control.fieldType == "month" ? "yyyy-MM" : control.fieldType == "time" ? "HH:mm" : control.fieldType == "date" ? "yyyy-MM-dd" : "yyyy-MM-dd'T'HH:mm" }
     func formatter() -> DateFormatter { let f=DateFormatter(); f.locale=Locale(identifier:"en_US_POSIX"); f.timeZone=TimeZone(identifier:"Europe/Prague"); f.dateFormat=dateFormat; return f }
     func date(_ value: String) -> Date { formatter().date(from: value) ?? Date() }
     func format(_ date: Date) -> String { formatter().string(from: date) }
