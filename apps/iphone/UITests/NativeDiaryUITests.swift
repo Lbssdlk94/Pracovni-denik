@@ -29,10 +29,10 @@ final class NativeDiaryUITests: XCTestCase {
         guard field.waitForExistence(timeout:15) else { XCTFail("Native form missing: \(app.debugDescription)");return }
         XCTAssertTrue(app.staticTexts["Engine visibility: visible"].exists); field.tap(); field.typeText("Zachovat zapis")
         let form = XCTAttachment(screenshot:app.screenshot());form.name="SwiftUI-native-form";form.lifetime = .keepAlways;add(form)
-        app.buttons["Přehled"].tap()
+        app.buttons["native-screen-back"].tap()
         XCTAssertTrue(field.waitForExistence(timeout: 10)); XCTAssertEqual(field.value as? String, "Zachovat zapis")
-        app.buttons["Zavřít formulář"].tap()
-        app.buttons["Přehled"].tap()
+        app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH %@ AND label == %@","native-control-","Zavřít formulář")).firstMatch.tap()
+        app.buttons["native-screen-back"].tap()
         XCTAssertTrue(app.tabBars.buttons["Přehled"].waitForExistence(timeout: 15))
     }
     @MainActor

@@ -22,7 +22,7 @@ struct HybridDiaryScreen: View {
                 .safeAreaInset(edge: .top) {
                     if !nativeVisible && store.wasActivated {
                         HStack {
-                            Button { Task { await store.activate() } } label: { Label("Přehled", systemImage: "chevron.left") }.frame(minHeight: 44)
+                            Button { Task { await store.activate() } } label: { Label("Přehled", systemImage: "chevron.left") }.frame(minHeight: 44).accessibilityIdentifier("native-screen-back")
                             Spacer()
                             if store.loading { ProgressView() }
                         }.padding(.horizontal).background(.regularMaterial)

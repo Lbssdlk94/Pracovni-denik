@@ -43,7 +43,7 @@ struct NativeControlView: View {
         case "field", "toggle", "select": NativeField(control: control, store: store)
         case "button", "file":
             Button(role: control.danger == true ? .destructive : nil) { Task { await store.perform(control) } } label: { Text(control.label).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading) }
-                .buttonStyle(.bordered).disabled(control.disabled == true || store.busy)
+                .buttonStyle(.bordered).accessibilityIdentifier("native-control-"+control.id).disabled(control.disabled == true || store.busy)
         case "card": VStack(alignment: .leading, spacing: 12) { NativeControlList(controls: control.children ?? [], store: store) }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(.background, in: RoundedRectangle(cornerRadius: 20))
         case "disclosure": NativeDisclosure(control: control, store: store)
         case "grid": LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7)) { NativeControlList(controls: control.children ?? [], store: store) }
