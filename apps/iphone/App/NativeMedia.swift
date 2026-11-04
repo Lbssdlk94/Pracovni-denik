@@ -52,7 +52,7 @@ struct NativeFilePanel: View {
         NavigationStack {
             Form {
                 if request.accept.contains("image") {
-                    PhotosPicker(selection: $selection, maxSelectionCount: request.multiple ? 100 : 1, matching: .images) { Label("Vybrat fotografie", systemImage: "photo.on.rectangle") }
+                    PhotosPicker(selection: $selection, maxSelectionCount: request.multiple ? 40 : 1, matching: .images) { Label("Vybrat fotografie", systemImage: "photo.on.rectangle") }
                     if UIImagePickerController.isSourceTypeAvailable(.camera) { Button { camera=true } label: { Label("Vyfotit", systemImage: "camera") } }
                 }
                 Button { importing=true } label: { Label("Vybrat ze Souborů", systemImage: "folder") }
@@ -64,16 +64,17 @@ struct NativeFilePanel: View {
             .onChange(of: selection) { _, items in Task {
                 loading=true;defer { loading=false }
                 do {
-                    var files: [NativePickedFile]=[]
-                    for item in items { if let data=try await item.loadTransferable(type: Data.self) { let type=item.supportedContentTypes.first ?? .jpeg;files.append(NativePickedFile(data:data,name:UUID().uuidString+"."+(type.preferredFilenameExtension ?? "jpg"),type:type.preferredMIMEType ?? "image/jpeg")) } }
-                    await store.attach(request, files:files)
+                    for (index,item) in items.enumerated() {
+                        guard let data=try await item.loadTransferable(type:Data.self) else { throw DiaryBridgeError(message:"Fotografii se nepodařilo načíst.") }
+                        let type=item.supportedContentTypes.first ?? .jpeg
+                        try await store.prepareFile(request,data:data,name:UUID().uuidString+"."+(type.preferredFilenameExtension ?? "jpg"),type:type.preferredMIMEType ?? "image/jpeg",last:index==items.count-1)
+                    }
                 } catch { self.error=error.localizedDescription }
             } }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.data], allowsMultipleSelection: request.multiple) { result in Task {
                 do {
-                    let urls=try result.get();var files: [NativePickedFile]=[]
-                    for url in urls { let access=url.startAccessingSecurityScopedResource();defer { if access { url.stopAccessingSecurityScopedResource() } };let data=try Data(contentsOf:url);let type=UTType(filenameExtension:url.pathExtension)?.preferredMIMEType ?? "application/octet-stream";files.append(NativePickedFile(data:data,name:url.lastPathComponent,type:type)) }
-                    await store.attach(request,files:files)
+                    let urls=try result.get()
+                    for (index,url) in urls.enumerated() { let access=url.startAccessingSecurityScopedResource();defer { if access { url.stopAccessingSecurityScopedResource() } };try await store.prepareFile(request,url:url,last:index==urls.count-1) }
                 } catch { self.error=error.localizedDescription }
             } }
             .sheet(isPresented: $camera) { NativeCamera { image in

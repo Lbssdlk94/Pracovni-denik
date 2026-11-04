@@ -47,7 +47,7 @@ try{
  const signature=await execute('asset',{handle:canvas.handle});assert.equal(signature.type,'image/png');assert.ok(signature.data.length>100);
  const gallery=await node('Vybrat fotografie','file');const selection=await execute('control',{handle:gallery.handle,action:'click'});assert.ok(selection.file,'Native picker was not requested');
  const png=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=100;c.height=80;const x=c.getContext('2d');x.fillStyle='#183f35';x.fillRect(0,0,100,80);return c.toDataURL('image/png').split(',')[1];});
- await execute('control',{handle:selection.file.id,action:'file',files:[{name:'Ukazka.png',type:'image/png',data:png}]});await page.locator('#service-photo-list img').waitFor();
+ await execute('control',{handle:selection.file.id,action:'fileStart',name:'Ukazka.png',type:'image/png',size:Buffer.from(png,'base64').length});await execute('control',{handle:selection.file.id,action:'fileChunk',index:0,data:png});await execute('control',{handle:selection.file.id,action:'fileFinish',last:true});await page.locator('#service-photo-list img').waitFor();
  await click('Uložit rozpracovaný protokol');await page.locator('#service-work-form').waitFor({state:'hidden'});
  const saved=await call('/api/jobs/irrigation-job/service');assert.equal(saved.report.work,'Nativní ovládací prvky – servis systému');assert.ok(saved.report.customerSignature.startsWith('data:image/png;base64,'));assert.equal(saved.photos.length,1);assert.equal(saved.job.status,'planned');
  console.log('PASS native controls save customer + paired garden, protocol, signature and a photograph through existing real Worker/D1/R2');

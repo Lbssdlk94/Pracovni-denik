@@ -2,7 +2,7 @@
 // logic owns validation, role gates, version checks, drafts and offline outboxes.
 // Opaque handles are bound to live DOM nodes, never arbitrary JS or API paths.
 function createNativeScreens({db,getSession,captureDrafts=()=>[]}){
- let serial=0,revision=0,gestureAt=0,pendingFile=null,locked=false,boundIdentity=null;const ids=new WeakMap(),nodes=new Map(),maps=new Map(),assets=new Map();
+ let serial=0,revision=0,gestureAt=0,pendingFile=null,fileBuilder=null,preparedFiles=[],locked=false,boundIdentity=null;const ids=new WeakMap(),nodes=new Map(),maps=new Map(),assets=new Map();
  const id=node=>{if(!ids.has(node)){const key='n'+(++serial);ids.set(node,key);nodes.set(key,node);}return ids.get(node);};
  const text=node=>String(node?.textContent||'').replace(/\s+/g,' ').trim();
  const visible=node=>!node.hidden&&getComputedStyle(node).display!=='none'&&getComputedStyle(node).visibility!=='hidden'&&getComputedStyle(node).opacity!=='0'&&node.getAttribute('aria-hidden')!=='true';
@@ -11,9 +11,9 @@ function createNativeScreens({db,getSession,captureDrafts=()=>[]}){
  const permitted=async()=>{if(locked)throw Error('Přístup se změnil. Neodeslanou práci nejdříve zabezpečte a obnovte aplikaci.');const s=db.session();const identity=s?.user?JSON.stringify([s.user.id,s.user.role,s.workspace?.authorizationVersion,s.features]):null;if(boundIdentity&&identity!==boundIdentity){locked=true;nodes.clear();assets.clear();throw Error('Přístup se změnil. Obnovte aplikaci.');}if(identity)boundIdentity=identity;if(!s?.user){if(document.querySelector('.shell'))throw Error('Obnovte přihlášení.');return;}if(!navigator.onLine&&!await db.offlineSession())throw Error('Platnost offline přístupu vypršela. Připojte se a ověřte účet.');};
  function mapProxy(){if(!globalThis.L||L.map.__nativeScreens)return;const factory=L.map;const wrapped=(...args)=>{const map=factory(...args);maps.set(map.getContainer(),map);return map;};wrapped.__nativeScreens=true;L.map=wrapped;}
  mapProxy();
- for(const event of ['workspace-access-freeze','workspace-access-reset','workspace-recovery-failed'])window.addEventListener(event,()=>{locked=true;nodes.clear();assets.clear();maps.clear();pendingFile=null;});
+ for(const event of ['workspace-access-freeze','workspace-access-reset','workspace-recovery-failed'])window.addEventListener(event,()=>{locked=true;nodes.clear();assets.clear();maps.clear();pendingFile=null;fileBuilder=null;preparedFiles=[];});
  const originalFileClick=HTMLInputElement.prototype.click;
- HTMLInputElement.prototype.click=function(){if(this.type==='file'&&Date.now()-gestureAt<30000){pendingFile={id:id(this),label:this.closest('label')?text(this.closest('label')):'Vybrat soubor',accept:this.accept,multiple:this.multiple,camera:!!this.capture};notify();return;}return originalFileClick.call(this);};
+ HTMLInputElement.prototype.click=function(){if(this.type==='file'&&Date.now()-gestureAt<30000){fileBuilder=null;preparedFiles=[];pendingFile={id:id(this),label:this.closest('label')?text(this.closest('label')):'Vybrat soubor',accept:this.accept,multiple:this.multiple,camera:!!this.capture};notify();return;}return originalFileClick.call(this);};
  function label(el){if(el.getAttribute('aria-label'))return el.getAttribute('aria-label');if(el.labels?.length)return [...el.labels].map(l=>{const copy=l.cloneNode(true);copy.querySelectorAll('input,textarea,select,svg').forEach(n=>n.remove());return text(copy);}).filter(Boolean).join(' ');return el.title||el.placeholder||el.name||el.id||'Údaj';}
  function read(el,path='r',deep=false){
   if(el.nodeType===3){const value=text(el);return value?[{id:path,handle:id(el),kind:'text',text:value}]:[];}
@@ -52,6 +52,14 @@ function createNativeScreens({db,getSession,captureDrafts=()=>[]}){
  }
  function pointer(el,points){const rect=(el.closest('.photo-wrap,.plan-photo')||el).getBoundingClientRect();if(!rect.width||!rect.height)throw Error('Obrázek není připravený.');const old=el.setPointerCapture;el.setPointerCapture=()=>{};try{points.forEach((p,i)=>{if(!Number.isFinite(p.x)||!Number.isFinite(p.y))throw Error('Neplatná poloha.');const event=new PointerEvent(i===0?'pointerdown':i===points.length-1?'pointerup':'pointermove',{bubbles:true,cancelable:true,pointerId:1,pointerType:'touch',isPrimary:true,buttons:i===points.length-1?0:1,clientX:rect.left+p.x*rect.width,clientY:rect.top+p.y*rect.height});el.dispatchEvent(event);});}finally{el.setPointerCapture=old;}}
  async function action(input){await permitted();gestureAt=Date.now();const el=live(input.handle);
+  if(input.action==='fileStart'||input.action==='fileChunk'||input.action==='fileFinish'){
+   if(el.type!=='file'||pendingFile?.id!==input.handle)throw Error('Výběr souboru se změnil.');
+   if(input.action==='fileStart'){if(!Number.isSafeInteger(input.size)||input.size<0||input.size>2147483648)throw Error('Neplatná velikost souboru.');fileBuilder={name:String(input.name||'Soubor'),type:String(input.type||'application/octet-stream'),size:input.size,received:0,chunks:[],index:0};return {ok:true};}
+   if(!fileBuilder)throw Error('Přenos souboru nebyl zahájen.');
+   if(input.action==='fileChunk'){if(input.index!==fileBuilder.index||typeof input.data!=='string'||input.data.length>800000)throw Error('Neplatné pořadí části souboru.');const binary=atob(input.data),bytes=Uint8Array.from(binary,c=>c.charCodeAt(0));if(fileBuilder.received+bytes.length>fileBuilder.size)throw Error('Soubor změnil velikost.');fileBuilder.chunks.push(bytes);fileBuilder.received+=bytes.length;fileBuilder.index++;return {ok:true};}
+   if(fileBuilder.received!==fileBuilder.size)throw Error('Soubor není přenesený celý.');preparedFiles.push(new File(fileBuilder.chunks,fileBuilder.name,{type:fileBuilder.type}));fileBuilder=null;
+   if(input.last){const transfer=new DataTransfer();for(const file of preparedFiles)transfer.items.add(file);preparedFiles=[];pendingFile=null;el.files=transfer.files;el.dispatchEvent(new Event('change',{bubbles:true}));}return {ok:true};
+  }
   if(input.action==='value'){
    if(!el.matches('input,select,textarea')||el.disabled||el.readOnly||el.type==='hidden'||el.type==='file')throw Error('Tento údaj nelze upravit.');
    if(el.type==='checkbox'||el.type==='radio')el.checked=!!input.checked;else if(el.tagName==='SELECT'&&el.multiple){for(const option of el.options)option.selected=(input.values||[]).includes(option.value);}else el.value=String(input.value??'');
@@ -66,11 +74,12 @@ function createNativeScreens({db,getSession,captureDrafts=()=>[]}){
    if(el.type!=='file'||pendingFile?.id!==input.handle)throw Error('Výběr souboru už není platný.');const transfer=new DataTransfer();
    for(const f of input.files||[]){const binary=atob(f.data),bytes=Uint8Array.from(binary,c=>c.charCodeAt(0));transfer.items.add(new File([bytes],f.name,{type:f.type||'application/octet-stream'}));}
    el.files=transfer.files;pendingFile=null;el.dispatchEvent(new Event('change',{bubbles:true}));
-  }else if(input.action==='cancelFile')pendingFile=null;
+  }else if(input.action==='cancelFile'){pendingFile=null;fileBuilder=null;preparedFiles=[];}
   else if(input.action==='click'){
    if(el.disabled)throw Error('Akce nyní není dostupná.');
    if(el.tagName==='INPUT'&&el.type==='file')el.click();
-   else if(el.tagName==='A'&&(el.download||el.href.startsWith('blob:')||(el.target==='_blank'&&new URL(el.href,location.href).origin===location.origin&&new URL(el.href,location.href).pathname.startsWith('/api/'))||/\.(pdf|jpg|png|jpeg)(?:[?#]|$)/i.test(el.href))){assets.set(input.handle,{url:el.href,name:el.download||el.textContent||'Dokument'});return {...await snapshot(),transfer:{id:input.handle,text:el.download||'Dokument'}};}
+   else if(el.tagName==='A'&&el.download){el.click();}
+   else if(el.tagName==='A'&&(el.href.startsWith('blob:')||(el.target==='_blank'&&new URL(el.href,location.href).origin===location.origin&&new URL(el.href,location.href).pathname.startsWith('/api/'))||/\.(pdf|jpg|png|jpeg)(?:[?#]|$)/i.test(el.href))){assets.set(input.handle,{url:el.href,name:el.download||el.textContent||'Dokument'});return {...await snapshot(),transfer:{id:input.handle,text:el.download||'Dokument'}};}
    else {const form=el.form;if(el.type==='submit'&&form&&!form.checkValidity()){const bad=form.querySelector(':invalid');throw Error((bad?label(bad)+': ':'')+(bad?.validationMessage||'Vyplňte povinné údaje.'));}el.click();}
   }else throw Error('Nepodporovaná akce.');
   await new Promise(resolve=>setTimeout(resolve,40));return snapshot();

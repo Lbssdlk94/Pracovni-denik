@@ -14,8 +14,8 @@ struct PracovniDenikApp: App {
 struct DiaryWebView: UIViewRepresentable {
     let webView: WKWebView
     var interactive = true
-    func makeUIView(context: Context) -> WKWebView { webView.isHidden = !interactive; webView.accessibilityElementsHidden = !interactive; return webView }
-    func updateUIView(_ view: WKWebView, context: Context) { view.isHidden = !interactive; view.accessibilityElementsHidden = !interactive /* Keep the current page and form. */ }
+    func makeUIView(context: Context) -> WKWebView { webView.isHidden = false; webView.isUserInteractionEnabled = interactive; webView.accessibilityElementsHidden = !interactive; return webView }
+    func updateUIView(_ view: WKWebView, context: Context) { view.isHidden = false; view.isUserInteractionEnabled = interactive; view.accessibilityElementsHidden = !interactive /* Keep the current page and form. */ }
 }
 struct FileShare: UIViewControllerRepresentable {
     let url: URL

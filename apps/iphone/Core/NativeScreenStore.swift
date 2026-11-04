@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 final class NativeScreenStore: ObservableObject {
@@ -98,5 +99,34 @@ final class NativeScreenStore: ObservableObject {
             try data.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
             preview = NativePreviewFile(url: url)
         } catch { self.error = error.localizedDescription }
+    }
+}
+
+@MainActor
+extension NativeScreenStore {
+    func prepareFile(_ request: NativeFileRequest, data: Data, name: String, type: String, last: Bool) async throws {
+        let generation = epoch
+        let _: BridgeAcknowledgement = try await browser.nativeCall("control", ["handle":request.id,"action":"fileStart","name":name,"type":type,"size":data.count])
+        var index=0
+        for offset in stride(from:0,to:data.count,by:262144) {
+            guard generation == epoch else { throw DiaryBridgeError(message:"Přístup se změnil.") }
+            let chunk=data.subdata(in:offset..<min(data.count,offset+262144))
+            let _: BridgeAcknowledgement = try await browser.nativeCall("control", ["handle":request.id,"action":"fileChunk","index":index,"data":chunk.base64EncodedString()]);index+=1
+        }
+        let _: BridgeAcknowledgement = try await browser.nativeCall("control", ["handle":request.id,"action":"fileFinish","last":last])
+        if last { fileRequest=nil;await refresh() }
+    }
+    func prepareFile(_ request: NativeFileRequest, url: URL, last: Bool) async throws {
+        let generation=epoch,handle=try FileHandle(forReadingFrom:url)
+        defer { try? handle.close() }
+        let size=try handle.seekToEnd();try handle.seek(toOffset:0)
+        let _: BridgeAcknowledgement = try await browser.nativeCall("control", ["handle":request.id,"action":"fileStart","name":url.lastPathComponent,"type":UTType(filenameExtension:url.pathExtension)?.preferredMIMEType ?? "application/octet-stream","size":size])
+        var index=0
+        while let chunk=try handle.read(upToCount:262144),!chunk.isEmpty {
+            guard generation == epoch else { throw DiaryBridgeError(message:"Přístup se změnil.") }
+            let _: BridgeAcknowledgement = try await browser.nativeCall("control", ["handle":request.id,"action":"fileChunk","index":index,"data":chunk.base64EncodedString()]);index+=1
+        }
+        let _: BridgeAcknowledgement = try await browser.nativeCall("control", ["handle":request.id,"action":"fileFinish","last":last])
+        if last { fileRequest=nil;await refresh() }
     }
 }

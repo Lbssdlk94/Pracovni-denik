@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct HybridDiaryScreen: View {
     @ObservedObject var session: BrowserSession
@@ -47,7 +48,7 @@ struct HybridDiaryScreen: View {
                     store.verifiedInForeground = false
                     if phase == .background {
                         let background = UIApplication.shared.beginBackgroundTask(withName: "Uchovat rozepsaný formulář")
-                        Task { await screens.flush(); let _: BridgeAcknowledgement? = try? await session.nativeCall("flushDrafts"); UIApplication.shared.endBackgroundTask(background) }
+                        Task { await screens.flush(); let _: BridgeAcknowledgement? = try? await session.nativeCall("flushDrafts"); if background != .invalid { UIApplication.shared.endBackgroundTask(background) } }
                     }
                 }
             }
