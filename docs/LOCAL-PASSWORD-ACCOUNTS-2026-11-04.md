@@ -76,11 +76,11 @@ Administrátora musí nejprve vytvořit/přidělit vlastník podle současných 
 ## Nasazení a omezení
 
 Nasazení přidává pouze schéma/kód. Nemění hesla uživatelů ani výchozí přechodový
-režim. Dr. Garden má navíc přístupovou bránu hostingu Sites (`custom`): tato
-brána může požadovat ChatGPT ještě před spuštěním aplikace. Samotný lokální
-login ji neumí obejít. Zpřístupnění veřejné přihlašovací stránky vyžaduje změnu
-publika hostingu; firemní data i pak zůstávají za autentizací a oprávněními API.
-Tato změna publika není součástí databázové migrace.
+režim. Dr. Garden měl původně navíc přístupovou bránu hostingu Sites (`custom`).
+Na navazující požadavek uživatele na stejné přihlášení v obou denících byla
+4. 11. 2026 otevřena samotná přihlašovací stránka: publikum hostingu je nyní
+stejně jako u Dr. Závlahy `public`. Firemní data zůstávají za autentizací
+a oprávněními společného API. Databázové účty ani hesla se tím neměnily.
 
 Zdroj: větev feat/local-password-accounts-2026-11-04. Lokální test:
 
@@ -101,7 +101,21 @@ node scripts/test-local-auth-browser.mjs
   https://dr-garden.purplecedar.chatgpt.site/
 - Veřejná kontrola curl: Dr. Závlaha `/api/auth/options` 200 s
   `password:true,legacyAllowed:true`; `/api/me` bez přihlášení 401.
-  Garden `/api/auth/options` 401 na vstupní bráně hostingu — publikum zůstalo
-  beze změny `custom`, otevření přihlašovací stránky nebylo potvrzeno.
+  Při první publikaci Garden `/api/auth/options` vracel 401 na vstupní bráně
+  hostingu. Následující schválená změna tuto bránu sjednotila (viz níže).
 - Provozní chybové logy Dr. Závlahy po první publikaci bez záznamu chyby.
   Nebyly vytvářeny skutečné účty ani měněny provozní zakázky či hesla.
+
+### Sjednocení vstupního přihlášení
+
+- Uživatelský požadavek: „Přihlášení bude na obou stejné“.
+- Sites změna publika Dr. Garden z `custom` na `public`, revize přístupu **3**,
+  potvrzená nástrojem 2026-11-04T16:35:08.215967+00:00. Stávající správci,
+  členové, role a povolení zůstali zachováni. Nebyla posílána žádná pozvánka.
+- Read-only curl kontrola obou veřejných adres: `/` 200, `/api/auth/options`
+  200 se shodným `password:true,legacyAllowed:true`; `/api/me`, `/api/jobs`,
+  `/api/customers` a `/api/gardens` bez přihlášení všechny 401.
+- Používá se společný adresář účtů. Každá adresa má vlastní zabezpečenou cookie
+  relace; nejde o automatické přenášení přihlášení mezi doménami.
+- Skutečným heslem uživatele nebylo testováno (není k dispozici); ověřena
+  dostupnost přihlášení a odmítnutí anonymního přístupu k datům.
