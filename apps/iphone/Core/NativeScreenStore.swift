@@ -36,7 +36,7 @@ final class NativeScreenStore: ObservableObject {
     func refresh() async {
         guard !busy, pending.isEmpty, browser.hasDocument else { return }
         let generation = epoch
-        do { let value: NativeScreenSnapshot = try await browser.nativeCall("screen"); accept(value, generation: generation); error = nil }
+        do { let value: NativeScreenSnapshot = try await browser.nativeCall("screen"); accept(value, generation: generation); error = nil; if browser.usesIsolatedNativeFixture { print("UI_TEST native screen nodes: \(value.nodes.map(\.kind))") } }
         catch { if generation == epoch { self.error = error.localizedDescription } }
     }
     func change(_ control: NativeControl, value: String? = nil, checked: Bool? = nil, values: [String]? = nil, commit: Bool = false) {

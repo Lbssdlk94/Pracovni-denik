@@ -26,7 +26,9 @@ final class NativeDiaryUITests: XCTestCase {
     func testNativeFormHandoffDoesNotDiscardAnOpenForm() {
         let app = launch(); app.tabBars.buttons["Více"].tap(); app.buttons["Zákazníci"].tap()
         let field = app.textFields.matching(NSPredicate(format: "identifier BEGINSWITH %@", "native-field-")).firstMatch
-        XCTAssertTrue(field.waitForExistence(timeout: 15)); XCTAssertTrue(app.staticTexts["Engine visibility: visible"].exists); field.tap(); field.typeText("Zachovat zapis")
+        guard field.waitForExistence(timeout:15) else { XCTFail("Native form missing: \(app.debugDescription)");return }
+        XCTAssertTrue(app.staticTexts["Engine visibility: visible"].exists); field.tap(); field.typeText("Zachovat zapis")
+        let form = XCTAttachment(screenshot:app.screenshot());form.name="SwiftUI-native-form";form.lifetime = .keepAlways;add(form)
         app.buttons["Přehled"].tap()
         XCTAssertTrue(field.waitForExistence(timeout: 10)); XCTAssertEqual(field.value as? String, "Zachovat zapis")
         app.buttons["Zavřít formulář"].tap()

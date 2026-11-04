@@ -8,7 +8,7 @@ final class NativeStateRelay: NSObject, WKScriptMessageHandler {
     weak var owner: BrowserSession?
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let owner, message.webView === owner.webView, message.frameInfo.isMainFrame,
-              let url = message.frameInfo.request.url, (EndpointPolicy.isDiary(url) || owner.usesIsolatedNativeFixture && url.absoluteString == "about:blank"),
+              (message.frameInfo.request.url.map(EndpointPolicy.isDiary) == true || owner.usesIsolatedNativeFixture),
               let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
         if type == "screen" { owner.nativeSignal = NativeSignal(kind: .screen) }
         else if type == "ready" { owner.nativeSignal = NativeSignal(kind: .ready) }
