@@ -1,3 +1,4 @@
+import {createWatchClient} from './watch-client.js?v=watch-companion-v1';
 import {createNativeScreens} from './native-screens.js?v=native-all-v1';
 // A narrow, read-only data bridge for the first native iPhone screens.
 // Mutations and offline forms continue through the existing guarded web UI.
@@ -16,7 +17,9 @@ export function createNativeClient({db,getName,onSession,openTarget,canResume,is
   const params=new URLSearchParams({state:input.state||'all',order:'schedule'});if(day){params.set('month',day.slice(0,7));params.set('day',day);}if(input.q)params.set('q',String(input.q).slice(0,100));if(input.cursor)params.set('cursor',String(input.cursor));if(input.mine||!s.permissions?.manage)params.set('assignee',s.user.id);
   const result=await db.request('/api/jobs?'+params);guard(key);return result;
  }
+ const watch=createWatchClient({db,getName,onSession,canResume,isOnline,today,identityKey:nativeIdentityKey});
  return Object.freeze({async execute(command,input={}){
+  if(command==='watch')return watch.execute(input);
   if(command==='nativePush'){
    const s=current(),userId=s.user.id,binding=readBinding(),deviceId=binding?.userId===userId?binding.deviceId:null;
    const send=(path,method='GET',value)=>db.request('/api/notifications/native'+path,{method,...(value?{body:JSON.stringify(value),headers:{'content-type':'application/json'}}:{})});

@@ -1,5 +1,5 @@
 import {createAccountUI} from './local-auth-ui.js?v=local-auth-v1';
-import {installNativeClient} from './native-client.js?v=native-push-v1';
+import {installNativeClient} from './native-client.js?v=watch-companion-v1';
 import {transientConnectionError} from './io.js?v=connection-recovery-v1';
 import {createConnectionRecovery} from './connection-recovery.js?v=connection-recovery-v1';
 import {createWorkspaceUI,workspaceFilterMarkup,workspaceBadge,workspaceDisciplineField} from './workspace-ui.js?v=shared-directory-v1';
@@ -499,6 +499,7 @@ installNativeClient({db,getName:appDisplayName,captureDrafts:captureActiveFormDr
  openTarget:async target=>{
   if(target.jobId){
    if(!/^[-\w]{1,100}$/.test(target.jobId)||!enabled('jobs'))throw Error('Zakázka není dostupná.');
+   if(target.action==='travelSms'){navigate('jobs');await jobsUI.openTravelSms(target.jobId);return;}
    if(target.action==='protocol'){await serviceWorkUI.open(target.jobId);return;}
    navigate('jobs');await jobsUI.open(target.jobId);
    const selectors={status:'[data-job-status]',depart:'[data-job-depart]',photos:'#job-jump-photos',edit:'[data-job-edit]'};

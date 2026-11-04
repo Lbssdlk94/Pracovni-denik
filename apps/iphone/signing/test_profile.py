@@ -25,3 +25,13 @@ class SigningPolicyTest(unittest.TestCase):
         p['ExpirationDate'] = datetime.datetime(2020, 1, 1)
         with self.assertRaises(ValueError):
             configuration(p)
+
+class WatchProfileTests(unittest.TestCase):
+    def profile(self):
+        return {'TeamIdentifier':['ABCDE12345'],'UUID':'12345678-1234-1234-1234-123456789abc','ExpirationDate':datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(days=30),'Entitlements':{'application-identifier':'ABCDE12345.cz.pracovnidenik.app.watchapp','get-task-allow':True},'ProvisionedDevices':['watch-test']}
+    def test_watch_profile_requires_exact_watch_bundle_and_matching_distribution(self):
+        p=self.profile();self.assertEqual(configuration(p,'cz.pracovnidenik.app.watchapp',False)[2],'development')
+        p['Entitlements']['application-identifier']='ABCDE12345.*'
+        with self.assertRaises(ValueError):configuration(p,'cz.pracovnidenik.app.watchapp',False)
+    def test_watch_profile_cannot_replace_the_push_enabled_iphone_profile(self):
+        with self.assertRaises(ValueError):configuration(self.profile())
