@@ -133,3 +133,28 @@ nyní používá standardní `macos-15-intel`, nikoli placený větší runner, 
 spuštění dovoluje mezi oběma běžnými typy přepnout. Oficiální seznam GitHub
 runner-images potvrzuje label i instalaci připnutého Xcode 26.0.1 na Intel obrazu.
 https://github.com/actions/runner-images/blob/main/images/macos/macos-15-Readme.md
+
+### Nasazení společného kontraktu a stav sestavení
+
+- Dr. Závlaha: verze **114**, zdroj `7140c78bdc3d17fd6c5b6a84f243e0f66203ca65`,
+  nasazení `appgdep_6aeb6c83ac008191ae36c85e2a9885d0` úspěšné.
+  https://zavlahovy-denik.purplecedar.chatgpt.site/
+- Dr. Garden: verze **35**, zdroj `37299e1cdfd91de138856a7791da7e64042e2c11`,
+  nasazení `appgdep_6aeb6d0f3c1c81918515efe4a017c88f` úspěšné.
+  https://dr-garden.purplecedar.chatgpt.site/
+- Veřejná kontrola: `watch-client.js?v=watch-companion-v1` vrací na obou adresách
+  200 a identický sestavený kontrakt. Publikum obou instalací zůstalo beze změny.
+- Prošla také regrese lokálního přihlášení v prohlížeči na 390, 430 a 1440 px:
+  dočasné heslo, jeho změna po obnovení, trvalá relace, výhradní obnova role
+  Administrátor, zákaz samoobslužné obnovy a ochrana neodeslaných změn.
+- Aktuální Apple workflow pro kód `d6a1faf2869542eb5f5dba43f4f4c2fd0fe10b75`:
+  https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/41879309267
+  Při kontrole **4. 11. 2026 v 17:46 UTC** je stále `queued`, bez přiděleného
+  runneru, bez spuštěných kroků a bez artefaktů. Ověřeno CLI i GitHub konektorem.
+  Check-run neobsahuje chybu ani vysvětlení fronty; příčinu nelze doložit.
+  Obecný GitHub Status uváděl Actions jako operational — to nepotvrzuje
+  dostupnost konkrétního Macu. Neprohlašujeme kompilaci ani XCTest za úspěšné.
+- **Ověřený IPA ani skutečné watchOS screenshoty zatím nejsou k dispozici.**
+  Workflow je připravené je vytvořit po přidělení stroje, pokud kompilace a testy
+  projdou. Výchozí balíček bude nepodepsaný; přímou instalaci do hodinek nelze
+  slibovat bez Apple podpisu. Fyzické zařízení ani profily zde nebyly použity.
