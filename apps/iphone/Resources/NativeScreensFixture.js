@@ -62,7 +62,7 @@ function createNativeScreens({db,getSession,captureDrafts=()=>[]}){
   }
   if(input.action==='value'){
    if(!el.matches('input,select,textarea')||el.disabled||el.readOnly||el.type==='hidden'||el.type==='file')throw Error('Tento údaj nelze upravit.');
-   if(el.type==='checkbox'||el.type==='radio')el.checked=!!input.checked;else if(el.tagName==='SELECT'&&el.multiple){for(const option of el.options)option.selected=(input.values||[]).includes(option.value);}else el.value=String(input.value??'');
+   if(el.type==='checkbox'||el.type==='radio')el.checked=!!input.checked;else if(el.tagName==='SELECT'&&el.multiple){for(const option of el.options)option.selected=(input.values||[]).includes(option.value);}else el.value=el.type==='number'?String(input.value??'').replace(',','.'):String(input.value??'');
    el.dispatchEvent(new Event('input',{bubbles:true}));if(input.commit!==false)el.dispatchEvent(new Event('change',{bubbles:true}));
   }else if(input.action==='toggle'){if(el.tagName!=='DETAILS')throw Error('Neplatná sekce.');el.open=!!input.checked;}
   else if(input.action==='draw'){if(!el.matches('canvas,[data-marker],.marker-dot,.marker-label,[data-plan-shaft]'))throw Error('Tento obrázek nelze upravovat.');pointer(el,input.points||[]);}

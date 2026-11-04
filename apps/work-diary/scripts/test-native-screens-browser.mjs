@@ -29,6 +29,8 @@ try{
  const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
  await context.addInitScript(()=>{window.webkit={messageHandlers:{workDiaryState:{postMessage:()=>{}}}}});
  const page=await context.newPage();page.on('pageerror',e=>console.error('UI error:',e.message));page.on('dialog',d=>d.accept());await page.goto(base);await page.locator('.shell').waitFor();
+ await page.evaluate(()=>{const label=document.createElement('label');label.id='qa-decimal-field';label.innerHTML='Množství<input id=qa-decimal type=number step=0.1>';document.querySelector('#app .main').append(label);});
+ const localeScreen=await page.evaluate(()=>window.__workDiaryNative.execute('screen'));const collect=nodes=>nodes.flatMap(n=>[n,...collect(n.children||[])]);const decimal=collect(localeScreen.nodes).find(n=>n.id==='id:qa-decimal');assert.ok(decimal);const decimalReply=await page.evaluate(handle=>window.__workDiaryNative.execute('control',{handle,action:'value',value:'1,5'}),decimal.handle);assert.equal(collect(decimalReply.nodes).find(n=>n.id==='id:qa-decimal').value,'1.5');await page.evaluate(()=>document.getElementById('qa-decimal-field').remove());
  const execute=(command,input={})=>page.evaluate(({command,input})=>window.__workDiaryNative.execute(command,input),{command,input});
  const flatten=items=>items.flatMap(n=>[n,...flatten(n.children||[])]);
  async function screen(){return execute('screen');}
@@ -51,6 +53,16 @@ try{
  await click('Uložit rozpracovaný protokol');await page.locator('#service-work-form').waitFor({state:'hidden'});
  const saved=await call('/api/jobs/irrigation-job/service');assert.equal(saved.report.work,'Nativní ovládací prvky – servis systému');assert.ok(saved.report.customerSignature.startsWith('data:image/png;base64,'));assert.equal(saved.photos.length,1);assert.equal(saved.job.status,'planned');
  console.log('PASS native controls save customer + paired garden, protocol, signature and a photograph through existing real Worker/D1/R2');
+ await execute('open',{jobId:'irrigation-job',action:'protocol'});await page.locator('#service-work-form').waitFor();await click('Zobrazit PDF');await page.locator('.protocol-pdf-frame').waitFor();
+ const pdfNode=flatten((await screen()).nodes).find(n=>n.kind==='document');assert.ok(pdfNode);const pdf=await execute('asset',{handle:pdfNode.handle});assert.ok(Buffer.from(pdf.data,'base64').subarray(0,5).toString()==='%PDF-');await click('Zavřít');
+ await execute('open',{page:'home'});await click('Zahrada maminky');await click('Šachty');await click('Přidat šachtu');await click('Vybrat fotografii');
+ const shaftFile=(await screen()).file;assert.ok(shaftFile);await execute('control',{handle:shaftFile.id,action:'file',files:[{name:'Sachta.png',type:'image/png',data:png}]});await page.locator('#photo-wrap img').waitFor();await value('Název šachty','Nativní šachta');
+ let picture=flatten((await screen()).nodes).find(n=>n.kind==='picture');assert.ok(picture);await execute('control',{handle:picture.handle,action:'point',x:.2,y:.3});await page.locator('#valve-label-form').waitFor();await value('Popisek ventilu','Nativní ventil');await click('Přidat popisek');
+ picture=flatten((await screen()).nodes).find(n=>n.kind==='picture');const pin=picture.pins.find(p=>p.text==='1');assert.ok(pin);await execute('control',{handle:pin.handle,action:'draw',points:[{x:pin.x,y:pin.y},{x:.7,y:.6},{x:.7,y:.6}]});
+ await click('Umístit špendlík');await page.locator('#position-picker-map').waitFor();const mapNode=flatten((await screen()).nodes).find(n=>n.kind==='map');assert.ok(mapNode,'MapKit contract lacks its map');await execute('control',{handle:mapNode.handle,action:'map',latitude:49.34,longitude:14.12,select:true});await click('Použít polohu');await click('Uložit');
+ await page.locator('#photo-wrap').waitFor({state:'hidden'});const records=(await call('/api/records')).records;const shaft=records.find(r=>r.name==='Nativní šachta');assert.ok(shaft);assert.ok(Math.abs(shaft.markers[0].x-.7)<.001);assert.ok(Math.abs(shaft.markers[0].y-.6)<.001);assert.equal(shaft.position.latitude,49.34);assert.equal(shaft.position.longitude,14.12);
+ console.log('PASS native document contract creates actual PDF; photo annotation add/drag and native map selection persist into the real record');
+
  await execute('open',{jobId:'irrigation-job',action:'protocol'});await page.locator('#service-work-form').waitFor();await context.setOffline(true);await value('Provedené práce','Nativní zápis offline');await click('Uložit rozpracovaný protokol');await page.locator('#service-work-form').waitFor({state:'hidden'});
  const pending=await page.evaluate(async()=> (await import('/cloud.js?v=draft-recovery-v1')).pendingSummary());assert.ok(pending.total>0);
  await context.setOffline(false);await page.waitForFunction(async()=>{const r=await fetch('/api/jobs/irrigation-job/service',{headers:{'x-workspace-client-version':'shared-directory-v1'}});const v=await r.json();return v.report?.work==='Nativní zápis offline';},{},{timeout:30000});
