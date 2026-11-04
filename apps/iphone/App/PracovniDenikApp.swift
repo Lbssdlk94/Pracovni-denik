@@ -13,8 +13,9 @@ struct PracovniDenikApp: App {
 
 struct DiaryWebView: UIViewRepresentable {
     let webView: WKWebView
-    func makeUIView(context: Context) -> WKWebView { webView }
-    func updateUIView(_ view: WKWebView, context: Context) { /* Keep the current page and form. */ }
+    var interactive = true
+    func makeUIView(context: Context) -> WKWebView { webView.isHidden = !interactive; webView.accessibilityElementsHidden = !interactive; return webView }
+    func updateUIView(_ view: WKWebView, context: Context) { view.isHidden = !interactive; view.accessibilityElementsHidden = !interactive /* Keep the current page and form. */ }
 }
 struct FileShare: UIViewControllerRepresentable {
     let url: URL
@@ -27,7 +28,7 @@ struct DiaryScreen: View {
     var body: some View {
         ZStack {
             Color(red: 0.969, green: 0.976, blue: 0.965).ignoresSafeArea()
-            DiaryWebView(webView: session.webView)
+            DiaryWebView(webView: session.webView, interactive: ProcessInfo.processInfo.arguments.contains("--ui-testing"))
             if session.initialLoading && !session.hasDocument {
                 ProgressView("Otevírám Pracovní deník…").padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
             }

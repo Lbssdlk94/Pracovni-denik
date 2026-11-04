@@ -18,7 +18,7 @@ export function createNativeScreens({db,getSession}){
  function read(el,path='r',deep=false){
   if(el.nodeType===3){const value=text(el);return value?[{id:path,handle:id(el),kind:'text',text:value}]:[];}
   if(el.nodeType!==1||['SCRIPT','STYLE','NOSCRIPT','SVG','PATH','OPTION'].includes(el.tagName)||!visible(el))return [];
-  const tag=el.tagName,handle=id(el),base={id:path,handle};
+  const tag=el.tagName,handle=id(el),base={id:el.id?'id:'+el.id:path,handle};
   if(el.matches('.sidebar,.topbar,.nav,.mobile-account'))return [];
   if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA'){
    if(['hidden','file','submit','button','reset'].includes(el.type))return [];

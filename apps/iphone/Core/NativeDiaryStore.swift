@@ -25,7 +25,7 @@ final class NativeDiaryStore: ObservableObject {
     init(browser: BrowserSession) { self.browser = browser }
 
     func invalidate() {
-        epoch += 1; listEpoch += 1
+        epoch += 1; listEpoch += 1; error = nil
         context = nil; overview = nil; jobs = []; nextCursor = nil
         webVisible = true; loading = false
     }
