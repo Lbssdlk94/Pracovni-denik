@@ -15,3 +15,7 @@ Zkouška na izolované kopii osmi souvisejících tabulek: 110 zákazníků, 110
 Ověření: 312 testů prošlo. Prohlížeč Chromium ověřil katalog a oprávnění na 360, 390, 430 a 1440 px, výběr množství do protokolu pracovníkem a jeho skutečné uložení po offline zápisu, původní ceny po změně katalogu a PDF. Skutečný iPhone/Safari a nová IPA nebyly v této kontrole ověřeny.
 
 Provozní úklid se provádí zvláštní jednorázovou servisní operací, protože nasazení samotné datový převod neprovedlo. Operace přijímá jen pevnou testovací sadu, nikoli ID/SQL od volajícího. Vyžaduje dočasné serverové pověření vázané na konkrétní doménu, živého vlastníka a platnost nejvýše 30 minut; ověřuje také identitu databáze a úložiště. Podporuje kontrolu nanečisto a opakování bez dalších změn. Pověření se po úklidu odstraní.
+
+## Potvrzený výsledek v provozu
+
+Dr. Závlaha: vydání 116, Dr. Garden: vydání 37. Jednorázový náhled v provozu potvrdil 110 rodin testovacích dat. Provedení vrátilo 110 zákazníků, 110 zahrad a 110 aktivních zakázek; následné čtení databáze potvrdilo nula zbývajících aktivních položek této sady a nula změn u ostatních zákazníků, zahrad a zakázek. Pověření bylo odstraněno z konfigurace a vydání znovu nasazeno bez něj. Provozní rozhraní úklidu následně vrací 404; katalog bez přihlášení vrací 401. Celkem prošlo 313 testů.
