@@ -18,4 +18,4 @@ Provozní úklid se provádí zvláštní jednorázovou servisní operací, prot
 
 ## Potvrzený výsledek v provozu
 
-Dr. Závlaha: vydání 116, Dr. Garden: vydání 37. Jednorázový náhled v provozu potvrdil 110 rodin testovacích dat. Provedení vrátilo 110 zákazníků, 110 zahrad a 110 aktivních zakázek; následné čtení databáze potvrdilo nula zbývajících aktivních položek této sady a nula změn u ostatních zákazníků, zahrad a zakázek. Pověření bylo odstraněno z konfigurace a vydání znovu nasazeno bez něj. Provozní rozhraní úklidu následně vrací 404; katalog bez přihlášení vrací 401. Celkem prošlo 313 testů.
+Dr. Závlaha: vydání 116, Dr. Garden: vydání 37. Jednorázový náhled v provozu potvrdil 110 rodin testovacích dat. Provedení vrátilo 110 zákazníků, 110 zahrad a 110 aktivních zakázek; následné čtení databáze potvrdilo nula zbývajících aktivních položek této sady a nula změn u ostatních zákazníků, zahrad a zakázek. Pověření bylo odstraněno z konfigurace a vydání znovu nasazeno bez něj. Dokončení v databázi jednorázově spotřebuje pověření; po nasazení této kontroly rozhraní úklidu vrací 404; katalog bez přihlášení vrací 401. Celkem prošlo 313 testů.

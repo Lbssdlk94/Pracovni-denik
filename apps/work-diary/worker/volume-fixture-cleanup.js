@@ -4,6 +4,8 @@ import {assertInstallation} from './installation.js';
 export async function handleVolumeFixtureCleanup(request,env,h){
  const {fail,json,accessHash,boundedBytes}=h;
  if(request.method!=='POST'||!env.APPROVED_VOLUME_CLEANUP)fail(404,'Nenalezeno.');
+ const retired=await env.DB.prepare("SELECT value FROM settings WHERE key='cleanup:volume-20261027:20261104'").first();
+ if(retired&&JSON.parse(retired.value).authorization==='scoped-maintenance')fail(404,'Jednorázový úklid byl dokončen a uzavřen.');
  let cap;try{cap=JSON.parse(env.APPROVED_VOLUME_CLEANUP);}catch{fail(503,'Úklid není připraven.');}
  const token=request.headers.get('authorization')?.match(/^Bearer ([a-f0-9]{64})$/)?.[1],hash=token?await accessHash(token):'';let diff=hash.length^String(cap.tokenHash).length;
  for(let i=0;i<64;i++)diff|=(hash.charCodeAt(i)||0)^(String(cap.tokenHash).charCodeAt(i)||0);

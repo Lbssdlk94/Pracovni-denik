@@ -40,6 +40,6 @@ test('Fixed maintenance capability rejects anonymous, expired, foreign-installat
  env.APPROVED_VOLUME_CLEANUP=JSON.stringify({...capability,origin:'https://another-company.test'});assert.equal((await run('apply')).status,403);
  env.APPROVED_VOLUME_CLEANUP=JSON.stringify(capability);assert.equal((await run('apply',token,{id:'unapproved'})).status,400);
  const preview=await ok(await run('preview'));assert.equal(preview.customers,1);assert.equal(env.sqlite.prepare('SELECT deleted FROM jobs WHERE id=?').get(f.jobId).deleted,0);
- const applied=await ok(await run('apply'));assert.deepEqual({customers:applied.customers,gardens:applied.gardens,jobs:applied.jobs},{customers:1,gardens:1,jobs:1});assert.equal(applied.replayed,false);assert.equal((await ok(await run('apply'))).replayed,true);
+ const applied=await ok(await run('apply'));assert.deepEqual({customers:applied.customers,gardens:applied.gardens,jobs:applied.jobs},{customers:1,gardens:1,jobs:1});assert.equal(applied.replayed,false);assert.equal((await run('apply')).status,404);assert.equal((await run('preview')).status,404);
  delete env.APPROVED_VOLUME_CLEANUP;assert.equal((await run('apply')).status,404);
  }finally{env.sqlite.close();}});
