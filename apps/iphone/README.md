@@ -1,6 +1,6 @@
 # Pracovní deník pro iPhone
 
-Verze 0.3 rozšiřuje SwiftUI z přehledu, zakázek a detailu také na zbývající povolené firemní sekce: zákazníky, zahrady, historii, závady, protokoly, materiál, předplatné, docházku, vozidla, tým, nastavení a centrum oznámení. Formuláře, výběry, karty, rozbalovací části, podpis, fotografie s přesouváním značek, MapKit a náhled dokumentů používají nativní ovládací prvky. Zachovává zelenou identitu a názvy jednotlivých firem.
+Verze 0.4 přidává podporu APNs a navazuje na převod rozhraní ve verzi 0.3. Ten rozšiřuje SwiftUI z přehledu, zakázek a detailu také na zbývající povolené firemní sekce: zákazníky, zahrady, historii, závady, protokoly, materiál, předplatné, docházku, vozidla, tým, nastavení a centrum oznámení. Formuláře, výběry, karty, rozbalovací části, podpis, fotografie s přesouváním značek, MapKit a náhled dokumentů používají nativní ovládací prvky. Zachovává zelenou identitu a názvy jednotlivých firem.
 
 ## Co je ve Swiftu a co zůstává společné
 
@@ -30,7 +30,7 @@ Pro vlastní vývoj: Xcode 26.0.1, XcodeGen 2.44.1, `cd apps/iphone && xcodegen 
 - Návrat z pozadí ani přepnutí nativní sekce neobnovuje hlavní stránku. Při pádu webového procesu se nabídne výslovné obnovení. Zachovat lze jen již uložené koncepty / fronty; neuloženou paměť zaniklého procesu nelze zaručit.
 - Offline zápisy používají původní podporované workflow. Pro offline spuštění je nejdřív nutné online přihlášení a naplnění cache. Typovaný nativní přehled/seznam vyžaduje ověřené připojení; při jeho ztrátě se použijí dostupné původní pracovní obrazovky vykreslené nativně. Nedochází ke slibu, že všechny původně online funkce nově fungují offline.
 - Neodinstalovávejte aplikaci ani nemažte její data, dokud obsahuje neodeslanou práci. Úložiště Safari a aplikace se automaticky neslučují.
-- Centrum oznámení je dostupné. **Nativní APNs ani push na zamčeném telefonu nejsou implementované**. Webový push ve WKWebView nepovažujeme za náhradu APNs. Je potřeba zvláštní integrace a podepsaný profil.
+- Centrum oznámení je dostupné. **Podpora nativního APNs je implementovaná, ale doručování zatím čeká na skutečnou Apple konfiguraci a podepsanou aplikaci.** Podrobné kroky a ověřené hranice jsou v `docs/IPHONE-PUSH-2026-11-04.md`. Webový push ve WKWebView není náhradou APNs.
 - Nativní rozhraní je navázané na kompatibilní verzi webového kontraktu. Úpravy jeho DOM struktur je potřeba ověřovat integračními testy. Nejde o nezávislého klienta, který by fungoval bez společného enginu.
 - Na fyzickém iPhonu zbývá ověřit skutečné přihlášení poskytovatele, fotoaparát/fotoknihovnu, GPS, dlouhé uspání a offline spuštění, velké importy, systémové sdílení a SMS. Simulátor tyto zkoušky nenahrazuje.
 

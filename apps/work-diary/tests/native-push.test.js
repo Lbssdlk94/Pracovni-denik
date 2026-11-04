@@ -9,7 +9,7 @@ const device={token:'ab'.repeat(32),environment:'development',bundleId:'cz.praco
 const register=async(env,actor=people.worker)=>{const r=await call(env,'/api/notifications/native',actor,'POST',device);assert.equal(r.status,200,await r.clone().text());return r.json();};
 const addJob=(env,id='native-a',who=people.worker.id)=>env.sqlite.prepare("INSERT INTO jobs(id,title,description,address,assigned_to,assigned_name,due_date,status,created_at,updated_at,created_by,updated_by) VALUES(?, 'PRIVATE CUSTOMER','PRIVATE WORK','PRIVATE ADDRESS',?,'','','planned',?,?,'owner-id','owner-id')").run(id,who,Date.now()+1,Date.now()+1);
 test('APNs signs independently verifiable ES256 JWTs, caches them, validates token lengths and sends only generic data',async()=>{
- const {pair,config}=await keys(),now=Date.now(),jwt=await apnsProviderToken(config,now),parts=jwt.split('.');
+ const {pair,config}=await keys(),now=Date.now(),parallel=await Promise.all(Array.from({length:8},()=>apnsProviderToken(config,now))),jwt=parallel[0],parts=jwt.split('.');assert.ok(parallel.every(value=>value===jwt),'Concurrent deliveries must share a provider JWT instead of triggering Apple token-rotation limits');
  assert.equal(await crypto.subtle.verify({name:'ECDSA',hash:'SHA-256'},pair.publicKey,Buffer.from(parts[2],'base64url'),new TextEncoder().encode(parts.slice(0,2).join('.'))),true);
  assert.deepEqual(JSON.parse(Buffer.from(parts[0],'base64url')),{alg:'ES256',kid:config.APNS_KEY_ID});assert.equal(JSON.parse(Buffer.from(parts[1],'base64url')).iss,config.APNS_TEAM_ID);
  assert.equal(await apnsProviderToken(config,now+60000),jwt);assert.notEqual(await apnsProviderToken(config,now+41*60000),jwt);

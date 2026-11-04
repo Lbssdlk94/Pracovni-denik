@@ -12,11 +12,14 @@ export async function apnsProviderToken(env,now=Date.now()){
  if(!apnsConfiguration(env).configured)throw Error('APNS_CONFIGURATION');
  const identity=[env.APNS_TEAM_ID,env.APNS_KEY_ID,env.APNS_PRIVATE_KEY].join('|');
  if(apnsCached?.identity===identity&&now-apnsCached.at<40*60000&&now>=apnsCached.at)return apnsCached.token;
+ const task=(async()=>{
  const raw=env.APNS_PRIVATE_KEY.replace(/-----[^-]+-----/g,'').replace(/\s/g,'');
  const key=await crypto.subtle.importKey('pkcs8',Uint8Array.from(atob(raw),c=>c.charCodeAt(0)),{name:'ECDSA',namedCurve:'P-256'},false,['sign']);
  const input=apns64(apnsEncoder.encode(JSON.stringify({alg:'ES256',kid:env.APNS_KEY_ID})))+'.'+apns64(apnsEncoder.encode(JSON.stringify({iss:env.APNS_TEAM_ID,iat:Math.floor(now/1000)})));
  const token=input+'.'+apns64(await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},key,apnsEncoder.encode(input)));
- apnsCached={identity,at:now,token};return token;
+ return token;
+ })();apnsCached={identity,at:now,token:task};
+ try{return await task;}catch(error){if(apnsCached?.token===task)apnsCached=null;throw error;}
 }
 export function apnsDeviceToken(token){if(typeof token!=='string'||!/^([a-fA-F0-9]{2}){16,256}$/.test(token))throw Error('APNS_DEVICE_TOKEN');return token.toLowerCase();}
 export function apnsPayload(test=false){return {aps:{alert:{title:'Pracovní deník',body:test?'Zkušební oznámení funguje.':'Máte nové upozornění. Otevřete aplikaci.'},sound:'default','thread-id':'work-diary-inbox'},workDiaryInbox:1};}
