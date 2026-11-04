@@ -1,3 +1,4 @@
+import {installNativeClient} from './native-client.js?v=native-swiftui-v1';
 import {transientConnectionError} from './io.js?v=connection-recovery-v1';
 import {createConnectionRecovery} from './connection-recovery.js?v=connection-recovery-v1';
 import {createWorkspaceUI,workspaceFilterMarkup,workspaceBadge,workspaceDisciplineField} from './workspace-ui.js?v=shared-directory-v1';
@@ -484,3 +485,21 @@ window.addEventListener('workspace-access-reset',()=>{location.replace(location.
 window.addEventListener('workspace-recovery-failed',event=>{app.innerHTML='<main class="login-page"><h1>Změněný přístup</h1><p role="alert">Neodeslanou práci se zatím nepodařilo zabezpečit. '+esc(event.detail.message)+'</p><p>Místní zápisy nebyly smazány. Přístup k nim je zablokovaný; připojte se a zkuste aplikaci znovu otevřít.</p><button class="btn" data-workspace-retry>Obnovit aplikaci</button></main>';app.querySelector('[data-workspace-retry]').onclick=()=>location.reload();});
 
 window.addEventListener('workspace-capture-extra',event=>{if(dirty&&draft)event.detail.push({key:'shaft-editor:'+draft.id,record:{...draft,markers:draft.markers.map(value=>({...value}))}});for(const value of planUI.recoveryDrafts())event.detail.push({key:'plan-markers:'+value.gardenId,record:value});});
+
+// Only installed inside the iPhone WebKit host; normal browsers retain their UI.
+installNativeClient({db,getName:appDisplayName,onSession:current=>{sessionInfo=current;},
+ canResume:()=>!document.querySelector('dialog[open]')&&!dirty&&!planUI.hasAnyChanges(),
+ openTarget:async target=>{
+  if(target.jobId){
+   if(!/^[-\w]{1,100}$/.test(target.jobId)||!enabled('jobs'))throw Error('Zakázka není dostupná.');
+   if(target.action==='protocol'){await serviceWorkUI.open(target.jobId);return;}
+   navigate('jobs');await jobsUI.open(target.jobId);
+   const selectors={status:'[data-job-status]',depart:'[data-job-depart]',photos:'#job-jump-photos',edit:'[data-job-edit]'};
+   if(target.action==='defects'){document.querySelector('#job-garden-defects')?.scrollIntoView({block:'start'});return;}
+   if(target.action&&target.action!=='detail'){const selector=selectors[target.action],button=selector&&modal.querySelector(selector);if(!button)throw Error('Tato akce není pro zakázku dostupná.');button.click();}
+   return;
+  }
+  if(target.page==='notifications'){if(!enabled('notifications'))throw Error('Upozornění jsou vypnutá.');document.querySelector('[data-notifications-open]')?.click();return;}
+  if(!navigationItems().some(([id])=>id===target.page))throw Error('Tato sekce není dostupná.');
+  const button=[...document.querySelectorAll('.nav [data-page]')].find(b=>b.dataset.page===target.page);if(!button)throw Error('Sekce není dostupná.');button.click();
+ }});

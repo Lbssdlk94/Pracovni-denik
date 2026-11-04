@@ -5,9 +5,9 @@ import WebKit
 @main
 @MainActor
 struct PracovniDenikApp: App {
-    @StateObject private var session = BrowserSession(testing: ProcessInfo.processInfo.arguments.contains("--ui-testing"))
+    @StateObject private var session = BrowserSession(testing: ProcessInfo.processInfo.arguments.contains("--ui-testing") || ProcessInfo.processInfo.arguments.contains("--native-ui-testing"), nativeTesting: ProcessInfo.processInfo.arguments.contains("--native-ui-testing"))
     var body: some Scene {
-        WindowGroup { DiaryScreen(session: session).preferredColorScheme(.light) }
+        WindowGroup { HybridDiaryScreen(session: session).preferredColorScheme(.light) }
     }
 }
 

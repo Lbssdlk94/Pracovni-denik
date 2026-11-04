@@ -24,15 +24,23 @@ final class BrowserSession: NSObject, ObservableObject, WKNavigationDelegate, WK
     private(set) var hasDocument = false
     private var downloadURLs: [ObjectIdentifier: URL] = [:]
     private let testing: Bool
+    private let nativeTesting: Bool
+    private var nativeRelay: NativeStateRelay?
+    @Published var nativeSignal = NativeSignal(kind: .invalidated)
 
-    init(testing: Bool = false, autoLoad: Bool = true) {
+    init(testing: Bool = false, autoLoad: Bool = true, nativeTesting: Bool = false) {
         self.testing = testing
+        self.nativeTesting = nativeTesting
+        let relay = NativeStateRelay()
+        self.nativeRelay = relay
         let config = WKWebViewConfiguration()
         config.websiteDataStore = testing ? .nonPersistent() : .default()
         config.limitsNavigationsToAppBoundDomains = !testing
         config.defaultWebpagePreferences.preferredContentMode = .mobile
+        config.userContentController.add(relay, name: "workDiaryState")
         webView = WKWebView(frame: .zero, configuration: config)
         super.init()
+        relay.owner = self
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.allowsBackForwardNavigationGestures = true
@@ -42,7 +50,14 @@ final class BrowserSession: NSObject, ObservableObject, WKNavigationDelegate, WK
         if autoLoad { loadInitialContent() }
     }
     func loadInitialContent() {
-        if testing {
+        if nativeTesting {
+            do {
+                let url = Bundle.main.url(forResource: "NativeFixture", withExtension: "json")!
+                let data = try String(contentsOf: url, encoding: .utf8)
+                let script = try String(contentsOf: Bundle.main.url(forResource: "NativeFixture", withExtension: "js")!, encoding: .utf8)
+                webView.loadHTMLString("<html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'></head><body><h1>Webová část – izolovaný test</h1><script>const fixture=\(data);\(script)</script></body></html>", baseURL: EndpointPolicy.home)
+            } catch { navigationFailed(error) }
+        } else if testing {
             webView.loadHTMLString("""
             <!doctype html><html lang="cs"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
             <body style="font:18px -apple-system;background:#f7f9f6;color:#183f35"><h1>Test deníku</h1>
@@ -93,7 +108,11 @@ final class BrowserSession: NSObject, ObservableObject, WKNavigationDelegate, WK
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         guard webView === self.webView else { return }
         initialLoading = false
+        nativeSignal = NativeSignal(kind: .invalidated)
         problem = "iOS ukončil zobrazení deníku. Uložená data zůstávají v aplikaci. Pro pokračování zvolte Znovu načíst."
+    }
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        if webView === self.webView { nativeSignal = NativeSignal(kind: .invalidated) }
     }
     private func showAuthentication(_ url: URL, configuration: WKWebViewConfiguration? = nil) -> WKWebView {
         let config = configuration ?? WKWebViewConfiguration()

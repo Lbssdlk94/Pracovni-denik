@@ -1,0 +1,52 @@
+import SwiftUI
+
+struct HybridDiaryScreen: View {
+    @ObservedObject var session: BrowserSession
+    @StateObject private var store: NativeDiaryStore
+    @Environment(\.scenePhase) private var scenePhase
+    init(session: BrowserSession) {
+        self.session = session
+        _store = StateObject(wrappedValue: NativeDiaryStore(browser: session))
+    }
+    var nativeVisible: Bool { !store.webVisible && store.context != nil }
+    var body: some View {
+        ZStack {
+            // The web form, DOM, Files, IndexedDB, cookies and outboxes remain
+            // mounted when covered by native screens. Never reload to switch UI.
+            DiaryScreen(session: session)
+                .opacity(nativeVisible ? 0 : 1).allowsHitTesting(!nativeVisible).accessibilityHidden(nativeVisible)
+                .safeAreaInset(edge: .top) {
+                    if !nativeVisible && store.wasActivated {
+                        HStack {
+                            Button { Task { await store.activate() } } label: { Label("Nativní přehled", systemImage: "chevron.left") }.frame(minHeight: 44)
+                            Spacer()
+                            if store.loading { ProgressView() }
+                        }.padding(.horizontal).background(.regularMaterial)
+                    }
+                }
+            if let context = store.context {
+                NativeDiaryTabs(store: store, context: context).opacity(nativeVisible ? 1 : 0)
+                    .allowsHitTesting(nativeVisible).accessibilityHidden(!nativeVisible)
+            }
+            if !store.verifiedInForeground || scenePhase != .active {
+                DiaryStyle.background.ignoresSafeArea().overlay { ProgressView("Ověřuji přístup…") }
+            }
+        }.tint(DiaryStyle.accent)
+            .safeAreaInset(edge: .top) {
+                if let error = store.error {
+                    HStack { Text(error).font(.callout); Button("Zavřít") { store.error = nil }.frame(minHeight: 44) }.padding().background(.background)
+                }
+            }
+            .onChange(of: session.nativeSignal) { _, signal in Task { await store.receive(signal) } }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { Task { await store.resumed() } }
+                else { store.verifiedInForeground = false }
+            }
+            .task {
+                while !Task.isCancelled {
+                    do { try await Task.sleep(for: .seconds(60)); try Task.checkCancellation() } catch { break }
+                    if scenePhase == .active && nativeVisible { await store.activate(); if store.tab == 1 { await store.reloadJobs() } }
+                }
+            }
+    }
+}
