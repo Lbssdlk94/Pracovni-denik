@@ -70,6 +70,7 @@ struct WatchJobView: View {
     @ObservedObject var store: WatchStore
     let id: String
     @State private var confirmDone = false
+    @State private var pendingCompletion: WatchJob?
     @State private var showArrival = false
     var body: some View {
         TimelineView(.periodic(from:.now,by:1)) { timeline in
@@ -97,7 +98,7 @@ struct WatchJobView: View {
                         if job.canStart { Button("Zahájit práci") { Task { await store.perform(.start,job:job) } } }
                         if job.canComplete {
                             if job.requiresProtocol { Button("Dokončit na iPhonu") { Task { await store.perform(.openPhone,job:job) } } }
-                            else { Button("Hotovo") { confirmDone = true }.accessibilityIdentifier("watch-complete") }
+                            else { Button("Hotovo") { pendingCompletion = job; confirmDone = true }.accessibilityIdentifier("watch-complete") }
                         }
                         if job.status == "incomplete" { Text(job.incompleteReason).foregroundStyle(.orange).font(.footnote) }
                         if job.status == "done" { Text(["ready":"Protokol hotový","draft":"Protokol rozpracovaný","missing":"Protokol chybí"][job.protocolStatus] ?? "Protokol chybí").font(.footnote) }
@@ -111,7 +112,7 @@ struct WatchJobView: View {
             }
         }.navigationTitle("Zakázka")
             .confirmationDialog("Označit zakázku jako hotovou?",isPresented:$confirmDone,titleVisibility:.visible) {
-                Button("Potvrdit dokončení") { if let job = store.visible()?.jobs.first(where:{$0.id == id}) { Task { await store.perform(.complete,job:job) } } }
+                Button("Potvrdit dokončení") { if let job = pendingCompletion { Task { await store.perform(.complete,job:job) } } }
                 Button("Zrušit",role:.cancel) {}
             } message: { Text("Závady tím nebudou vyřešené. Protokol můžete doplnit na iPhonu.") }
             .sheet(isPresented:$showArrival) { if let job = store.visible()?.jobs.first(where:{$0.id == id}) { WatchArrivalView(store:store,job:job) } }
@@ -123,10 +124,11 @@ struct WatchArrivalView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var hour = 12
     @State private var minute = 0
+    @State private var seeded = false
     private var exactTime: String { String(format:"%02d:%02d",hour,minute) }
     var body: some View {
         NavigationStack {
-            VStack(spacing:6) {
+            ScrollView { VStack(spacing:6) {
                 Text("Příjezd dnes v \(exactTime)").font(.headline)
                 HStack {
                     Picker("Hodina",selection:$hour) { ForEach(0..<24,id:\.self){ Text(String(format:"%02d",$0)).tag($0) } }
@@ -134,8 +136,9 @@ struct WatchArrivalView: View {
                 }.frame(height:85)
                 Text("Čas v místě zakázky").font(.caption2).foregroundStyle(.secondary)
                 Button("Potvrdit odjezd") { let value = exactTime;dismiss();Task { await store.perform(.depart,job:job,arrivalTime:value) } }.disabled(store.busy || store.preview)
-            }.navigationTitle("Na cestě").padding(.horizontal,6)
+            }.padding(.horizontal,6) }.navigationTitle("Na cestě")
         }.onAppear {
+            guard !seeded else { return };seeded = true
             var calendar = Calendar(identifier:.gregorian);calendar.timeZone = TimeZone(identifier:"Europe/Prague")!
             let suggested = Date().addingTimeInterval(1800);hour = calendar.component(.hour,from:suggested);minute = calendar.component(.minute,from:suggested)
         }

@@ -47,26 +47,6 @@ jobs:
           mkdir -p build
           UDID=$(xcrun simctl list devices available -j | python3 apps/iphone/select_simulator.py)
           xcodebuild -project apps/iphone/PracovniDenik.xcodeproj -scheme PracovniDenik -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build/simulator -resultBundlePath build/Tests.xcresult test CODE_SIGNING_ALLOWED=NO | tee build/simulator.log
-      - name: Apple Watch simulator build and previews
-        shell: bash
-        run: |
-          set -euo pipefail
-          WATCH_UDID=$(xcrun simctl list devices available -j | python3 apps/iphone/select_watch_simulator.py)
-          xcodebuild -project apps/iphone/PracovniDenik.xcodeproj -scheme PracovniDenikWatch -destination "platform=watchOS Simulator,id=$WATCH_UDID" -derivedDataPath build/watch-simulator build CODE_SIGNING_ALLOWED=NO | tee build/watch-simulator.log
-          xcrun simctl boot "$WATCH_UDID" || true
-          xcrun simctl bootstatus "$WATCH_UDID" -b
-          WATCH_APP=build/watch-simulator/Build/Products/Debug-watchsimulator/PracovniDenikWatch.app
-          xcrun simctl install "$WATCH_UDID" "$WATCH_APP"
-          mkdir -p build/watch-previews
-          for SCREEN in day detail inbox; do
-            xcrun simctl terminate "$WATCH_UDID" cz.pracovnidenik.app.watchapp >/dev/null 2>&1 || true
-            ARGS=(--watch-preview)
-            if [[ "$SCREEN" == detail ]]; then ARGS+=(--watch-preview-detail); fi
-            if [[ "$SCREEN" == inbox ]]; then ARGS+=(--watch-preview-inbox); fi
-            xcrun simctl launch "$WATCH_UDID" cz.pracovnidenik.app.watchapp "${ARGS[@]}"
-            sleep 3
-            xcrun simctl io "$WATCH_UDID" screenshot "build/watch-previews/$SCREEN.png"
-          done
       - name: Unsigned iPhone build
         shell: bash
         run: |
@@ -80,6 +60,33 @@ jobs:
           zip -qr ../PracovniDenik-UNSIGNED-REQUIRES-SIGNING.ipa Payload
           cd ../..
           shasum -a 256 build/PracovniDenik-UNSIGNED-REQUIRES-SIGNING.ipa > build/IPA-SHA256.txt
+      - name: Apple Watch simulator build and previews
+        shell: bash
+        run: |
+          set -euo pipefail
+          WATCH_UDID=$(xcrun simctl list devices available -j | python3 apps/iphone/select_watch_simulator.py)
+          xcodebuild -project apps/iphone/PracovniDenik.xcodeproj -scheme PracovniDenikWatch -destination "platform=watchOS Simulator,id=$WATCH_UDID" -derivedDataPath build/watch-simulator build CODE_SIGNING_ALLOWED=NO | tee build/watch-simulator.log
+          PHONE_UDID=$(xcrun simctl list devices available -j | python3 apps/iphone/select_simulator.py)
+          xcrun simctl shutdown "$WATCH_UDID" >/dev/null 2>&1 || true
+          xcrun simctl shutdown "$PHONE_UDID" >/dev/null 2>&1 || true
+          python3 apps/iphone/pair_watch_simulators.py "$WATCH_UDID" "$PHONE_UDID"
+          xcrun simctl boot "$PHONE_UDID"
+          xcrun simctl bootstatus "$PHONE_UDID" -b
+          xcrun simctl install "$PHONE_UDID" build/simulator/Build/Products/Debug-iphonesimulator/PracovniDenik.app
+          xcrun simctl boot "$WATCH_UDID"
+          xcrun simctl bootstatus "$WATCH_UDID" -b
+          WATCH_APP=build/watch-simulator/Build/Products/Debug-watchsimulator/PracovniDenikWatch.app
+          xcrun simctl install "$WATCH_UDID" "$WATCH_APP"
+          mkdir -p build/watch-previews
+          for SCREEN in day detail inbox; do
+            xcrun simctl terminate "$WATCH_UDID" cz.pracovnidenik.app.watchapp >/dev/null 2>&1 || true
+            ARGS=(--watch-preview)
+            if [[ "$SCREEN" == detail ]]; then ARGS+=(--watch-preview-detail); fi
+            if [[ "$SCREEN" == inbox ]]; then ARGS+=(--watch-preview-inbox); fi
+            xcrun simctl launch "$WATCH_UDID" cz.pracovnidenik.app.watchapp "${ARGS[@]}"
+            sleep 3
+            xcrun simctl io "$WATCH_UDID" screenshot "build/watch-previews/$SCREEN.png"
+          done
       - name: Signed IPA with Push Notifications
         if: github.event_name == 'workflow_dispatch' && inputs.sign_ipa == true
         env:
