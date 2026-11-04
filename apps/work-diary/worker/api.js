@@ -27,6 +27,7 @@ import {handleEmailConfiguration} from './email-config.js';
 import {handleProtocolEmails} from './protocol-emails.js';
 import {handleInvoiceCompany} from './protocol-billing.js';
 import {handleWorkRates} from './work-charges.js';
+import {handleVolumeFixtureCleanup} from './volume-fixture-cleanup.js';
 import {handleMaterials} from './materials.js';
 import {handleSubscriptions} from './subscriptions.js';
 import {handleServiceWork} from './service-work.js';
@@ -234,6 +235,7 @@ async function workspaceRawApi(request,env,ctx){
     if(path==='/api/workspace/recovery-key'&&method==='GET'){await assertInstallation(env);return json({recovery:await workspaceRecoveryPublicInfo(env)});}
     if(['/api/auth/options','/api/auth/login','/api/auth/recover'].includes(path)){await assertInstallation(env);return await handleLocalPublicAuth(request,env,{body,json,fail});}
     if(path==='/api/platform-invitation'){if(await passwordOnly(env))fail(403,'Účty nyní vytváří správce jménem a heslem.');await assertInstallation(env);return await tenantClaimInvitation(request,env,{fail,json,body,userFrom});}
+    if(path==='/api/maintenance/volume-fixtures-20261027')return await handleVolumeFixtureCleanup(request,env,{fail,json,accessHash,boundedBytes});
     if(path==='/api/maintenance/approved-job-import'){await tenantPlatformGate(request,env,{fail});
       const response=await handleApprovedImport(request,env,{fail,json,one,cleanText,validId,accessHash,boundedBytes});
       ctx.waitUntil(dispatchNotifications(env).catch(()=>{}));return response;

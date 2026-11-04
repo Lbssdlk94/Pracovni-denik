@@ -32,3 +32,14 @@ test('Cleanup never deletes by name and skips changed contacts, unrelated work a
  env.sqlite.exec(sql);for(const id of [changed.customerId,used.customerId,defect.customerId,'normal-test-name'])assert.equal(env.sqlite.prepare('SELECT deleted FROM customers WHERE id=?').get(id).deleted,0,id);
  assert.equal(JSON.parse(env.sqlite.prepare('SELECT value FROM settings WHERE key=?').get(key).value).families.length,0);
  }finally{env.sqlite.close();}});
+test('Fixed maintenance capability rejects anonymous, expired, foreign-installation and supplied-data requests; preview and replay are safe',async()=>{const env=await setup();try{
+ const f=await fixture(env,8),token='a'.repeat(64),hash=createHash('sha256').update(token).digest('hex'),installation=env.sqlite.prepare("SELECT instance_id FROM installation_state WHERE singleton='primary'").get().instance_id,path='/api/maintenance/volume-fixtures-20261027';
+ env.PUBLIC_APP_URL='https://zavlahy.test';const capability={origin:env.PUBLIC_APP_URL,batch:'volume-20261027',tokenHash:hash,expiresAt:Date.now()+300000,installationId:installation,ownerId:people.owner.id};env.APPROVED_VOLUME_CLEANUP=JSON.stringify(capability);
+ const run=(mode,tokenValue=token,value)=>api(request(path+'?mode='+mode,null,'POST',value,{'authorization':'Bearer '+tokenValue}),env,ctx);
+ assert.equal((await run('apply','b'.repeat(64))).status,401);env.APPROVED_VOLUME_CLEANUP=JSON.stringify({...capability,expiresAt:Date.now()-1});assert.equal((await run('apply')).status,401);
+ env.APPROVED_VOLUME_CLEANUP=JSON.stringify({...capability,origin:'https://another-company.test'});assert.equal((await run('apply')).status,403);
+ env.APPROVED_VOLUME_CLEANUP=JSON.stringify(capability);assert.equal((await run('apply',token,{id:'unapproved'})).status,400);
+ const preview=await ok(await run('preview'));assert.equal(preview.customers,1);assert.equal(env.sqlite.prepare('SELECT deleted FROM jobs WHERE id=?').get(f.jobId).deleted,0);
+ const applied=await ok(await run('apply'));assert.deepEqual({customers:applied.customers,gardens:applied.gardens,jobs:applied.jobs},{customers:1,gardens:1,jobs:1});assert.equal(applied.replayed,false);assert.equal((await ok(await run('apply'))).replayed,true);
+ delete env.APPROVED_VOLUME_CLEANUP;assert.equal((await run('apply')).status,404);
+ }finally{env.sqlite.close();}});

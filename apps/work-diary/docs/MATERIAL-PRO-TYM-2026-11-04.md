@@ -13,3 +13,5 @@ Používá standardní příznaky smazání a zvýšení verzí. Původní hodno
 Zkouška na izolované kopii osmi souvisejících tabulek: 110 zákazníků, 110 zahrad a 110 aktivních zakázek označeno jako smazané. Jedna zakázka ze staršího pokusu již byla smazaná. Žádný jiný řádek těchto tabulek se nezměnil. Kopie sloužila výhradně pro čtení a ověření migrace; do provozu se neimportuje.
 
 Ověření: 312 testů prošlo. Prohlížeč Chromium ověřil katalog a oprávnění na 360, 390, 430 a 1440 px, výběr množství do protokolu pracovníkem a jeho skutečné uložení po offline zápisu, původní ceny po změně katalogu a PDF. Skutečný iPhone/Safari a nová IPA nebyly v této kontrole ověřeny.
+
+Provozní úklid se provádí zvláštní jednorázovou servisní operací, protože nasazení samotné datový převod neprovedlo. Operace přijímá jen pevnou testovací sadu, nikoli ID/SQL od volajícího. Vyžaduje dočasné serverové pověření vázané na konkrétní doménu, živého vlastníka a platnost nejvýše 30 minut; ověřuje také identitu databáze a úložiště. Podporuje kontrolu nanečisto a opakování bez dalších změn. Pověření se po úklidu odstraní.
