@@ -40,7 +40,7 @@ Závěrečné ověření **prošlo celé**: [GitHub Actions 41984820174](https:/
 
 ### Stav připravené verze 0.6.1 (7)
 
-Zdrojové změny přidávají jednu společnou `NavigationStack` cestu pro výběr zakázky i náhled, odstranění asynchronního počátečního přesměrování, pracovní návštěvy na začátku Watch přehledu, kompaktní hlavičku detailu a čitelné tlačítko nativních možností. Watch používá `confirmationDialog`, nikoli nepodporované webové menu. Přehled ani pracovní operace iPhonu se proti ověřené 0.6.0 nemění.
+Zdrojové změny přidávají jednu společnou `NavigationStack` cestu pro výběr zakázky i náhled, odstranění asynchronního počátečního přesměrování, pracovní návštěvy na začátku Watch přehledu, kompaktní hlavičku detailu a čitelné tlačítko nativních možností. Nabídka možností hodinek používá nativní `confirmationDialog`. Přehled ani pracovní operace iPhonu se proti ověřené 0.6.0 nemění.
 
 **Tato verze není sestavená ani ověřená.** GitHub při běhu [41989006987](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/41989006987), zdroj `ef245a434aa51cba243f0310b02385b8b934d70b`, odmítl přidělit runner. Neproběhl žádný sestavovací krok. Anotace: “The job was not started because recent account payments have failed or your spending limit needs to be increased.” Stejná překážka nastala u předchozího běhu 41988885874. Nelze ji zaměňovat za chybu překladače ani za úspěšné sestavení 0.6.1. Je potřeba opravit platbu/limit v nastavení GitHub Billing a poté spustit nové ověření. Nesmí se nahrazovat ověřené IPA neexistujícím balíčkem 0.6.1.
 
