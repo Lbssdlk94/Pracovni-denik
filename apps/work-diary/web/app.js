@@ -426,7 +426,7 @@ async function start(){
  nearby.restore().catch(report);
  if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').then(()=>{offlineReady=true;}).catch(()=>{offlineReady=false;});}
  const linkedJob=new URLSearchParams(location.search).get('job');if(linkedJob){history.replaceState(null,'',location.pathname);navigate('jobs');jobsUI.open(linkedJob).catch(report);}
- if(!sessionListeners){sessionListeners=true;setInterval(()=>{if(document.visibilityState==='visible'&&navigator.onLine)synchronize().catch(err=>console.warn('Auto-sync failed',err));},120000);
+ if(!sessionListeners){sessionListeners=true;setInterval(()=>{if(document.visibilityState==='visible'&&navigator.onLine)synchronize().catch(err=>console.warn('Auto-sync failed',err));},300000);
  document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')return;if(navigator.onLine)synchronize().finally(()=>nearby.resume().catch(report));else nearby.resume().catch(report);});}
 }
 window.addEventListener('hashchange',()=>{const token=new URLSearchParams(location.hash.slice(1)).get('access');if(token){if(!leaveDraft()||planUI.hasAnyChanges()&&!confirm('Přepnout přístup a zahodit neuložené značky v plánu?')){history.replaceState(null,'',location.pathname+location.search);return;}gardenHistoryUI.clear();notificationsUI.clear();materialsUI.clear();subscriptionsUI.clear();serviceWorkUI.clear();customersUI.clear();jobsUI.clear();sessionGeneration++;sessionInfo=null;clearURLs();accessUI.open(token).catch(report);}});
