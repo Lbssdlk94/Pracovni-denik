@@ -1,2 +1,7 @@
+PracovniDenik.xcodeproj/
+Info.plist
+build/
+*.xcresult
+*.ipa
 __pycache__/
 *.pyc

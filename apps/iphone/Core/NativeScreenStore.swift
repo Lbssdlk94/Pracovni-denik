@@ -31,7 +31,8 @@ final class NativeScreenStore: ObservableObject {
                 keys.formUnion(imageKeys(control.children ?? []))
             }
         }
-        let currentImages = imageKeys(value.nodes)
+        var currentImages = imageKeys(value.nodes)
+        if value.modal == true, let baseScreen { currentImages.formUnion(imageKeys(baseScreen.nodes)) }
         images = images.filter { currentImages.contains($0.key) }
     }
     func refresh() async {
