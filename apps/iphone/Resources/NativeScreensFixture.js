@@ -1,3 +1,4 @@
+// Exact native-screen adapter used only with isolated fixture data.
 // Native screen contract: SwiftUI renders controls; the existing domain/client
 // logic owns validation, role gates, version checks, drafts and offline outboxes.
 // Opaque handles are bound to live DOM nodes, never arbitrary JS or API paths.
@@ -27,11 +28,11 @@ function createNativeScreens({db,getSession,captureDrafts=()=>[]}){
   if(el.matches('.sidebar,.topbar,.nav,.mobile-account'))return [];
   if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA'){
    if(['hidden','file','submit','button','reset'].includes(el.type))return [];
-   return [{...base,kind:el.type==='checkbox'||el.type==='radio'?'toggle':tag==='SELECT'?'select':'field',text:label(el),value:el.value,checked:!!el.checked,disabled:el.matches(':disabled')||el.readOnly,fieldType:tag==='TEXTAREA'?'textarea':el.type||'text',required:el.required,options:tag==='SELECT'?[...el.options].map(o=>({id:o.value,text:o.text,disabled:o.disabled,selected:o.selected})):[],multiple:!!el.multiple,secure:el.type==='password'||el.id==='access-link'}];
+   return [{...base,kind:el.type==='checkbox'||el.type==='radio'?'toggle':tag==='SELECT'?'select':'field',text:label(el),value:el.value,checked:!!el.checked,disabled:el.matches(':disabled')||el.readOnly,fieldType:tag==='TEXTAREA'?'textarea':el.type||'text',autocomplete:el.autocomplete||'',required:el.required,options:tag==='SELECT'?[...el.options].map(o=>({id:o.value,text:o.text,disabled:o.disabled,selected:o.selected})):[],multiple:!!el.multiple,secure:el.type==='password'||el.id==='access-link'}];
   }
   if(tag==='LABEL'&&el.querySelector('input[type=file]')){const file=el.querySelector('input[type=file]');return [{...base,handle:id(file),kind:'file',text:text(el)||'Vybrat soubor',disabled:file.disabled}];}
   if(tag==='LABEL'&&el.querySelector('input,select,textarea'))return [...el.children].flatMap((c,i)=>read(c,path+'.'+i,deep));
-  if(tag==='BUTTON'||tag==='A'||el.getAttribute('role')==='button')return [{...base,kind:'button',text:el.getAttribute('aria-label')||text(el)||el.title||(el.matches('[data-close]')?'Zavřít':'Otevřít'),disabled:!!el.disabled,danger:el.matches('.danger,[class*=delete]'),primary:el.classList.contains('primary')}];
+  if(tag==='BUTTON'||tag==='A'||el.getAttribute('role')==='button')return [{...base,kind:'button',text:el.getAttribute('aria-label')||text(el)||el.title||(el.matches('[data-close]')?'Zavřít':'Otevřít'),disabled:!!el.disabled,danger:el.matches('.danger,[class*=delete]'),primary:el.classList.contains('primary'),intent:el.matches('[data-close]')?'dismiss':el.type==='submit'?'submit':el.href?.startsWith('tel:')?'call':el.matches('[data-job-navigate],[data-navigate]')?'navigate':el.matches('[data-customer-new],[data-job-new],[data-garden-new]')?'add':el.matches('[data-job-open],[data-customer-open]')?'open':null}];
   if(/^H[1-6]$/.test(tag))return [{...base,kind:'heading',text:text(el),level:Number(tag[1])}];
   if(tag==='DETAILS'){
    const summary=el.querySelector(':scope > summary');return [{...base,kind:'disclosure',text:text(summary),expanded:el.open,children:[...el.childNodes].filter(n=>n!==summary).flatMap((n,i)=>read(n,path+'.'+i,true))}];
@@ -46,8 +47,11 @@ function createNativeScreens({db,getSession,captureDrafts=()=>[]}){
   if(tag==='IFRAME'||tag==='OBJECT'||tag==='EMBED')return [{...base,kind:'document',text:el.title||'Zobrazit dokument'}];
   if(tag==='PROGRESS')return [{...base,kind:'progress',text:el.getAttribute('aria-label')||'Průběh',value:String(el.value/el.max)}];
   if(tag==='BR'||tag==='HR')return [];
+  if(['P','SMALL'].includes(tag)&&!el.querySelector('input,button,a,select,textarea,[role=button],img,canvas'))return [{...base,kind:'text',text:text(el),tone:tag==='SMALL'||el.matches('.mini-empty')?'secondary':null}];
   const children=[...el.childNodes].flatMap((n,i)=>read(n,path+'.'+i,deep));
   if(!children.length)return [];
+  if(tag==='FORM')return [{...base,kind:'form',children}];
+  if(el.matches('.modal-actions,.actions,.job-card-actions'))return [{...base,kind:'actions',children}];
   const card=el.matches('article,.panel,.storage-card,.note-box,.overview-visit,.garden-folder,.plan-shaft-list');
   return el.matches('.jobs-month-grid')?[{...base,kind:'grid',children}]:card?[{...base,kind:'card',children}]:children;
  }

@@ -1,8 +1,5 @@
-"""Choose a real installed watchOS simulator, without assuming its model name."""
-import json,sys
-for runtime,devices in sorted(json.load(sys.stdin)['devices'].items(),reverse=True):
-    if 'watchOS' in runtime:
-        for device in devices:
-            if device['isAvailable'] and 'Apple Watch' in device['name']:
-                print(device['udid']);sys.exit(0)
-raise SystemExit('No available Apple Watch simulator')
+import argparse,json,sys
+from simulator_selection import select_simulator
+parser=argparse.ArgumentParser();parser.add_argument('--sdk-major',type=int);args=parser.parse_args()
+try: print(select_simulator(json.load(sys.stdin),'watchOS',args.sdk_major))
+except ValueError as error: raise SystemExit(str(error))

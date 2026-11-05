@@ -52,4 +52,28 @@ final class NativeDiaryUITests: XCTestCase {
         app.swipeUp()
         XCTAssertTrue(app.staticTexts["Důvod: Chyběl materiál"].waitForExistence(timeout: 10))
     }
+    @MainActor
+    func testProtocolUsesNativeSheetAndOnePrimarySaveAction() {
+        let app = launch(); app.tabBars.buttons["Zakázky"].tap()
+        let customer = app.staticTexts["Pavel Svoboda – ukázka"]; XCTAssertTrue(customer.waitForExistence(timeout: 15)); customer.tap()
+        let protocolButton = app.buttons["Servisní protokol"]
+        for _ in 0..<4 { if protocolButton.isHittable { break }; app.swipeUp() }
+        protocolButton.tap()
+        XCTAssertTrue(app.navigationBars["Servisní protokol"].waitForExistence(timeout: 15))
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == %@", "Uložit")).count, 1)
+        let image = XCTAttachment(screenshot: app.screenshot()); image.name = "SwiftUI-protokol-sheet"; image.lifetime = .keepAlways; add(image)
+        app.buttons["native-modal-close"].tap()
+        XCTAssertFalse(app.navigationBars["Servisní protokol"].exists)
+    }
+    @MainActor
+    func testOpeningAndCancellingEmptyArrivalTimeDoesNotFillIt() {
+        let app = launch(); app.tabBars.buttons["Zakázky"].tap()
+        let customer = app.staticTexts["Pavel Svoboda – ukázka"]; XCTAssertTrue(customer.waitForExistence(timeout: 15)); customer.tap()
+        let depart = app.buttons["Jsem na cestě"]; XCTAssertTrue(depart.waitForExistence(timeout: 10)); depart.tap()
+        let time = app.buttons["native-field-id:fixture-arrival"]; XCTAssertTrue(time.waitForExistence(timeout: 15)); time.tap()
+        app.buttons["Zrušit"].tap()
+        XCTAssertTrue(app.buttons["native-field-id:fixture-arrival"].label.contains("Vybrat čas"))
+        let image = XCTAttachment(screenshot: app.screenshot()); image.name = "SwiftUI-presny-prijezd"; image.lifetime = .keepAlways; add(image)
+    }
+
 }

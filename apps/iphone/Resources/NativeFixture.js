@@ -17,6 +17,13 @@ window.__workDiaryNative={execute:async(command,payload={})=>{
  }
  if(command==='job')return {job:fixture.jobs.find(j=>j.id===payload.id),defects:fixture.defects};
  if(command==='open'){
+  if(payload.action==='protocol'||payload.action==='depart'){
+   const protocol=payload.action==='protocol',title=protocol?'Servisní protokol':'Jsem na cestě';
+   const markup=protocol?'<label>Provedené práce<textarea id="fixture-work" aria-label="Provedené práce"></textarea></label><label>Datum<input id="fixture-date" type="date" value="2026-11-05"></label>':'<label>Přesný čas příjezdu<input id="fixture-arrival" type="time" aria-label="Přesný čas příjezdu" value="" required></label>';
+   document.querySelector('#app').innerHTML='<main class="main"><h1>Zakázka</h1><p>Podrobnosti návštěvy</p></main><dialog open id="fixture-dialog"><header><h2>'+title+'</h2><button type="button" data-close aria-label="Zavřít">×</button></header><form id="fixture-form">'+markup+'<div class="modal-actions"><button type="submit" class="primary">Uložit</button></div></form></dialog>';
+   document.querySelector('[data-close]').onclick=()=>document.querySelector('#fixture-dialog').remove();document.querySelector('#fixture-form').onsubmit=e=>{e.preventDefault();document.querySelector('#fixture-dialog').remove();};
+   return {opened:true};
+  }
   document.querySelector('#app').innerHTML='<main class=main><h1>Webová část – izolovaný test</h1><form id="fixture-form"><label>Poznámka <input aria-label="Poznámka"></label><button type="button" onclick="this.closest(\'form\').remove()">Zavřít formulář</button></form></main>';
   document.querySelector('#app .main').insertAdjacentHTML('beforeend','<p>Engine visibility: '+document.visibilityState+'</p>');
   return {opened:true};

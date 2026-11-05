@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 final class NativeScreenStore: ObservableObject {
     let browser: BrowserSession
     @Published var screen: NativeScreenSnapshot?
+    @Published private(set) var baseScreen: NativeScreenSnapshot?
     @Published var error: String?
     @Published var busy = false
     @Published var images: [String: Data] = [:]
@@ -18,12 +19,12 @@ final class NativeScreenStore: ObservableObject {
     private var loadingImages = Set<String>()
     init(browser: BrowserSession) { self.browser = browser }
     func invalidate() {
-        epoch += 1; error = nil; pending.clear(); flushTask?.cancel(); screen = nil; images = [:]; loadingImages = []
+        epoch += 1; error = nil; pending.clear(); flushTask?.cancel(); screen = nil; baseScreen = nil; images = [:]; loadingImages = []
         fileRequest = nil; preview = nil; busy = false
     }
     private func accept(_ value: NativeScreenSnapshot, generation: Int) {
         guard epoch == generation else { return }
-        screen = value; fileRequest = value.file
+        screen = value; if value.modal != true { baseScreen = value }; fileRequest = value.file
         func imageKeys(_ controls: [NativeControl]) -> Set<String> {
             controls.reduce(into: Set<String>()) { keys, control in
                 if ["image","canvas","picture"].contains(control.kind) { keys.insert(control.imageHandle ?? control.handle) }

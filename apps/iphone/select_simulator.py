@@ -1,7 +1,5 @@
-import json,sys
-for runtime,devices in sorted(json.load(sys.stdin)['devices'].items(),reverse=True):
-    if 'iOS' in runtime:
-        for d in devices:
-            if d['isAvailable'] and d['name'].startswith('iPhone'):
-                print(d['udid']);sys.exit(0)
-raise SystemExit('No available iPhone simulator')
+import argparse,json,sys
+from simulator_selection import select_simulator
+parser=argparse.ArgumentParser();parser.add_argument('--sdk-major',type=int);args=parser.parse_args()
+try: print(select_simulator(json.load(sys.stdin),'iOS',args.sdk_major))
+except ValueError as error: raise SystemExit(str(error))

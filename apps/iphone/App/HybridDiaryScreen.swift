@@ -19,17 +19,8 @@ struct HybridDiaryScreen: View {
             // The web form, DOM, Files, IndexedDB, cookies and outboxes remain
             // mounted when covered by native screens. Never reload to switch UI.
             DiaryScreen(session: session).opacity(ProcessInfo.processInfo.arguments.contains("--ui-testing") ? 1 : 0).allowsHitTesting(ProcessInfo.processInfo.arguments.contains("--ui-testing")).accessibilityHidden(!ProcessInfo.processInfo.arguments.contains("--ui-testing"))
-            NativeScreenView(store: screens)
+            NativeScreenView(store: screens, onBack: { await screens.flush(); await store.activate() })
                 .opacity(nativeVisible || ProcessInfo.processInfo.arguments.contains("--ui-testing") ? 0 : 1).allowsHitTesting(!nativeVisible && !ProcessInfo.processInfo.arguments.contains("--ui-testing")).accessibilityHidden(nativeVisible || ProcessInfo.processInfo.arguments.contains("--ui-testing"))
-                .safeAreaInset(edge: .top) {
-                    if !nativeVisible && store.wasActivated {
-                        HStack {
-                            Button { Task { await store.activate() } } label: { Label("Přehled", systemImage: "chevron.left") }.frame(minHeight: 44).accessibilityIdentifier("native-screen-back")
-                            Spacer()
-                            if store.loading { ProgressView() }
-                        }.padding(.horizontal).background(.regularMaterial)
-                    }
-                }
             if let context = store.context {
                 NativeDiaryTabs(store: store, context: context).opacity(nativeVisible ? 1 : 0)
                     .allowsHitTesting(nativeVisible).accessibilityHidden(!nativeVisible)
