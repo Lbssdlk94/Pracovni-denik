@@ -39,7 +39,7 @@ import * as db from './cloud.js?v=workspace-controls-v1';
 import * as legacyDb from './storage.js?v=workspace-roles-v1';
 import {preparePhoto,annotatedPhoto,download,blobToDataURL} from './export.js?v=workspace-roles-v1';
 
-const app=document.querySelector('#app'),modal=document.querySelector('#modal');\n
+const app=document.querySelector('#app'),modal=document.querySelector('#modal');
 // --- EARLY DEBUG PANEL ---
 (function initDebug(){
   function ensurePanel(){
