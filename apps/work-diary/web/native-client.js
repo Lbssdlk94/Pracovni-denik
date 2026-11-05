@@ -1,5 +1,5 @@
 import {createWatchClient} from './watch-client.js?v=watch-companion-v1';
-import {createNativeScreens} from './native-screens.js?v=native-ui-v2';
+import {createNativeScreens} from './native-screens.js?v=native-progressive-v1';
 // A narrow, read-only data bridge for the first native iPhone screens.
 // Mutations and offline forms continue through the existing guarded web UI.
 const formOpen=()=>Object.assign(Error('Nejdříve uložte nebo zavřete otevřený formulář.'),{code:'native_form_open'});

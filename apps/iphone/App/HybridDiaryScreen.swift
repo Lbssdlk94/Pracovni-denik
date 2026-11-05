@@ -19,11 +19,14 @@ struct HybridDiaryScreen: View {
             // The web form, DOM, Files, IndexedDB, cookies and outboxes remain
             // mounted when covered by native screens. Never reload to switch UI.
             DiaryScreen(session: session).opacity(ProcessInfo.processInfo.arguments.contains("--ui-testing") ? 1 : 0).allowsHitTesting(ProcessInfo.processInfo.arguments.contains("--ui-testing")).accessibilityHidden(!ProcessInfo.processInfo.arguments.contains("--ui-testing"))
-            NativeScreenView(store: screens, onBack: { await screens.flush(); await store.activate() })
-                .opacity(nativeVisible || ProcessInfo.processInfo.arguments.contains("--ui-testing") ? 0 : 1).allowsHitTesting(!nativeVisible && !ProcessInfo.processInfo.arguments.contains("--ui-testing")).accessibilityHidden(nativeVisible || ProcessInfo.processInfo.arguments.contains("--ui-testing"))
+            if store.context == nil {
+                NativeScreenView(store: screens)
+                    .opacity(ProcessInfo.processInfo.arguments.contains("--ui-testing") ? 0 : 1)
+                    .allowsHitTesting(!ProcessInfo.processInfo.arguments.contains("--ui-testing"))
+                    .accessibilityHidden(ProcessInfo.processInfo.arguments.contains("--ui-testing"))
+            }
             if let context = store.context {
-                NativeDiaryTabs(store: store, context: context).opacity(nativeVisible ? 1 : 0)
-                    .allowsHitTesting(nativeVisible).accessibilityHidden(!nativeVisible)
+                NativeDiaryTabs(store: store, screens: screens, context: context)
             }
             if !store.verifiedInForeground || scenePhase != .active {
                 DiaryStyle.background.ignoresSafeArea().overlay { ProgressView("Ověřuji přístup…") }

@@ -62,6 +62,14 @@ final class NativeScreenStore: ObservableObject {
             catch { pending.restoreFirst(entry.key, entry.value); self.error = error.localizedDescription; break }
         }
     }
+    func prepareNavigation() async -> Bool {
+        flushTask?.cancel()
+        // A tab tap must not race an in-flight field commit or submission.
+        for _ in 0..<200 { if !busy { break }; try? await Task.sleep(for: .milliseconds(20)) }
+        guard !busy else { error = "Probíhá ukládání. Počkejte na dokončení."; return false }
+        await flush()
+        return pending.isEmpty && !busy && error == nil
+    }
     func perform(_ control: NativeControl, action: String = "click", extra: [String: Any] = [:]) async {
         flushTask?.cancel()
         // Finish all typed values before the submitter is activated.

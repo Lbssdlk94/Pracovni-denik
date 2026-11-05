@@ -42,7 +42,7 @@ final class NativeDiaryStore: ObservableObject {
             let current: DiaryContext = try await browser.nativeCall("context")
             guard ticket == epoch else { return }
             let changed = context?.identityKey != current.identityKey
-            if changed { jobs = []; overview = nil; nextCursor = nil; query = ""; state = "all"; mine = true; allDates = !current.enabled("jobDay"); day = current.today }
+            if changed { tab = 0; jobs = []; overview = nil; nextCursor = nil; query = ""; state = "all"; mine = true; allDates = !current.enabled("jobDay"); day = current.today }
             context = current
             if day.isEmpty { day = current.today }
             activated = true; verifiedInForeground = true; webVisible = false
@@ -87,7 +87,11 @@ final class NativeDiaryStore: ObservableObject {
         guard page != nil || job != nil else { return }
         var args: [String: Any] = [:]
         args["page"] = page; args["jobId"] = job; args["action"] = action
-        do { let _: BridgeAcknowledgement = try await browser.nativeCall("open", args) }
+        do {
+            let _: BridgeAcknowledgement = try await browser.nativeCall("open", args)
+            if page == "attendance" { tab = 2 }
+            if page == "customers" { tab = 3 }
+        }
         catch { self.error = error.localizedDescription }
     }
     func resumed() async {

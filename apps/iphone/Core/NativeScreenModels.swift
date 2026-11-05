@@ -14,6 +14,7 @@ struct NativeMapPath: Decodable, Identifiable { let id: String; let points: [Nat
 struct NativeControl: Decodable, Identifiable {
     let id: String; let handle: String; let kind: String
     let text: String?; let value: String?; let fieldType: String?
+    let subtitle: String?; let symbol: String?
     let intent: String?; let tone: String?; let autocomplete: String?
     let checked: Bool?; let disabled: Bool?; let required: Bool?; let secure: Bool?
     let multiple: Bool?; let primary: Bool?; let danger: Bool?; let expanded: Bool?
@@ -23,7 +24,7 @@ struct NativeControl: Decodable, Identifiable {
     let imageHandle: String?; let options: [NativeOption]?; let children: [NativeControl]?; let pins: [NativePin]?
     var label: String { text ?? "" }
     var descendants: [NativeControl] { [self] + (children ?? []).flatMap(\.descendants) }
-    var presentedDescendants: [NativeControl] { [self] + (kind == "disclosure" && expanded != true ? [] : (children ?? []).flatMap(\.presentedDescendants)) }
+    var presentedDescendants: [NativeControl] { [self] + (["disclosure", "category"].contains(kind) && expanded != true ? [] : (children ?? []).flatMap(\.presentedDescendants)) }
     var isAction: Bool { ["button", "file", "document"].contains(kind) }
     var isInput: Bool { ["field", "select", "toggle"].contains(kind) }
     var actionSymbol: String {
@@ -44,8 +45,10 @@ struct NativeTransfer: Decodable, Identifiable { let id: String; let text: Strin
 struct NativeScreenSnapshot: Decodable {
     let revision: Int; let title: String; let nodes: [NativeControl]
     let modal: Bool?; let online: Bool?; let busy: Bool?; let toast: String?
+    let presentation: String?
     let file: NativeFileRequest?; let transfer: NativeTransfer?
     var controls: [NativeControl] { nodes.flatMap(\.descendants) }
+    var isInlineDetail: Bool { modal == true && presentation == "page" }
     var displayTitle: String {
         if modal == true { return title }
         return controls.first(where: { $0.kind == "heading" && $0.level == 1 })?.label ?? title

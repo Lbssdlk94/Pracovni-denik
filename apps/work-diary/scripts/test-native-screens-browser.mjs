@@ -48,6 +48,30 @@ try{
  for(const [module,selector] of [['customers','#customers'],['home','.garden-overview'],['defects','#defects'],['attendance','#attendance'],['subscriptions','#subscriptions'],['materials','#materials'],['vehicles','#vehicles'],['team','#team'],['settings','.settings-workspace'],['jobs','#jobs']]){
   await execute('open',{page:module});await page.locator('.nav [data-page="'+module+'"][aria-current=page]').first().waitFor({state:'attached',timeout:12000});const s=await screen();assert.ok(s.nodes.length,module+' empty native descriptor');assert.ok(flatten(s.nodes).some(n=>['button','field','toggle','select'].includes(n.kind)),module+' has no usable native controls');console.log('PASS native contract module',module);
  }
+ // Compact native rows retain IDs and live click/call handles, not joined text.
+ await execute('open',{page:'customers'});await page.locator('.customer-compact').first().waitFor();
+ const customerRow=await node('Jméno se dvěma zahradami','contact');assert.equal(customerRow.id,'customer:ui-both');
+ assert.ok(customerRow.children.some(n=>n.kind==='button'&&n.intent==='open'));
+ await execute('control',{handle:customerRow.handle,action:'click'});await page.locator('[data-customer-view]').waitFor();
+ const customerDetail=await screen();assert.equal(customerDetail.presentation,'page');
+ assert.ok(customerDetail.nodes.some(n=>n.kind==='category'&&n.text==='Kontakt a adresa'));
+ assert.ok(flatten(customerDetail.nodes).some(n=>n.text?.includes('Lipová 1488')),'Address must remain accessible in the details');
+ await click('Zavřít');
+ await execute('open',{page:'home'});await page.locator('.garden-card[data-garden]').first().waitFor();
+ const gardenRow=await node('Zahrada maminky','destination');assert.equal(gardenRow.id,'garden:'+mother);
+ assert.equal(gardenRow.text,'Zahrada maminky s dlouhým názvem');assert.equal(gardenRow.subtitle,'');
+ assert.ok(!gardenRow.text.includes('Lipová'));assert.ok(!gardenRow.text.includes('šachet'));
+ assert.ok((await screen()).nodes.some(n=>n.kind==='category'&&n.text==='Řazení a poloha'));
+ await execute('control',{handle:gardenRow.handle,action:'click'});await page.locator('.garden-title').waitFor();
+ const gardenDetail=await screen();assert.ok(gardenDetail.nodes.some(n=>n.kind==='category'&&n.text==='Kontakt a adresa'));
+ const historyCategory=gardenDetail.nodes.find(n=>n.id==='garden-section:history');assert.ok(historyCategory);
+ assert.ok(historyCategory.children.some(n=>n.kind==='button'));
+ assert.ok(!gardenDetail.nodes.some(n=>n.kind==='text'&&n.text?.includes('Lipová')),'Full address leaked onto native garden summary');
+ await execute('open',{page:'settings'});await page.locator('.settings-workspace').waitFor();
+ const settingsScreen=await screen();assert.ok(settingsScreen.nodes.some(n=>n.kind==='category'));
+ assert.ok(!settingsScreen.nodes.some(n=>['field','toggle','select','form'].includes(n.kind)&&!n.id.startsWith('header.')),'Settings forms must start behind categories');
+ for(const width of [360,390,430]){await page.setViewportSize({width,height:844});await execute('open',{page:'home'});assert.ok(flatten((await screen()).nodes).some(n=>n.kind==='destination'&&n.id==='garden:'+mother));}
+ console.log('PASS compact native customer/garden destinations, stable identifiers, inline customer detail, collapsed settings and mobile descriptor visibility');
  await execute('open',{page:'customers'});await page.locator('#customers-new').waitFor();await click('Nový zákazník');await page.locator('#customer-form').waitFor();
  await value('Jméno nebo název','Nativní zákazník');await value('Telefonní číslo','+420777123456');await value('Ulice, číslo','Ukázková 12');await value('Město / obec','Blatná');await click('Uložit zákazníka');await page.locator('#customer-form').waitFor({state:'hidden'});
  assert.equal((await db.prepare("SELECT count(*) n FROM customers WHERE name='Nativní zákazník'").first()).n,1);assert.equal((await db.prepare("SELECT count(*) n FROM gardens WHERE customer_id IN (SELECT id FROM customers WHERE name='Nativní zákazník')").first()).n,1);

@@ -31,4 +31,21 @@ final class NativePresentationTests: XCTestCase {
         XCTAssertEqual(DiaryDate.shifted("2026-12-31", days: 1), "2027-01-01")
         XCTAssertEqual(DiaryDate.shifted("", days: 1), "")
     }
+    func testCompactDestinationIsNotAnActionGridAndRetainsSmallDistance() throws {
+        let row = try control(#"{"id":"garden:g1","handle":"original-live-button","kind":"destination","text":"Zahrada maminky","subtitle":"≈ 12 km","symbol":"leaf","children":[{"id":"fallback","handle":"original-live-button","kind":"button","text":"Zahrada maminky Lipová 1488 2 šachty"}]}"#)
+        XCTAssertEqual(NativePresentation.groups([row]).first?.kind, .container)
+        XCTAssertEqual(row.label, "Zahrada maminky"); XCTAssertEqual(row.subtitle, "≈ 12 km")
+        XCTAssertEqual(row.handle, row.children?.first?.handle)
+    }
+    func testLocalCategoryDoesNotExposeAddressOrPromoteHiddenSave() throws {
+        let row = try control(#"{"id":"contact","handle":"h","kind":"category","text":"Kontakt a adresa","children":[{"id":"address","handle":"a","kind":"text","text":"Lipová 1488, Blatná"},{"id":"save","handle":"s","kind":"button","text":"Uložit","primary":true}]}"#)
+        XCTAssertEqual(row.presentedDescendants.map(\.id), ["contact"])
+        XCTAssertEqual(row.find("address")?.label, "Lipová 1488, Blatná")
+    }
+    func testReadOnlyCustomerDetailCanStayInsideTabsButEditingRemainsModal() throws {
+        let decoder = JSONDecoder()
+        let detail = try decoder.decode(NativeScreenSnapshot.self, from: Data(#"{"revision":1,"title":"Pavel Svoboda","nodes":[],"modal":true,"presentation":"page"}"#.utf8))
+        let form = try decoder.decode(NativeScreenSnapshot.self, from: Data(#"{"revision":2,"title":"Upravit zákazníka","nodes":[],"modal":true}"#.utf8))
+        XCTAssertTrue(detail.isInlineDetail); XCTAssertFalse(form.isInlineDetail)
+    }
 }

@@ -32,20 +32,24 @@ final class NativeDiaryUITests: XCTestCase {
     }
     @MainActor
     func testNativeFormHandoffDoesNotDiscardAnOpenForm() {
-        let app = launch(); selectTab("Více", in: app); app.buttons["Zákazníci"].tap()
+        let app = launch(); selectTab("Zákazníci", in: app)
+        let create = app.buttons.matching(NSPredicate(format: "label == %@", "Nový zákazník")).firstMatch
+        XCTAssertTrue(create.waitForExistence(timeout: 15)); create.tap()
         let field = app.textFields.matching(NSPredicate(format: "identifier BEGINSWITH %@", "native-field-")).firstMatch
         guard field.waitForExistence(timeout:15) else { XCTFail("Native form missing: \(app.debugDescription)");return }
         XCTAssertTrue(app.staticTexts["Engine visibility: visible"].exists); field.tap(); field.typeText("Zachovat zapis")
         let form = XCTAttachment(screenshot:app.screenshot());form.name="SwiftUI-native-form";form.lifetime = .keepAlways;add(form)
         app.buttons["native-screen-back"].tap()
         XCTAssertTrue(field.waitForExistence(timeout: 10)); XCTAssertEqual(field.value as? String, "Zachovat zapis")
+        selectTab("Docházka", in: app)
+        XCTAssertTrue(field.exists); XCTAssertEqual(field.value as? String, "Zachovat zapis")
         app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH %@ AND label == %@","native-control-","Zavřít formulář")).firstMatch.tap()
         app.buttons["native-screen-back"].tap()
         XCTAssertTrue(app.buttons["Přehled"].waitForExistence(timeout: 15))
     }
     @MainActor
     func testNativePushSettingsExplainMissingAppleConfigurationWithoutRequestingPermission() {
-        let app=launch();selectTab("Více", in: app);app.swipeUp()
+        let app=launch();selectTab("Více", in: app);app.buttons.matching(identifier: "Nastavení").firstMatch.tap()
         let settings=app.buttons["native-push-settings"];XCTAssertTrue(settings.waitForExistence(timeout:10));settings.tap()
         XCTAssertTrue(app.staticTexts["native-push-not-configured"].waitForExistence(timeout:15))
         XCTAssertFalse(app.buttons["Zapnout oznámení"].isEnabled)
@@ -82,6 +86,35 @@ final class NativeDiaryUITests: XCTestCase {
         app.buttons["Zrušit"].tap()
         XCTAssertTrue(app.buttons["native-field-id:fixture-arrival"].label.contains("Vybrat čas"))
         let image = XCTAttachment(screenshot: app.screenshot()); image.name = "SwiftUI-presny-prijezd"; image.lifetime = .keepAlways; add(image)
+    }
+    @MainActor
+    func testFiveTabsRemainAvailableInsideCustomerDetails() {
+        let app = launch(); selectTab("Zákazníci", in: app)
+        let customer = app.buttons["native-control-customer:customer-one"]
+        XCTAssertTrue(customer.waitForExistence(timeout: 15)); customer.tap()
+        XCTAssertTrue(app.buttons["native-detail-back"].waitForExistence(timeout: 15))
+        for name in ["Přehled", "Zakázky", "Docházka", "Zákazníci", "Více"] {
+            XCTAssertTrue(app.buttons.matching(identifier: name).firstMatch.isHittable, "Missing tab: " + name)
+        }
+        XCTAssertFalse(app.staticTexts["Ukázková 12, Blatná"].isHittable)
+        app.buttons["native-detail-back"].tap()
+        XCTAssertTrue(customer.waitForExistence(timeout: 10))
+        let image = XCTAttachment(screenshot: app.screenshot()); image.name = "SwiftUI-zakaznici-kompaktni"; image.lifetime = .keepAlways; add(image)
+    }
+    @MainActor
+    func testGardenListShowsNameAndDistanceAndProgressiveDetails() {
+        let app = launch(); selectTab("Více", in: app)
+        app.buttons.matching(identifier: "Práce v terénu").firstMatch.tap(); app.buttons.matching(identifier: "Zahrady").firstMatch.tap()
+        let garden = app.buttons["native-control-garden:garden-one"]
+        XCTAssertTrue(garden.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.staticTexts["≈ 12 km"].exists)
+        XCTAssertFalse(app.staticTexts["Ukázková 12, Blatná, Česká republika"].exists)
+        XCTAssertFalse(app.staticTexts["2 šachty Bez plánu"].exists)
+        let list = XCTAttachment(screenshot: app.screenshot()); list.name = "SwiftUI-zahrady-kompaktni"; list.lifetime = .keepAlways; add(list)
+        garden.tap()
+        XCTAssertTrue(app.buttons["Kontakt a adresa"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.staticTexts["Poslední návštěva"].isHittable)
+        let detail = XCTAttachment(screenshot: app.screenshot()); detail.name = "SwiftUI-zahrada-podrobnosti"; detail.lifetime = .keepAlways; add(detail)
     }
 
 }

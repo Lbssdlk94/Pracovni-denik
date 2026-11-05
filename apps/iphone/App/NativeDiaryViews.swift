@@ -18,20 +18,64 @@ struct DiaryTile: View {
                 Spacer(minLength: 0); Image(systemName: "chevron.right").font(.caption.weight(.semibold))
             }.foregroundStyle(DiaryStyle.accent).padding(16).frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
                 .background(.background, in: RoundedRectangle(cornerRadius: 24)).overlay(RoundedRectangle(cornerRadius: 24).stroke(DiaryStyle.accent.opacity(0.09)))
-        }.buttonStyle(.plain)
+        }.buttonStyle(.plain).accessibilityLabel(title)
     }
 }
 struct NativeDiaryTabs: View {
     @ObservedObject var store: NativeDiaryStore
+    @ObservedObject var screens: NativeScreenStore
     let context: DiaryContext
-    var body: some View {
-        TabView(selection: $store.tab) {
-            NavigationStack { NativeOverview(store: store, context: context) }.tabItem { Label("Přehled", systemImage: "square.grid.2x2") }.tag(0)
-            if context.nativeJobsAvailable {
-                NavigationStack { NativeJobs(store: store, context: context) }.tabItem { Label("Zakázky", systemImage: "list.clipboard") }.tag(1)
+    @State private var switching = false
+    private var selection: Binding<Int> {
+        Binding(get: { store.tab }, set: { target in
+            guard target != store.tab, !switching else { return }
+            switching = true
+            Task { @MainActor in
+                defer { switching = false }
+                // Flush native edits before asking the existing engine to leave.
+                // Its dirty-form guard must be allowed to refuse a tab switch.
+                guard await screens.prepareNavigation() else { return }
+                await store.activate()
+                guard let current = store.context, !store.webVisible else { return }
+                guard target != 1 || current.enabled("jobs"), target != 2 || current.enabled("attendance"), target != 3 || current.enabled("customers") else { return }
+                store.tab = target
+                if target == 2 || target == 3 || (target == 1 && !current.nativeJobsAvailable) {
+                    await store.openWeb(page: target == 2 ? "attendance" : target == 3 ? "customers" : "jobs")
+                    await screens.refresh()
+                }
             }
-            NavigationStack { NativeMore(store: store, context: context) }.tabItem { Label("Více", systemImage: "ellipsis") }.tag(2)
+        })
+    }
+    var body: some View {
+        TabView(selection: selection) {
+            pane(0) { NavigationStack { NativeOverview(store: store, context: context) } }
+                .tabItem { Label("Přehled", systemImage: "square.grid.2x2") }.tag(0)
+            if context.enabled("jobs") {
+                pane(1) { NavigationStack { NativeJobs(store: store, context: context) } }
+                    .tabItem { Label("Zakázky", systemImage: "list.clipboard") }.tag(1)
+            }
+            if context.enabled("attendance") {
+                pane(2) { Color.clear }.tabItem { Label("Docházka", systemImage: "clock") }.tag(2)
+            }
+            if context.enabled("customers") {
+                pane(3) { Color.clear }.tabItem { Label("Zákazníci", systemImage: "person.crop.rectangle") }.tag(3)
+            }
+            pane(4) { NavigationStack { NativeMore(store: store, context: context) } }
+                .tabItem { Label("Více", systemImage: "ellipsis") }.tag(4)
         }.tint(DiaryStyle.accent)
+    }
+    private func pane<Content: View>(_ tab: Int, @ViewBuilder content: () -> Content) -> some View {
+        ZStack {
+            content().opacity(store.webVisible && store.tab == tab ? 0 : 1)
+                .allowsHitTesting(!store.webVisible).accessibilityHidden(store.webVisible)
+            if store.webVisible && store.tab == tab {
+                NativeScreenView(store: screens, onBack: {
+                    guard await screens.prepareNavigation() else { return }
+                    await store.activate()
+                    if !store.webVisible && (tab == 2 || tab == 3) { store.tab = 0 }
+                })
+            }
+        }
     }
 }
 struct NativeHeaderActions: ToolbarContent {
@@ -81,7 +125,6 @@ struct NativeOverview: View {
                     Text("Na dnešek ani další dny není naplánovaná aktivní návštěva.").font(.callout).foregroundStyle(.secondary)
                 }
                 if store.loading { ProgressView().frame(maxWidth: .infinity) }
-                Text(context.today).font(.footnote).foregroundStyle(.secondary)
             }.padding(20)
         }.background(DiaryStyle.background).navigationTitle(context.companyName).navigationBarTitleDisplayMode(.inline)
             .toolbar { NativeHeaderActions(store: store, context: context) }
@@ -319,8 +362,8 @@ struct NativeMore: View {
         return items.filter { key,_,_ in (key == "home" ? context.enabled("gardens") || context.enabled("shafts") : context.enabled(["team":"teamManagement"][key] ?? key)) }
     }
     var body: some View {
-        List {
-            Section {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 14) {
                     Image(systemName: "person.crop.circle.fill").font(.system(size: 42)).foregroundStyle(DiaryStyle.accent)
                     VStack(alignment: .leading, spacing: 4) {
@@ -328,34 +371,56 @@ struct NativeMore: View {
                         Text(context.companyName).font(.subheadline).foregroundStyle(.secondary)
                         Text(["owner":"Vlastník", "administrator":"Administrátor", "admin":"Správce", "worker":"Pracovník", "reader":"Čtenář"][context.user.role] ?? context.user.role).font(.caption).foregroundStyle(DiaryStyle.accent)
                     }
-                }.padding(.vertical, 6)
-            }
-            Section("Práce v terénu") { rows(["customers", "home", "attendance", "defects"]) }
-            Section("Firemní agenda") { rows(["materials", "vehicles", "subscriptions", "team"]) }
-            Section("Aplikace a zařízení") {
-                rows(["settings"])
-                if context.enabled("notifications") {
-                    Button { NativePushController.shared.showSettings = true } label: { menuLabel("Upozornění na iPhonu", "bell.badge") }.accessibilityIdentifier("native-push-settings")
+                }.diaryCard()
+                category("Práce v terénu", subtitle: "Zahrady a závady", symbol: "leaf", keys: ["home", "defects"])
+                category("Firemní agenda", subtitle: "Materiál, vozidla a předplatné", symbol: "building.2", keys: ["materials", "vehicles", "subscriptions"])
+                if sections.contains(where: { $0.0 == "team" }) {
+                    DiaryTile(title: "Tým", subtitle: "Kolegové a oprávnění", symbol: "person.2") { Task { await store.openWeb(page: "team") } }
                 }
-                Button { WatchPhoneCoordinator.shared.showSettings = true } label: { menuLabel("Apple Watch", "applewatch") }.accessibilityIdentifier("native-watch-settings")
-                Button { Task { await store.openWeb() } } label: { menuLabel("Všechny funkce deníku", "rectangle.stack") }
-            }
-            Section {
-                Text("Pracovní deník · \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")").font(.footnote).foregroundStyle(.secondary)
-            }.listRowBackground(Color.clear)
-        }.listStyle(.insetGrouped).scrollContentBackground(.hidden).background(DiaryStyle.background).navigationTitle("Více")
+                NavigationLink {
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            ForEach(sections.filter { $0.0 == "settings" }, id: \.0) { page, title, symbol in
+                                DiaryTile(title: title, subtitle: "Účet a nastavení firmy", symbol: symbol) { Task { await store.openWeb(page: page) } }
+                            }
+                            if context.enabled("notifications") {
+                                DiaryTile(title: "Upozornění na iPhonu", subtitle: "Doručování oznámení", symbol: "bell.badge") { NativePushController.shared.showSettings = true }
+                                    .accessibilityIdentifier("native-push-settings")
+                            }
+                            DiaryTile(title: "Apple Watch", subtitle: "Propojení s hodinkami", symbol: "applewatch") { WatchPhoneCoordinator.shared.showSettings = true }
+                                .accessibilityIdentifier("native-watch-settings")
+                        }.padding(18)
+                    }.background(DiaryStyle.background).navigationTitle("Nastavení").navigationBarTitleDisplayMode(.inline)
+                } label: { menuLabel("Nastavení", "gearshape") }.buttonStyle(.plain).accessibilityLabel("Nastavení")
+                Text("Pracovní deník · \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
+                    .font(.footnote).foregroundStyle(.secondary).padding(.horizontal, 4)
+            }.padding(18)
+        }.background(DiaryStyle.background).navigationTitle("Více").navigationBarTitleDisplayMode(.inline)
             .toolbar { NativeHeaderActions(store: store, context: context) }
     }
-    private func rows(_ keys: [String]) -> some View {
-        ForEach(sections.filter { keys.contains($0.0) }, id: \.0) { page, title, symbol in
-            Button { Task { await store.openWeb(page: page) } } label: { menuLabel(title, symbol) }.accessibilityLabel(title)
+    @ViewBuilder
+    private func category(_ title: String, subtitle: String, symbol: String, keys: [String]) -> some View {
+        let items = sections.filter { keys.contains($0.0) }
+        if !items.isEmpty {
+            NavigationLink {
+                ScrollView {
+                    VStack(spacing: 16) {
+                        ForEach(items, id: \.0) { page, title, symbol in
+                            DiaryTile(title: title, subtitle: "Otevřít přehled", symbol: symbol) { Task { await store.openWeb(page: page) } }
+                        }
+                    }.padding(18)
+                }.background(DiaryStyle.background).navigationTitle(title).navigationBarTitleDisplayMode(.inline)
+            } label: { menuLabel(title, symbol, subtitle: subtitle) }.buttonStyle(.plain).accessibilityLabel(title)
         }
     }
-    private func menuLabel(_ title: String, _ symbol: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol).font(.body.weight(.medium)).foregroundStyle(DiaryStyle.accent).frame(width: 36, height: 36).background(DiaryStyle.soft, in: RoundedRectangle(cornerRadius: 11))
-            Text(title).foregroundStyle(.primary)
-            Spacer(minLength: 6); Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
-        }.frame(minHeight: 48)
+    private func menuLabel(_ title: String, _ symbol: String, subtitle: String? = nil) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: symbol).font(.title3).foregroundStyle(DiaryStyle.accent).frame(width: 44, height: 44).background(DiaryStyle.soft, in: RoundedRectangle(cornerRadius: 14))
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title).font(.headline).foregroundStyle(.primary)
+                if let subtitle { Text(subtitle).font(.subheadline).foregroundStyle(.secondary) }
+            }
+            Spacer(minLength: 6); Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+        }.frame(minHeight: 50).diaryCard()
     }
 }

@@ -20,11 +20,44 @@ export function createNativeScreens({db,getSession,captureDrafts=()=>[]}){
  const originalFileClick=HTMLInputElement.prototype.click;
  HTMLInputElement.prototype.click=function(){if(this.type==='file'&&Date.now()-gestureAt<30000){fileBuilder=null;preparedFiles=[];pendingFile={id:id(this),label:this.closest('label')?text(this.closest('label')):'Vybrat soubor',accept:this.accept,multiple:this.multiple,camera:!!this.capture};notify();return;}return originalFileClick.call(this);};
  function label(el){if(el.getAttribute('aria-label'))return el.getAttribute('aria-label');if(el.labels?.length)return [...el.labels].map(l=>{const copy=l.cloneNode(true);copy.querySelectorAll('input,textarea,select,svg').forEach(n=>n.remove());return text(copy);}).filter(Boolean).join(' ');return el.title||el.placeholder||el.name||el.id||'Údaj';}
- function read(el,path='r',deep=false){
+ function read(el,path='r',deep=false,plain=false){
   if(el.nodeType===3){if(!visible(el))return [];const value=text(el);return value?[{id:path,handle:id(el),kind:'text',text:value}]:[];}
   if(el.nodeType!==1||['SCRIPT','STYLE','NOSCRIPT','SVG','PATH','OPTION'].includes(el.tagName)||!visible(el))return [];
   const tag=el.tagName,handle=id(el),base={id:el.id?'id:'+el.id:path,handle};
   if(el.matches('.sidebar,.topbar,.nav,.mobile-account'))return [];
+  // Semantic presentation for the native app only. Every destination still
+  // invokes the same live element; no records are joined by display text.
+  const category=(title,children,symbol='folder',key=base.id)=>({id:key,handle,kind:'category',text:title,symbol,children});
+  if(!plain&&el.matches('.garden-card-wrap')){
+   const card=el.querySelector('.garden-card[data-garden]');if(card){const row=read(card,path+'.garden')[0];const address=el.querySelector('[data-address-garden]');if(row&&address)row.children.push(...read(address,path+'.location').map(n=>({...n,intent:'locate'})));return row?[row]:[];}
+  }
+  if(!plain&&el.matches('.garden-card[data-garden]')){
+   return [{...base,id:'garden:'+el.dataset.garden,kind:'destination',text:text(el.querySelector(':scope > strong')),subtitle:text(el.querySelector('.garden-distance:not(.unknown)')),symbol:'leaf',children:read(el,path,deep,true)}];
+  }
+  if(!plain&&el.matches('.customer-compact')){
+   const open=el.querySelector('[data-customer-open]');if(open){const name=open.querySelector('strong')?.cloneNode(true);name?.querySelectorAll('span,svg').forEach(n=>n.remove());return [{...base,id:'customer:'+open.dataset.customerOpen,handle:id(open),kind:'contact',text:text(name)||text(open),symbol:'person',children:[...el.querySelectorAll('[data-customer-open],a[href^="tel:"]')].flatMap((n,i)=>read(n,path+'.'+i,deep,true))}];}
+  }
+  if(!plain&&el.matches('.garden-sort'))return [category('Řazení a poloha',read(el,path,deep,true),'location')];
+  if(!plain&&el.matches('.garden-title')){
+   const heading=el.querySelector('h1'),contact=el.parentElement.querySelector('.garden-customer-link');
+   const info=[...el.querySelectorAll('p,button')].flatMap((n,i)=>read(n,path+'.info'+i));
+   return [...(heading?read(heading,path+'.title'):[]),category('Kontakt a adresa',[...info,...(contact?read(contact,path+'.contact',deep,true):[])],'person.crop.rectangle')];
+  }
+  if(!plain&&el.matches('.garden-customer-link')&&el.parentElement.querySelector('.garden-title'))return [];
+  if(!plain&&el.matches('.garden-tabs'))return [...el.querySelectorAll('[data-garden-tab]')].map((button,i)=>{
+   const key=button.dataset.gardenTab,panel=document.getElementById(button.getAttribute('aria-controls'));
+   const names={shafts:'Šachty a fotodokumentace',history:'Historie',defects:'Závady',service:'Servis',blowout:'Vyfukování',plan:'Plán zahrady',map:'Mapa'};
+   const symbols={shafts:'photo',history:'clock.arrow.circlepath',defects:'exclamationmark.triangle',service:'wrench',blowout:'wind',plan:'map',map:'mappin'};
+   return category(names[key]||text(button.querySelector('span')), [...read(button,path+'.tab'+i),...(panel?read(panel,path+'.panel'+i,deep,true):[])],symbols[key]||'folder','garden-section:'+key);
+  });
+  if(!plain&&el.matches('[data-garden-panel]')&&el.parentElement.querySelector('.garden-tabs'))return [];
+  if(!plain&&el.matches('.settings-workspace'))return [...el.children].flatMap((child,i)=>{
+   if(!visible(child))return [];
+   if(child.matches('.page-title'))return [...child.querySelectorAll('h1')].flatMap(n=>read(n,path+'.title'));
+   const title=text(child.querySelector('h2,h3,summary'))||'Další nastavení';
+   return [category(title,read(child,path+'.setting'+i,deep,true),'gearshape',child.id?'settings:'+child.id:path+'.setting'+i)];
+  });
+  if(!plain&&el.matches('.customer-contact,.customer-gardens'))return [category(el.matches('.customer-contact')?'Kontakt a adresa':text(el.querySelector('h3'))||'Zahrady',read(el,path,deep,true),el.matches('.customer-contact')?'person.crop.rectangle':'leaf')];
   if(tag==='INPUT'||tag==='SELECT'||tag==='TEXTAREA'){
    if(['hidden','file','submit','button','reset'].includes(el.type))return [];
    return [{...base,kind:el.type==='checkbox'||el.type==='radio'?'toggle':tag==='SELECT'?'select':'field',text:label(el),value:el.value,checked:!!el.checked,disabled:el.matches(':disabled')||el.readOnly,fieldType:tag==='TEXTAREA'?'textarea':el.type||'text',autocomplete:el.autocomplete||'',required:el.required,options:tag==='SELECT'?[...el.options].map(o=>({id:o.value,text:o.text,disabled:o.disabled,selected:o.selected})):[],multiple:!!el.multiple,secure:el.type==='password'||el.id==='access-link'}];
@@ -56,7 +89,9 @@ export function createNativeScreens({db,getSession,captureDrafts=()=>[]}){
  }
  async function snapshot(){await permitted();mapProxy();for(const [key,n]of nodes)if(!n.isConnected)nodes.delete(key);for(const [el]of maps)if(!el.isConnected)maps.delete(el);
   const dialogs=[...document.querySelectorAll('dialog[open]')],modal=dialogs.at(-1),root=modal||document.querySelector('#app .main')||document.querySelector('#app');if(!root)return {revision:++revision,title:'Pracovní deník',nodes:[],busy:true};
-  const header=modal?[]:[...document.querySelectorAll('[data-workspace-filter],[data-notifications-open],[data-show-sync],[data-signout]')].filter((el,i,all)=>all.findIndex(other=>other.outerHTML===el.outerHTML)===i).flatMap((el,i)=>read(el,'header.'+i));const content=[...header,...read(root)];return {revision:++revision,title:modal?.querySelector('h1,h2,h3')?.textContent?.trim()||document.title||'Pracovní deník',nodes:content,modal:!!modal,online:navigator.onLine,file:pendingFile,toast:text(document.querySelector('#toast')),busy:!!root.querySelector('.loading')};
+  const header=modal?[]:[...document.querySelectorAll('[data-workspace-filter],[data-notifications-open],[data-show-sync]')].filter((el,i,all)=>all.findIndex(other=>other.outerHTML===el.outerHTML)===i).flatMap((el,i)=>read(el,'header.'+i));const content=[...header,...read(root)];
+  if(!modal&&root.querySelector('.settings-workspace')){const logout=document.querySelector('[data-signout]');if(logout&&visible(logout))content.push({id:'native-account',handle:id(logout),kind:'category',text:'Účet a odhlášení',symbol:'person.crop.circle',children:read(logout,'account.logout')});}
+  return {revision:++revision,title:modal?.querySelector('h1,h2,h3')?.textContent?.trim()||document.title||'Pracovní deník',nodes:content,modal:!!modal,presentation:modal?.querySelector('[data-customer-view]')&&!modal.querySelector('form')?'page':null,online:navigator.onLine,file:pendingFile,toast:text(document.querySelector('#toast')),busy:!!root.querySelector('.loading')};
  }
  function pointer(el,points){const rect=(el.closest('.photo-wrap,.plan-photo')||el).getBoundingClientRect();if(!rect.width||!rect.height)throw Error('Obrázek není připravený.');const old=el.setPointerCapture;el.setPointerCapture=()=>{};try{points.forEach((p,i)=>{if(!Number.isFinite(p.x)||!Number.isFinite(p.y))throw Error('Neplatná poloha.');const event=new PointerEvent(i===0?'pointerdown':i===points.length-1?'pointerup':'pointermove',{bubbles:true,cancelable:true,pointerId:1,pointerType:'touch',isPrimary:true,buttons:i===points.length-1?0:1,clientX:rect.left+p.x*rect.width,clientY:rect.top+p.y*rect.height});el.dispatchEvent(event);});}finally{el.setPointerCapture=old;}}
  async function action(input){await permitted();gestureAt=Date.now();const el=live(input.handle);

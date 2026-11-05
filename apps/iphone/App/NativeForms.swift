@@ -4,13 +4,18 @@ import UIKit
 struct NativeScreenView: View {
     @ObservedObject var store: NativeScreenStore
     var onBack: (() async -> Void)? = nil
-    private var base: NativeScreenSnapshot? { store.screen?.modal == true ? store.baseScreen : store.screen }
+    private var base: NativeScreenSnapshot? { store.screen?.modal == true && store.screen?.isInlineDetail != true ? store.baseScreen : store.screen }
     var body: some View {
         NavigationStack {
-            NativeScreenContent(screen: base, store: store, modal: false)
+            NativeScreenContent(screen: base, store: store, modal: base?.isInlineDetail == true)
                 .navigationTitle(base?.displayTitle ?? "Pracovní deník").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    if let onBack {
+                    if base?.isInlineDetail == true, let close = base?.closeControl {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button { Task { await store.perform(close) } } label: { Label("Zpět", systemImage: "chevron.left") }
+                                .accessibilityIdentifier("native-detail-back").disabled(store.busy)
+                        }
+                    } else if let onBack {
                         ToolbarItem(placement: .topBarLeading) {
                             Button { Task { await onBack() } } label: { Label("Přehled", systemImage: "chevron.left") }
                                 .accessibilityIdentifier("native-screen-back")
@@ -23,7 +28,7 @@ struct NativeScreenView: View {
                 if signal.kind == .invalidated { store.invalidate() }
                 Task { await store.refresh() }
             }
-            .sheet(isPresented: Binding(get: { store.screen?.modal == true }, set: { _ in })) {
+            .sheet(isPresented: Binding(get: { store.screen?.modal == true && store.screen?.isInlineDetail != true }, set: { _ in })) {
                 if let screen = store.screen, screen.modal == true {
                     NavigationStack {
                         NativeScreenContent(screen: screen, store: store, modal: true)
@@ -119,6 +124,8 @@ struct NativeControlView: View {
         case "alert": DiaryStatusBanner(text: control.label, warning: true)
         case "field", "toggle", "select": NativeField(control: control, store: store)
         case "button", "file", "document": NativeActionButton(control: control, store: store)
+        case "destination", "contact": NativeDestinationRow(control: control, store: store)
+        case "category": NativeCategory(control: control, store: store, omitting: omitting)
         case "card", "section":
             DiarySection(title: control.kind == "section" && !control.label.isEmpty ? control.label : nil) {
                 NativeControlList(controls: control.children ?? [], store: store, omitting: omitting, embedded: true)
@@ -135,6 +142,60 @@ struct NativeControlView: View {
         case "map": NativeMapSurface(control: control, store: store)
         default: NativeControlList(controls: control.children ?? [], store: store, omitting: omitting)
         }
+    }
+}
+// Presentation groups carry the original opaque handles. They never write
+// business data or derive an identity from the displayed name/address.
+struct NativeDestinationRow: View {
+    let control: NativeControl
+    @ObservedObject var store: NativeScreenStore
+    private var call: NativeControl? { control.children?.first(where: { $0.intent == "call" }) }
+    private var location: NativeControl? { control.children?.first(where: { $0.intent == "locate" }) }
+    var body: some View {
+        HStack(spacing: 10) {
+            Button { Task { await store.perform(control) } } label: {
+                HStack(spacing: 14) {
+                    Image(systemName: control.symbol ?? "leaf").font(.title3).frame(width: 42, height: 42)
+                        .background(DiaryStyle.soft, in: RoundedRectangle(cornerRadius: 14))
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(control.label).font(.headline).foregroundStyle(.primary).fixedSize(horizontal: false, vertical: true)
+                        if let subtitle = control.subtitle, !subtitle.isEmpty { Text(subtitle).font(.caption).foregroundStyle(.secondary) }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                    Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                }.frame(minHeight: 48).contentShape(Rectangle())
+            }.buttonStyle(.plain).accessibilityIdentifier("native-control-" + control.id)
+            if let call {
+                Button { Task { await store.perform(call) } } label: {
+                    Image(systemName: "phone").frame(minWidth: 44, minHeight: 44).background(DiaryStyle.soft, in: Circle())
+                }.buttonStyle(.plain).accessibilityLabel("Zavolat: " + control.label)
+            } else if let location {
+                Button { Task { await store.perform(location) } } label: {
+                    Image(systemName: "location.circle").frame(minWidth: 44, minHeight: 44)
+                }.buttonStyle(.plain).accessibilityLabel("Upřesnit polohu: " + control.label)
+            }
+        }.foregroundStyle(DiaryStyle.accent).padding(16).background(DiaryStyle.surface, in: RoundedRectangle(cornerRadius: 22))
+            .disabled(store.busy || control.disabled == true)
+    }
+}
+struct NativeCategory: View {
+    let control: NativeControl
+    @ObservedObject var store: NativeScreenStore
+    var omitting: Set<String> = []
+    @State private var open = false
+    private var sectionAction: NativeControl? {
+        control.id.hasPrefix("garden-section:") ? control.children?.first(where: { $0.kind == "button" }) : nil
+    }
+    var body: some View {
+        DisclosureGroup(isExpanded: $open) {
+            NativeControlList(controls: control.children ?? [], store: store, omitting: omitting.union(Set([sectionAction?.id].compactMap { $0 })), embedded: true).padding(.top, 14)
+        } label: {
+            Label(control.label, systemImage: control.symbol ?? "folder")
+                .font(.headline).frame(minHeight: 44)
+        }.tint(DiaryStyle.accent).diaryCard()
+            .accessibilityIdentifier("native-category-" + control.id)
+            .onChange(of: open) { _, expanded in
+                if expanded, let sectionAction { Task { await store.perform(sectionAction) } }
+            }
     }
 }
 struct NativeActionButton: View {
