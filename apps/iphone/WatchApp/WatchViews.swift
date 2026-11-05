@@ -18,13 +18,23 @@ struct WatchVisitSummary: View {
         }.padding(.vertical,5).accessibilityElement(children:.combine)
     }
 }
+private enum WatchRoute: Hashable { case job(String), inbox }
 struct WatchDayView: View {
     @ObservedObject var store: WatchStore
     @Environment(\.scenePhase) private var scenePhase
-    @State private var showPreviewDetail = false
-    @State private var showPreviewInbox = false
+    @State private var path: [WatchRoute]
+    @MainActor init(store: WatchStore) {
+        self.store = store
+        var initial: [WatchRoute] = []
+        if store.preview {
+            let args = ProcessInfo.processInfo.arguments
+            if args.contains("--watch-preview-detail"), let id = store.snapshot?.jobs.first?.id { initial = [.job(id)] }
+            else if args.contains("--watch-preview-inbox") { initial = [.inbox] }
+        }
+        _path = State(initialValue: initial)
+    }
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             TimelineView(.periodic(from:.now,by:1)) { timeline in
                 List {
                     if let snapshot = store.visible(at:timeline.date) { content(snapshot) }
@@ -40,15 +50,26 @@ struct WatchDayView: View {
                     if store.busy { ProgressView("Ověřuji…") }
                 }
             }.navigationTitle("Dnes")
-                .toolbar { ToolbarItem(placement:.topBarTrailing) { Button { Task { await store.refresh() } } label: { Image(systemName:"arrow.clockwise") }.accessibilityLabel("Obnovit zakázky").disabled(store.busy) } }
-                .navigationDestination(isPresented:$showPreviewDetail) { if let id = store.snapshot?.jobs.first?.id { WatchJobView(store:store,id:id) } }
-                .navigationDestination(isPresented:$showPreviewInbox) { WatchInboxView(store:store) }
+                .toolbar {
+                    ToolbarItem(placement:.topBarTrailing) {
+                        Menu {
+                            Button("Obnovit zakázky",systemImage:"arrow.clockwise") { Task { await store.refresh() } }
+                            if store.visible()?.notificationsEnabled == true {
+                                Button("Upozornění",systemImage:"bell") { path.append(.inbox) }
+                            }
+                        } label: { Image(systemName:"ellipsis").foregroundStyle(.white) }
+                            .tint(Color(white:0.2)).accessibilityLabel("Možnosti deníku").disabled(store.busy)
+                    }
+                }
+                .navigationDestination(for: WatchRoute.self) { route in
+                    switch route {
+                    case .job(let id): WatchJobView(store:store,id:id)
+                    case .inbox: WatchInboxView(store:store)
+                    }
+                }
         }.tint(WatchStyle.accent)
             .task {
-                if store.preview {
-                    showPreviewDetail = ProcessInfo.processInfo.arguments.contains("--watch-preview-detail")
-                    showPreviewInbox = ProcessInfo.processInfo.arguments.contains("--watch-preview-inbox")
-                } else { await store.resume() }
+                if !store.preview { await store.resume() }
                 while !Task.isCancelled {
                     do { try await Task.sleep(for:.seconds(30));try Task.checkCancellation() } catch { break }
                     if scenePhase == .active { await store.refresh() }
@@ -57,26 +78,20 @@ struct WatchDayView: View {
             .onChange(of:scenePhase) { _,phase in if phase == .active { Task { await store.resume() } } else { store.pause() } }
     }
     @ViewBuilder private func content(_ snapshot: WatchSnapshot) -> some View {
-        Section {
-            VStack(alignment:.leading,spacing:3) {
-                Text(snapshot.companyName).font(.caption).foregroundStyle(WatchStyle.accent)
-                Text(snapshot.userName).font(.footnote).foregroundStyle(.secondary)
-            }
-            if snapshot.notificationsEnabled {
-                NavigationLink { WatchInboxView(store:store) } label: { Label("Upozornění · \(snapshot.unread)",systemImage:"bell") }
-            }
-        }
         if snapshot.jobsEnabled {
-            Section("Dnešní návštěvy") {
+            Section(snapshot.companyName) {
                 if snapshot.jobs.isEmpty { Text("Na dnešek nemáte přiřazené návštěvy.").font(.footnote) }
                 ForEach(snapshot.jobs) { job in
-                    NavigationLink { WatchJobView(store:store,id:job.id) } label: {
-                        WatchVisitSummary(job:job)
-                    }.accessibilityIdentifier("watch-job-"+job.id)
+                    NavigationLink(value: WatchRoute.job(job.id)) { WatchVisitSummary(job:job) }
+                        .accessibilityIdentifier("watch-job-"+job.id)
                 }
                 if snapshot.hasMoreJobs { Text("Další návštěvy najdete v iPhonu.").font(.footnote) }
             }
         } else { Section { Text("Pohled Můj den je ve firmě vypnutý.").font(.footnote) } }
+        if snapshot.notificationsEnabled {
+            Section { NavigationLink(value: WatchRoute.inbox) { Label("Upozornění · \(snapshot.unread)",systemImage:"bell") } }
+        }
+        Section { Text(snapshot.userName).font(.caption2).foregroundStyle(.secondary) }.listRowBackground(Color.clear)
     }
 }
 struct WatchJobView: View {
@@ -90,10 +105,12 @@ struct WatchJobView: View {
             List {
                 if let snapshot = store.visible(at:timeline.date), let job = snapshot.jobs.first(where:{$0.id == id}) {
                     Section {
-                        Text(job.customerName).font(.headline)
-                        Text(job.title).font(.footnote).foregroundStyle(.secondary)
-                        Label(job.stateLabel,systemImage:WatchStyle.symbol(job.status)).font(.subheadline).foregroundStyle(job.status == "incomplete" ? WatchStyle.warning : WatchStyle.accent)
-                        Text([job.kindLabel,job.disciplineLabel].filter{!$0.isEmpty}.joined(separator:" · ")).font(.caption)
+                        VStack(alignment:.leading,spacing:7) {
+                            Text(job.customerName).font(.headline).fixedSize(horizontal:false,vertical:true)
+                            Text(job.title).font(.footnote).foregroundStyle(.secondary)
+                            Label(job.stateLabel,systemImage:WatchStyle.symbol(job.status)).font(.subheadline).foregroundStyle(job.status == "incomplete" ? WatchStyle.warning : WatchStyle.accent)
+                            Text([job.kindLabel,job.disciplineLabel].filter{!$0.isEmpty}.joined(separator:" · ")).font(.caption)
+                        }.padding(.vertical,4)
                     }
                     Section("Termín a místo") {
                         Label(job.workLabel,systemImage:"clock").font(.footnote)

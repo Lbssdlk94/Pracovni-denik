@@ -1,6 +1,6 @@
 # Pracovní deník pro iPhone
 
-Verze **0.6.0** přepracovává zakázky, detail, menu i navazující formuláře ve SwiftUI, přidává nativní okna, systémový vzhled iOS 27 / Liquid Glass a tmavý režim. Stav ověření: [iOS UI 0.6](../../docs/IOS-UI-0.6-2026-11-05.md).
+Verze **0.6.1** přepracovává zakázky, detail, menu i navazující formuláře ve SwiftUI, přidává nativní okna, systémový vzhled iOS 27 / Liquid Glass a tmavý režim. Hodinky používají sjednocenou navigaci a návštěvy zobrazují hned nahoře. Stav ověření: [iOS UI 0.6](../../docs/IOS-UI-0.6-2026-11-05.md).
 
 Verze 0.5 přidává doprovodnou aplikaci pro Apple Watch (watchOS 10+) s dnešními přidělenými zakázkami, převzetím, přesným příjezdem a změnami stavu. Podrobnosti, instalace a ověřené hranice jsou v `docs/APPLE-WATCH-2026-11-04.md`. Verze 0.4 přidala podporu APNs a navazuje na převod rozhraní ve verzi 0.3. Ten rozšiřuje SwiftUI z přehledu, zakázek a detailu také na zbývající povolené firemní sekce: zákazníky, zahrady, historii, závady, protokoly, materiál, předplatné, docházku, vozidla, tým, nastavení a centrum oznámení. Formuláře, výběry, karty, rozbalovací části, podpis, fotografie s přesouváním značek, MapKit a náhled dokumentů používají nativní ovládací prvky. Zachovává zelenou identitu a názvy jednotlivých firem.
 
