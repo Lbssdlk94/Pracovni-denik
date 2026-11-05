@@ -6,6 +6,7 @@ enum DiaryStyle {
     static let background = Color(.systemGroupedBackground)
     static let soft = Color("DiarySoft")
     static let actionFill = Color("DiaryActionFill")
+    static let warning = Color("DiaryWarning")
     static let surface = Color(.secondarySystemGroupedBackground)
 }
 struct DiaryGlass: ViewModifier {
@@ -86,7 +87,7 @@ struct DiaryStatusBanner: View {
     var warning = false
     var body: some View {
         Label(text, systemImage: symbol).font(.callout).fixedSize(horizontal: false, vertical: true)
-            .foregroundStyle(warning ? Color.orange : Color.secondary)
+            .foregroundStyle(warning ? DiaryStyle.warning : Color.secondary)
             .padding(14).frame(maxWidth: .infinity, alignment: .leading)
             .background(warning ? Color.orange.opacity(0.1) : DiaryStyle.soft, in: RoundedRectangle(cornerRadius: 16))
     }

@@ -4,7 +4,7 @@ struct DiaryBadge: View {
     let text: String
     var warning = false
     var body: some View {
-        Text(text).font(.caption.weight(.semibold)).foregroundStyle(warning ? Color.orange : DiaryStyle.accent)
+        Text(text).font(.caption.weight(.semibold)).foregroundStyle(warning ? DiaryStyle.warning : DiaryStyle.accent)
             .padding(.horizontal, 10).padding(.vertical, 7).background(warning ? Color.orange.opacity(0.12) : DiaryStyle.soft, in: Capsule())
     }
 }
@@ -96,7 +96,7 @@ struct NativeJobCard: View {
             if !typeSize.isAccessibilitySize {
                 VStack(spacing: 5) {
                     Image(systemName: job.status == "done" ? "checkmark.circle.fill" : job.status == "incomplete" ? "exclamationmark.circle.fill" : "clock")
-                        .foregroundStyle(job.status == "incomplete" ? Color.orange : DiaryStyle.accent)
+                        .foregroundStyle(job.status == "incomplete" ? DiaryStyle.warning : DiaryStyle.accent)
                     Text(job.plannedStart.isEmpty ? "—" : job.plannedStart).font(.headline.monospacedDigit())
                 }.frame(width: 58).padding(.vertical, 12).background(DiaryStyle.soft, in: RoundedRectangle(cornerRadius: 16))
             }
@@ -104,7 +104,7 @@ struct NativeJobCard: View {
                 Text(job.customerLabel).font(.headline).foregroundStyle(.primary).fixedSize(horizontal: false, vertical: true)
                 if job.title != job.customerLabel { Text(job.title).font(.subheadline).foregroundStyle(.secondary).lineLimit(2) }
                 HStack(spacing: 7) {
-                    Text(job.stateLabel).font(.caption.weight(.semibold)).foregroundStyle(job.status == "incomplete" ? Color.orange : DiaryStyle.accent)
+                    Text(job.stateLabel).font(.caption.weight(.semibold)).foregroundStyle(job.status == "incomplete" ? DiaryStyle.warning : DiaryStyle.accent)
                     Text("· \(job.kindLabel)").font(.caption).foregroundStyle(.secondary)
                 }
                 if !job.gardenName.isEmpty { Text(job.gardenName).font(.caption.weight(.medium)).foregroundStyle(.secondary).lineLimit(2) }
@@ -112,7 +112,7 @@ struct NativeJobCard: View {
                 Text([DiaryDate.localized(job.dueDate), job.compactTime].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption.weight(.medium)).foregroundStyle(.secondary)
                 if !job.assignedName.isEmpty { Label(job.assignedName, systemImage: "person").font(.caption).foregroundStyle(.secondary) }
                 if job.status == "done" { DiaryBadge(text: job.protocolLabel, warning: job.protocolStatus != "ready") }
-                if job.status == "incomplete" { Text("Důvod: \(job.incompleteReason)").font(.callout).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true) }
+                if job.status == "incomplete" { Text("Důvod: \(job.incompleteReason)").font(.callout).foregroundStyle(DiaryStyle.warning).fixedSize(horizontal: false, vertical: true) }
             }.frame(maxWidth: .infinity, alignment: .leading)
         }.padding(16).background(DiaryStyle.surface, in: RoundedRectangle(cornerRadius: 22))
             .accessibilityElement(children: .combine)

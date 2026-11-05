@@ -25,7 +25,7 @@ struct NativeDrawingSurface: View {
                     }.allowsHitTesting(false)
                     if control.kind == "canvas" {
                         Canvas { context,_ in
-                            guard let first=points.first else { return };var path=Path();path.move(to:first);for point in points.dropFirst() { path.addLine(to:point) };context.stroke(path,with:.color(DiaryStyle.accent),lineWidth:2.4)
+                            guard let first=points.first else { return };var path=Path();path.move(to:first);for point in points.dropFirst() { path.addLine(to:point) };context.stroke(path,with:.color(DiaryStyle.actionFill),lineWidth:2.4)
                         }.gesture(DragGesture(minimumDistance:0).onChanged { value in if control.disabled != true { points.append(value.location) } }.onEnded { _ in
                             guard control.disabled != true,points.count>1 else { points=[];return }
                             let line=points.map { ["x":max(0,min(1,$0.x/size.width)),"y":max(0,min(1,$0.y/size.height))] };points=[]
