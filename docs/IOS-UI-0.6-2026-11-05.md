@@ -36,7 +36,15 @@ Obě URL vracejí nový kontrakt; heslo zůstává povolené a osobní přihlaš
 - GitHub běh 41980906704: Xcode 27.1 / iOS SDK 27.1, všech 26 Swift jednotkových a 8 UI testů prošlo na iPhonu Duo. Vzniklo skutečné iPhone IPA včetně vloženého Watch executable, ikony, privacy manifestu a shodných verzí. Samostatné sestavení Watch prošlo také.
 - Klasický iPhone 18 Pro / iOS 27.0 v běhu 41983507621: všech 26 jednotkových testů a 7 z 8 UI testů prošlo. Selhání jednoho testu bylo způsobeno předčasným rozpoznáním tlačítka Přehled v úvodním formulářovém obalu. Test nyní čeká na jedinečný titulek skutečného nativního přehledu a na dostupnost konkrétní navigační akce.
 
-Závěrečné ověření **prošlo celé**: [GitHub Actions 41984820174](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/41984820174), zdroj `20338eb09b6e6086db531d1272f437e56afd7282`. Na čerstvém iPhonu 18 Pro / iOS 27.0 prošlo všech **26 jednotkových + 8 UI testů**. Na Apple Watch Series 12 (46 mm) / watchOS 27.0 se SwiftUI aplikace sestavila, nainstalovala, spustila a vznikly náhledy dne, detailu a upozornění. Xcode i SDK byly 27.1. Vytvořeno iPhone IPA s vloženou Watch aplikací; kontroly skutečných balíčků prošly. Artefakt: `13396325113`, uchování 14 dní. Podepsaná distribuční větev nebyla spuštěná (nepodepsané IPA).
+Závěrečné ověření **prošlo celé**: [GitHub Actions 41984820174](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/41984820174), zdroj `20338eb09b6e6086db531d1272f437e56afd7282`. Na čerstvém iPhonu 18 Pro / iOS 27.0 prošlo všech **26 jednotkových + 8 UI testů**. Na Apple Watch Series 12 (46 mm) / watchOS 27.0 se SwiftUI aplikace sestavila, nainstalovala, spustila a vznikly soubory náhledů dne, detailu a upozornění. Vizuálně potvrzené jsou den a upozornění; soubor detailu zachytil úvodní načítací obrazovku a není důkazem jeho vykreslení. Xcode i SDK byly 27.1. Vytvořeno iPhone IPA s vloženou Watch aplikací; kontroly skutečných balíčků prošly. Artefakt: `13396325113`, uchování 14 dní. Podepsaná distribuční větev nebyla spuštěná (nepodepsané IPA).
+
+### Stav připravené verze 0.6.1 (7)
+
+Zdrojové změny přidávají jednu společnou `NavigationStack` cestu pro výběr zakázky i náhled, odstranění asynchronního počátečního přesměrování, pracovní návštěvy na začátku Watch přehledu, kompaktní hlavičku detailu a čitelné tlačítko nativních možností. Watch používá `confirmationDialog`, nikoli nepodporované webové menu. Přehled ani pracovní operace iPhonu se proti ověřené 0.6.0 nemění.
+
+**Tato verze není sestavená ani ověřená.** GitHub při běhu [41989006987](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/41989006987), zdroj `ef245a434aa51cba243f0310b02385b8b934d70b`, odmítl přidělit runner. Neproběhl žádný sestavovací krok. Anotace: “The job was not started because recent account payments have failed or your spending limit needs to be increased.” Stejná překážka nastala u předchozího běhu 41988885874. Nelze ji zaměňovat za chybu překladače ani za úspěšné sestavení 0.6.1. Je potřeba opravit platbu/limit v nastavení GitHub Billing a poté spustit nové ověření. Nesmí se nahrazovat ověřené IPA neexistujícím balíčkem 0.6.1.
+
+Po prodloužení čekání na náhled v úspěšném běhu [41986860050](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/41986860050) se také znovu sestavila 0.6.0 a prošlo všech 26+8 iOS testů. Jeho artefakt `13396707201` je zdrojem předávaného IPA. Kontrolní součet po stažení byl ověřen: `61c14d1265bb43a62e1db582a95e31dced1a20f20a1c104cf834edae522ee690`. Desetisekundové čekání samo nepomohlo s náhledem Watch detailu; proto vznikla samostatně označená, zatím neověřená úprava navigace 0.6.1.
 
 Testy UI používají místní fixture, ne provozní účty. Zápisové integrační testy používají výhradně syntetické uživatele a oddělené úložiště. Úspěch formulářového UI testu sám není vydáván za ověření skutečného přihlášení či fyzického fotoaparátu.
 
@@ -57,6 +65,6 @@ Párování ověřuje skutečný aktivní stav místo opakované aktivace již a
 
 ## Instalace a hranice
 
-Verze je **0.6.0 (6)**. Minimální iOS zůstává 17 a watchOS 10; starší systém má kompatibilní materiál namísto Liquid Glass. Starší runtime nebyl v tomto vydání zvlášť ověřený.
+Předávané ověřené IPA je **0.6.0 (6)**; zdrojová připravená verze je **0.6.1 (7)**. Minimální iOS zůstává 17 a watchOS 10; starší systém má kompatibilní materiál namísto Liquid Glass. Starší runtime nebyl v tomto vydání zvlášť ověřený.
 
 IPA je nepodepsané a vyžaduje vlastní Apple podepsání. Toto vydání se neposílá do TestFlight/App Store. Instalovat jako aktualizaci; před odinstalací je nutné synchronizovat neodeslanou práci. Fyzické iPhone/Watch, reálné přihlášení, fotoaparát, GPS, systémové sdílení, dlouhé uspání, velké soubory a APNs vyžadují samostatnou zkoušku na zařízení. Watch náhledy s fixture nenahrazují ověření skutečného spojení s přihlášeným iPhonem.
