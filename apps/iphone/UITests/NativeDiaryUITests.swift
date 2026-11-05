@@ -4,7 +4,7 @@ final class NativeDiaryUITests: XCTestCase {
     @MainActor
     private func launch() -> XCUIApplication {
         let app = XCUIApplication(); app.launchArguments = ["--native-ui-testing"]; app.launch()
-        XCTAssertTrue(app.tabBars.buttons["Přehled"].waitForExistence(timeout: 25))
+        XCTAssertTrue(app.buttons["Přehled"].waitForExistence(timeout: 25), app.debugDescription)
         return app
     }
     @MainActor
@@ -12,7 +12,7 @@ final class NativeDiaryUITests: XCTestCase {
         let app = launch()
         XCTAssertTrue(app.staticTexts["Pracovní deník"].exists)
         let overview = XCTAttachment(screenshot: app.screenshot()); overview.name = "SwiftUI-prehled"; overview.lifetime = .keepAlways; add(overview)
-        app.tabBars.buttons["Zakázky"].tap()
+        app.buttons["Zakázky"].tap()
         let customer = app.buttons["native-job-fixture-progress"]
         XCTAssertTrue(customer.waitForExistence(timeout: 15));
         let jobs = XCTAttachment(screenshot: app.screenshot()); jobs.name = "SwiftUI-zakazky"; jobs.lifetime = .keepAlways; add(jobs)
@@ -26,7 +26,7 @@ final class NativeDiaryUITests: XCTestCase {
     }
     @MainActor
     func testNativeFormHandoffDoesNotDiscardAnOpenForm() {
-        let app = launch(); app.tabBars.buttons["Více"].tap(); app.buttons["Zákazníci"].tap()
+        let app = launch(); app.buttons["Více"].tap(); app.buttons["Zákazníci"].tap()
         let field = app.textFields.matching(NSPredicate(format: "identifier BEGINSWITH %@", "native-field-")).firstMatch
         guard field.waitForExistence(timeout:15) else { XCTFail("Native form missing: \(app.debugDescription)");return }
         XCTAssertTrue(app.staticTexts["Engine visibility: visible"].exists); field.tap(); field.typeText("Zachovat zapis")
@@ -35,11 +35,11 @@ final class NativeDiaryUITests: XCTestCase {
         XCTAssertTrue(field.waitForExistence(timeout: 10)); XCTAssertEqual(field.value as? String, "Zachovat zapis")
         app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH %@ AND label == %@","native-control-","Zavřít formulář")).firstMatch.tap()
         app.buttons["native-screen-back"].tap()
-        XCTAssertTrue(app.tabBars.buttons["Přehled"].waitForExistence(timeout: 15))
+        XCTAssertTrue(app.buttons["Přehled"].waitForExistence(timeout: 15))
     }
     @MainActor
     func testNativePushSettingsExplainMissingAppleConfigurationWithoutRequestingPermission() {
-        let app=launch();app.tabBars.buttons["Více"].tap();app.swipeUp()
+        let app=launch();app.buttons["Více"].tap();app.swipeUp()
         let settings=app.buttons["native-push-settings"];XCTAssertTrue(settings.waitForExistence(timeout:10));settings.tap()
         XCTAssertTrue(app.staticTexts["native-push-not-configured"].waitForExistence(timeout:15))
         XCTAssertFalse(app.buttons["Zapnout oznámení"].isEnabled)
@@ -47,7 +47,7 @@ final class NativeDiaryUITests: XCTestCase {
     }
     @MainActor
     func testNativePaginationShowsTheExistingJobsOnce() {
-        let app = launch(); app.tabBars.buttons["Zakázky"].tap()
+        let app = launch(); app.buttons["Zakázky"].tap()
         let more = app.buttons["Načíst další zakázky"]
         if !more.waitForExistence(timeout: 10) { app.swipeUp() }
         more.tap()
@@ -56,7 +56,7 @@ final class NativeDiaryUITests: XCTestCase {
     }
     @MainActor
     func testProtocolUsesNativeSheetAndOnePrimarySaveAction() {
-        let app = launch(); app.tabBars.buttons["Zakázky"].tap()
+        let app = launch(); app.buttons["Zakázky"].tap()
         let customer = app.buttons["native-job-fixture-progress"]; XCTAssertTrue(customer.waitForExistence(timeout: 15)); customer.tap()
         let protocolButton = app.buttons["Servisní protokol"]
         for _ in 0..<4 { if protocolButton.isHittable { break }; app.swipeUp() }
@@ -69,7 +69,7 @@ final class NativeDiaryUITests: XCTestCase {
     }
     @MainActor
     func testOpeningAndCancellingEmptyArrivalTimeDoesNotFillIt() {
-        let app = launch(); app.tabBars.buttons["Zakázky"].tap()
+        let app = launch(); app.buttons["Zakázky"].tap()
         let customer = app.buttons["native-job-fixture-progress"]; XCTAssertTrue(customer.waitForExistence(timeout: 15)); customer.tap()
         let depart = app.buttons["Jsem na cestě"]; XCTAssertTrue(depart.waitForExistence(timeout: 10)); depart.tap()
         let time = app.buttons["native-field-id:fixture-arrival"]; XCTAssertTrue(time.waitForExistence(timeout: 15)); time.tap()

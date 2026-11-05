@@ -107,6 +107,7 @@ struct NativeJobCard: View {
                     Text(job.stateLabel).font(.caption.weight(.semibold)).foregroundStyle(job.status == "incomplete" ? Color.orange : DiaryStyle.accent)
                     Text("· \(job.kindLabel)").font(.caption).foregroundStyle(.secondary)
                 }
+                if !job.gardenName.isEmpty { Text(job.gardenName).font(.caption.weight(.medium)).foregroundStyle(.secondary).lineLimit(2) }
                 if !job.address.isEmpty { Label(job.address, systemImage: "mappin").font(.subheadline).foregroundStyle(.secondary).lineLimit(2) }
                 Text([DiaryDate.localized(job.dueDate), job.compactTime].filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption.weight(.medium)).foregroundStyle(.secondary)
                 if !job.assignedName.isEmpty { Label(job.assignedName, systemImage: "person").font(.caption).foregroundStyle(.secondary) }
@@ -154,10 +155,10 @@ struct NativeJobs: View {
                         .accessibilityIdentifier("native-job-" + job.id)
                         .listRowBackground(Color.clear).listRowSeparator(.hidden).listRowInsets(EdgeInsets(top: 5, leading: 0, bottom: 5, trailing: 0))
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button("Změnit stav", systemImage: "checkmark.circle") { Task { await store.openWeb(job: job.id, action: "status") } }.tint(DiaryStyle.accent)
+                            if context.permissions.write { Button("Změnit stav", systemImage: "checkmark.circle") { Task { await store.openWeb(job: job.id, action: "status") } }.tint(DiaryStyle.accent) }
                         }
                         .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                            if job.active && context.enabled("jobTravel") { Button("Jsem na cestě", systemImage: "location.north") { Task { await store.openWeb(job: job.id, action: "depart") } }.tint(.blue) }
+                            if context.permissions.write && job.active && context.enabled("jobTravel") { Button("Jsem na cestě", systemImage: "location.north") { Task { await store.openWeb(job: job.id, action: "depart") } }.tint(.blue) }
                         }
                 }
                 if store.loading { ProgressView("Načítám zakázky…").frame(maxWidth: .infinity).listRowBackground(Color.clear) }
@@ -288,7 +289,7 @@ struct NativeJobDetail: View {
             }.frame(maxWidth: 760, alignment: .leading).padding(18).frame(maxWidth: .infinity)
         }.background(DiaryStyle.background).navigationTitle("Detail zakázky").navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .bottom) {
-                if let job = detail?.job {
+                if let job = detail?.job, store.context?.permissions.write == true {
                     let layout = typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 10)) : AnyLayout(HStackLayout(spacing: 10))
                     layout {
                         if store.context?.enabled("jobTravel") != false && job.active { action("Jsem na cestě", symbol: "location.north.fill", job: job, kind: "depart", prominent: true) }
