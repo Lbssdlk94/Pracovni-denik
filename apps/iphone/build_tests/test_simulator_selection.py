@@ -19,6 +19,9 @@ class SimulatorSelectionTests(unittest.TestCase):
         self.assertEqual(select_simulator(data,'iOS',27),'portrait')
         data['devices']['com.apple.CoreSimulator.SimRuntime.iOS-27-1'].pop()
         self.assertEqual(select_simulator(data,'iOS',27),'foldable')
+    def test_foldable_only_patch_runtime_does_not_hide_conventional_same_major(self):
+        data={'devices':{'com.apple.CoreSimulator.SimRuntime.iOS-27-1':[device('iPhone Duo','foldable')],'com.apple.CoreSimulator.SimRuntime.iOS-27-0':[device('iPhone 18 Pro','portrait')]}}
+        self.assertEqual(select_simulator(data,'iOS',27),'portrait')
     def test_missing_compatible_runtime_fails_instead_of_selecting_unsupported_one(self):
         with self.assertRaises(ValueError): select_simulator({'devices':{'com.apple.CoreSimulator.SimRuntime.iOS-27-0':[device('iPhone 18','future')]}},'iOS',26)
 if __name__=='__main__': unittest.main()

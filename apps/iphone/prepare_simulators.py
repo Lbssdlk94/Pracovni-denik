@@ -19,7 +19,10 @@ def prepare():
         major=int(subprocess.check_output(['xcrun','--sdk',sdk,'--show-sdk-version'],text=True).split('.')[0])
         chosen=select_simulator(devices,platform,major)
         runtime,original=next((runtime,d) for runtime,rows in devices['devices'].items() for d in rows if d['udid']==chosen)
-        kind=portrait_type(types) if label=='phone' else next(d for d in types if d['identifier']==original.get('deviceTypeIdentifier') or d['name']==original['name'])
+        compatible_ids={d.get('deviceTypeIdentifier') for d in devices['devices'][runtime]}
+        compatible_names={d['name'] for d in devices['devices'][runtime]}
+        compatible_types=[d for d in types if d['identifier'] in compatible_ids or d['name'] in compatible_names]
+        kind=portrait_type(compatible_types) if label=='phone' else next(d for d in compatible_types if d['identifier']==original.get('deviceTypeIdentifier') or d['name']==original['name'])
         fresh=subprocess.check_output(['xcrun','simctl','create','Diary CI '+label,kind['identifier'],runtime],text=True).strip()
         output[label]=fresh;print(label+': '+kind['name']+' / '+runtime)
     with open(os.environ['GITHUB_ENV'],'a') as f:
