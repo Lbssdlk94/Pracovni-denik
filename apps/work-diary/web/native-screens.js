@@ -5,7 +5,7 @@ export function createNativeScreens({db,getSession,captureDrafts=()=>[]}){
  let serial=0,revision=0,gestureAt=0,pendingFile=null,fileBuilder=null,preparedFiles=[],locked=false,boundIdentity=null;const ids=new WeakMap(),nodes=new Map(),maps=new Map(),assets=new Map(),objectBlobs=new Map();
  const id=node=>{if(!ids.has(node)){const key='n'+(++serial);ids.set(node,key);nodes.set(key,node);}return ids.get(node);};
  const text=node=>String(node?.textContent||'').replace(/\s+/g,' ').trim();
- const visible=node=>!node.hidden&&getComputedStyle(node).display!=='none'&&getComputedStyle(node).visibility!=='hidden'&&getComputedStyle(node).opacity!=='0'&&node.getAttribute('aria-hidden')!=='true';
+ const visible=node=>{for(let el=node.nodeType===1?node:node.parentElement;el;el=el.parentElement){const style=getComputedStyle(el);if(el.hidden||style.display==='none'||style.visibility==='hidden'||style.opacity==='0'||el.getAttribute('aria-hidden')==='true')return false;if(el.tagName==='DETAILS'&&!el.open&&el!==node&&!el.querySelector(':scope > summary')?.contains(node))return false;}return true;};
  const live=key=>{const n=nodes.get(key);if(!n?.isConnected)throw Error('Obrazovka se změnila. Obnovte ji před další úpravou.');return n;};
  const notify=()=>globalThis.webkit?.messageHandlers?.workDiaryState?.postMessage({type:'screen'});
  const permitted=async()=>{if(locked)throw Error('Přístup se změnil. Neodeslanou práci nejdříve zabezpečte a obnovte aplikaci.');const s=db.session();const identity=s?.user?JSON.stringify([s.user.id,s.user.role,s.workspace?.authorizationVersion,s.features]):null;if(boundIdentity&&identity!==boundIdentity){locked=true;nodes.clear();assets.clear();throw Error('Přístup se změnil. Obnovte aplikaci.');}if(identity)boundIdentity=identity;if(!s?.user){if(document.querySelector('.shell'))throw Error('Obnovte přihlášení.');return;}if(!navigator.onLine&&!await db.offlineSession())throw Error('Platnost offline přístupu vypršela. Připojte se a ověřte účet.');};
@@ -21,7 +21,7 @@ export function createNativeScreens({db,getSession,captureDrafts=()=>[]}){
  HTMLInputElement.prototype.click=function(){if(this.type==='file'&&Date.now()-gestureAt<30000){fileBuilder=null;preparedFiles=[];pendingFile={id:id(this),label:this.closest('label')?text(this.closest('label')):'Vybrat soubor',accept:this.accept,multiple:this.multiple,camera:!!this.capture};notify();return;}return originalFileClick.call(this);};
  function label(el){if(el.getAttribute('aria-label'))return el.getAttribute('aria-label');if(el.labels?.length)return [...el.labels].map(l=>{const copy=l.cloneNode(true);copy.querySelectorAll('input,textarea,select,svg').forEach(n=>n.remove());return text(copy);}).filter(Boolean).join(' ');return el.title||el.placeholder||el.name||el.id||'Údaj';}
  function read(el,path='r',deep=false){
-  if(el.nodeType===3){const value=text(el);return value?[{id:path,handle:id(el),kind:'text',text:value}]:[];}
+  if(el.nodeType===3){if(!visible(el))return [];const value=text(el);return value?[{id:path,handle:id(el),kind:'text',text:value}]:[];}
   if(el.nodeType!==1||['SCRIPT','STYLE','NOSCRIPT','SVG','PATH','OPTION'].includes(el.tagName)||!visible(el))return [];
   const tag=el.tagName,handle=id(el),base={id:el.id?'id:'+el.id:path,handle};
   if(el.matches('.sidebar,.topbar,.nav,.mobile-account'))return [];
@@ -46,7 +46,7 @@ export function createNativeScreens({db,getSession,captureDrafts=()=>[]}){
   if(tag==='IFRAME'||tag==='OBJECT'||tag==='EMBED')return [{...base,kind:'document',text:el.title||'Zobrazit dokument'}];
   if(tag==='PROGRESS')return [{...base,kind:'progress',text:el.getAttribute('aria-label')||'Průběh',value:String(el.value/el.max)}];
   if(tag==='BR'||tag==='HR')return [];
-  if(['P','SMALL'].includes(tag)&&!el.querySelector('input,button,a,select,textarea,[role=button],img,canvas'))return [{...base,kind:'text',text:text(el),tone:tag==='SMALL'||el.matches('.mini-empty')?'secondary':null}];
+  if(['P','SMALL'].includes(tag)&&!el.querySelector('input,button,a,select,textarea,[role=button],img,canvas,progress,iframe,object,embed,details')&&[...el.querySelectorAll('*')].every(visible))return [{...base,kind:'text',text:text(el),tone:tag==='SMALL'||el.matches('.mini-empty')?'secondary':null}];
   const children=[...el.childNodes].flatMap((n,i)=>read(n,path+'.'+i,deep));
   if(!children.length)return [];
   if(tag==='FORM')return [{...base,kind:'form',children}];

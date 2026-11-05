@@ -48,7 +48,8 @@ jobs:
           swift build -c release
           cp .build/release/xcodegen /usr/local/bin/xcodegen
       - name: Verify signing profile policy
-        run: python3 -m unittest discover -s apps/iphone/signing -p 'test_*.py'
+        run: |
+          python3 -m unittest discover -s apps/iphone/signing -p 'test_*.py'
           python3 -m unittest discover -s apps/iphone/build_tests -p 'test_*.py'
       - name: Generate Xcode project
         run: cd apps/iphone && xcodegen generate
