@@ -110,7 +110,8 @@ jobs:
             if [[ "$SCREEN" == detail ]]; then ARGS+=(--watch-preview-detail); fi
             if [[ "$SCREEN" == inbox ]]; then ARGS+=(--watch-preview-inbox); fi
             xcrun simctl launch "$WATCH_UDID" cz.pracovnidenik.app.watchapp "${ARGS[@]}"
-            sleep 3
+            # A cold debug launch can still be on the system launch animation at 3s.
+            sleep 10
             xcrun simctl io "$WATCH_UDID" screenshot "build/watch-previews/$SCREEN.png"
           done
       - name: Signed IPA with Push Notifications
