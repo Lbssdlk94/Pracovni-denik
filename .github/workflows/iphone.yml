@@ -60,6 +60,12 @@ jobs:
           mkdir -p build
           UDID=$(xcrun simctl list devices available -j | python3 apps/iphone/select_simulator.py --sdk-major "$(xcrun --sdk iphonesimulator --show-sdk-version | cut -d. -f1)")
           xcodebuild -project apps/iphone/PracovniDenik.xcodeproj -scheme PracovniDenik -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build/simulator -resultBundlePath build/Tests.xcresult test CODE_SIGNING_ALLOWED=NO | tee build/simulator.log
+      - name: Export iPhone UI previews
+        if: always()
+        run: |
+          if [ -d build/Tests.xcresult ]; then
+            xcrun xcresulttool export attachments --path build/Tests.xcresult --output-path build/iphone-previews
+          fi
       - name: Unsigned iPhone build
         shell: bash
         run: |
@@ -164,3 +170,4 @@ jobs:
             build/SIGNED-IPA-SHA256.txt
             build/Tests.xcresult
             build/watch-previews/*.png
+            build/iphone-previews/**

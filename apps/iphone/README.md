@@ -24,11 +24,11 @@ PDF a další soubory se otevírají přes QuickLook a lze je sdílet systémov�
 
 Balíček je **nepodepsaný**. Nelze jej přímo nainstalovat klepnutím v Safari. Použijte vlastní nástroj pro podepsání a instalaci jako u 3D Scanneru, například Sideloadly. Apple přihlášení zadávejte pouze důvěryhodnému instalačnímu nástroji, neposílejte hesla, certifikáty ani privátní klíče do chatu či GitHubu. TestFlight / App Store vyžadují Apple Developer účet, podepisování a samostatné ověření distribučních požadavků; toto workflow do nich aplikaci nevydává. Artefakty GitHubu mají životnost 14 dní.
 
-Pro vlastní vývoj: Xcode 26.0.1, XcodeGen 2.44.1, `cd apps/iphone && xcodegen generate`. Minimální iOS je 17. Výchozí instalace je Dr. Závlaha; důvěryhodné domény Dr. Závlaha a Dr. Garden jsou explicitně uvedené v `EndpointPolicy.swift` a `WKAppBoundDomains`. Telefon, připravená SMS, e-mail a externí navigace se otevírají systémově.
+Pro vlastní vývoj: Xcode 27 (kompatibilní základ Xcode 26+), XcodeGen 2.44.1, `cd apps/iphone && xcodegen generate`. Minimální iOS je 17. Výchozí instalace je Dr. Závlaha; důvěryhodné domény Dr. Závlaha a Dr. Garden jsou explicitně uvedené v `EndpointPolicy.swift` a `WKAppBoundDomains`. Telefon, připravená SMS, e-mail a externí navigace se otevírají systémově.
 
 ## Přihlášení, offline a známé meze
 
-- Aplikace má vlastní trvalé cookies a úložiště, není automaticky přihlášená ze Safari. Přístupový odkaz se vyplňuje nativním zabezpečeným polem. Přihlášení poskytovatele ChatGPT zůstává v odděleném přihlašovacím okně; nejde o firemní obrazovku převedenou do SwiftUI.
+- Aplikace má vlastní trvalé cookies a úložiště, není automaticky přihlášená ze Safari. Přihlášení používá firemní jméno a heslo; osobní přístupové odkazy jsou na serveru vypnuté. Přihlášení poskytovatele ChatGPT zůstává v odděleném přihlašovacím okně; nejde o firemní obrazovku převedenou do SwiftUI.
 - Návrat z pozadí ani přepnutí nativní sekce neobnovuje hlavní stránku. Při pádu webového procesu se nabídne výslovné obnovení. Zachovat lze jen již uložené koncepty / fronty; neuloženou paměť zaniklého procesu nelze zaručit.
 - Offline zápisy používají původní podporované workflow. Pro offline spuštění je nejdřív nutné online přihlášení a naplnění cache. Typovaný nativní přehled/seznam vyžaduje ověřené připojení; při jeho ztrátě se použijí dostupné původní pracovní obrazovky vykreslené nativně. Nedochází ke slibu, že všechny původně online funkce nově fungují offline.
 - Neodinstalovávejte aplikaci ani nemažte její data, dokud obsahuje neodeslanou práci. Úložiště Safari a aplikace se automaticky neslučují.

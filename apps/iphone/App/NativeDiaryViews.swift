@@ -151,6 +151,7 @@ struct NativeJobs: View {
             Section(store.loading ? "Načítám rozpis" : "\(store.jobs.count) návštěv\(store.nextCursor == nil ? "" : "+")") {
                 ForEach(store.jobs) { job in
                     NavigationLink { NativeJobDetail(store: store, id: job.id) } label: { NativeJobCard(job: job) }
+                        .accessibilityIdentifier("native-job-" + job.id)
                         .listRowBackground(Color.clear).listRowSeparator(.hidden).listRowInsets(EdgeInsets(top: 5, leading: 0, bottom: 5, trailing: 0))
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button("Změnit stav", systemImage: "checkmark.circle") { Task { await store.openWeb(job: job.id, action: "status") } }.tint(DiaryStyle.accent)

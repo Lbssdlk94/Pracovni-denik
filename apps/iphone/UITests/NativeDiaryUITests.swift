@@ -13,8 +13,10 @@ final class NativeDiaryUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Pracovní deník"].exists)
         let overview = XCTAttachment(screenshot: app.screenshot()); overview.name = "SwiftUI-prehled"; overview.lifetime = .keepAlways; add(overview)
         app.tabBars.buttons["Zakázky"].tap()
-        let customer = app.staticTexts["Pavel Svoboda – ukázka"]
-        XCTAssertTrue(customer.waitForExistence(timeout: 15)); customer.tap()
+        let customer = app.buttons["native-job-fixture-progress"]
+        XCTAssertTrue(customer.waitForExistence(timeout: 15));
+        let jobs = XCTAttachment(screenshot: app.screenshot()); jobs.name = "SwiftUI-zakazky"; jobs.lifetime = .keepAlways; add(jobs)
+        customer.tap()
         XCTAssertTrue(app.navigationBars["Detail zakázky"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["Práce 09:00 · 60 min"].exists)
         XCTAssertTrue(app.staticTexts["Příjezd 10:00–11:00"].exists)
@@ -55,7 +57,7 @@ final class NativeDiaryUITests: XCTestCase {
     @MainActor
     func testProtocolUsesNativeSheetAndOnePrimarySaveAction() {
         let app = launch(); app.tabBars.buttons["Zakázky"].tap()
-        let customer = app.staticTexts["Pavel Svoboda – ukázka"]; XCTAssertTrue(customer.waitForExistence(timeout: 15)); customer.tap()
+        let customer = app.buttons["native-job-fixture-progress"]; XCTAssertTrue(customer.waitForExistence(timeout: 15)); customer.tap()
         let protocolButton = app.buttons["Servisní protokol"]
         for _ in 0..<4 { if protocolButton.isHittable { break }; app.swipeUp() }
         protocolButton.tap()
@@ -68,7 +70,7 @@ final class NativeDiaryUITests: XCTestCase {
     @MainActor
     func testOpeningAndCancellingEmptyArrivalTimeDoesNotFillIt() {
         let app = launch(); app.tabBars.buttons["Zakázky"].tap()
-        let customer = app.staticTexts["Pavel Svoboda – ukázka"]; XCTAssertTrue(customer.waitForExistence(timeout: 15)); customer.tap()
+        let customer = app.buttons["native-job-fixture-progress"]; XCTAssertTrue(customer.waitForExistence(timeout: 15)); customer.tap()
         let depart = app.buttons["Jsem na cestě"]; XCTAssertTrue(depart.waitForExistence(timeout: 10)); depart.tap()
         let time = app.buttons["native-field-id:fixture-arrival"]; XCTAssertTrue(time.waitForExistence(timeout: 15)); time.tap()
         app.buttons["Zrušit"].tap()
