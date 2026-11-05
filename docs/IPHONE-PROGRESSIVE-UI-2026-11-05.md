@@ -42,3 +42,12 @@ GitHub Actions [běh 42081168803](https://github.com/Lbssdlk94/Pracovni-denik/ac
 Závěrečné změny se proto ukládají s `[skip ci]`, aby se opakovaně nespouštěl stejný zablokovaný běh. Po vyřešení účtování je nutné spustit workflow `iPhone and Apple Watch build and IPA` nad **aktuální hlavou této větve**, ověřit Swift kompilaci, XCTest a nové screenshoty. Následně vydat nové IPA se stejným bundle ID a vlastním podepsáním. V tuto chvíli **není nové IPA, ověřené nativní snímky ani ověření na fyzickém iPhonu**. Poslední úspěšně sestavené IPA zůstává 0.6.0; neobsahuje tyto úpravy ani rozpracované změny Watch z 0.6.1.
 
 Provozní zákazníci, zahrady, zakázky, fotky, role a databáze se při testování neupravovaly.
+
+## Publikovaný společný kontrakt
+
+Kompatibilní prezentační adaptér byl úspěšně nasazen bez změn databáze:
+
+- Dr. Závlaha: https://zavlahovy-denik.purplecedar.chatgpt.site — verze Sites 120, zdroj `f896082efc4b9674384ee7d7c34607ef0e9f40f4`.
+- Dr. Garden: https://dr-garden.purplecedar.chatgpt.site — verze Sites 41, zdroj `7505fc72705d80e34dae621f9aa5cc5987093ac2`.
+
+Obě publikace vrátily `succeeded`. Je to podklad pro nové SwiftUI obrazovky; stávající nainstalované IPA se tím nepřepíše. Native zdroje a omezení sestavení jsou v [draft PR #2](https://github.com/Lbssdlk94/Pracovni-denik/pull/2).
