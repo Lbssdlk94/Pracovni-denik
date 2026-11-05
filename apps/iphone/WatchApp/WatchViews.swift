@@ -23,6 +23,7 @@ struct WatchDayView: View {
     @ObservedObject var store: WatchStore
     @Environment(\.scenePhase) private var scenePhase
     @State private var path: [WatchRoute]
+    @State private var showOptions = false
     @MainActor init(store: WatchStore) {
         self.store = store
         var initial: [WatchRoute] = []
@@ -52,12 +53,7 @@ struct WatchDayView: View {
             }.navigationTitle("Dnes")
                 .toolbar {
                     ToolbarItem(placement:.topBarTrailing) {
-                        Menu {
-                            Button("Obnovit zakázky",systemImage:"arrow.clockwise") { Task { await store.refresh() } }
-                            if store.visible()?.notificationsEnabled == true {
-                                Button("Upozornění",systemImage:"bell") { path.append(.inbox) }
-                            }
-                        } label: { Image(systemName:"ellipsis").foregroundStyle(.white) }
+                        Button { showOptions = true } label: { Image(systemName:"ellipsis").foregroundStyle(.white) }
                             .tint(Color(white:0.2)).accessibilityLabel("Možnosti deníku").disabled(store.busy)
                     }
                 }
@@ -68,6 +64,11 @@ struct WatchDayView: View {
                     }
                 }
         }.tint(WatchStyle.accent)
+            .confirmationDialog("Možnosti deníku",isPresented:$showOptions,titleVisibility:.visible) {
+                Button("Obnovit zakázky") { Task { await store.refresh() } }
+                if store.visible()?.notificationsEnabled == true { Button("Upozornění") { path.append(.inbox) } }
+                Button("Zrušit",role:.cancel) {}
+            }
             .task {
                 if !store.preview { await store.resume() }
                 while !Task.isCancelled {
