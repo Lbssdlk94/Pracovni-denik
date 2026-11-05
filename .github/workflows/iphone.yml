@@ -51,6 +51,8 @@ jobs:
         run: |
           python3 -m unittest discover -s apps/iphone/signing -p 'test_*.py'
           python3 -m unittest discover -s apps/iphone/build_tests -p 'test_*.py'
+      - name: Prepare isolated portrait iPhone and Watch simulators
+        run: python3 apps/iphone/prepare_simulators.py
       - name: Generate Xcode project
         run: cd apps/iphone && xcodegen generate
       - name: Simulator build and tests
@@ -58,7 +60,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p build
-          UDID=$(xcrun simctl list devices available -j | python3 apps/iphone/select_simulator.py --sdk-major "$(xcrun --sdk iphonesimulator --show-sdk-version | cut -d. -f1)")
+          UDID="$DIARY_PHONE_SIMULATOR_ID"
           xcodebuild -project apps/iphone/PracovniDenik.xcodeproj -scheme PracovniDenik -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build/simulator -resultBundlePath build/Tests.xcresult test CODE_SIGNING_ALLOWED=NO | tee build/simulator.log
       - name: Export iPhone UI previews
         if: always()
@@ -83,19 +85,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          WATCH_UDID=$(xcrun simctl list devices available -j | python3 apps/iphone/select_watch_simulator.py --sdk-major "$(xcrun --sdk watchsimulator --show-sdk-version | cut -d. -f1)")
+          WATCH_UDID="$DIARY_WATCH_SIMULATOR_ID"
           xcodebuild -project apps/iphone/PracovniDenik.xcodeproj -scheme PracovniDenikWatch -destination "platform=watchOS Simulator,id=$WATCH_UDID" -derivedDataPath build/watch-simulator build CODE_SIGNING_ALLOWED=NO | tee build/watch-simulator.log
-          PHONE_UDID=$(xcrun simctl list devices available -j | python3 apps/iphone/select_simulator.py --sdk-major "$(xcrun --sdk iphonesimulator --show-sdk-version | cut -d. -f1)")
+          PHONE_UDID="$DIARY_PHONE_SIMULATOR_ID"
           xcrun simctl shutdown "$WATCH_UDID" >/dev/null 2>&1 || true
           xcrun simctl shutdown "$PHONE_UDID" >/dev/null 2>&1 || true
           python3 apps/iphone/pair_watch_simulators.py "$WATCH_UDID" "$PHONE_UDID"
           xcrun simctl boot "$PHONE_UDID"
           xcrun simctl bootstatus "$PHONE_UDID" -b
           xcrun simctl install "$PHONE_UDID" build/simulator/Build/Products/Debug-iphonesimulator/PracovniDenik.app
-          xcrun simctl boot "$WATCH_UDID"
-          xcrun simctl bootstatus "$WATCH_UDID" -b
           WATCH_APP=build/watch-simulator/Build/Products/Debug-watchsimulator/PracovniDenikWatch.app
-          xcrun simctl install "$WATCH_UDID" "$WATCH_APP"
+          # A paired Watch may be auto-booted/shut down during phone startup.
+          # Retry only this ephemeral simulator boot/install, never app writes.
+          for ATTEMPT in 1 2; do
+            xcrun simctl boot "$WATCH_UDID" >/dev/null 2>&1 || true
+            if xcrun simctl bootstatus "$WATCH_UDID" -b && xcrun simctl install "$WATCH_UDID" "$WATCH_APP"; then break; fi
+            if [[ "$ATTEMPT" == 2 ]]; then exit 1; fi
+            sleep 3
+          done
           mkdir -p build/watch-previews
           for SCREEN in day detail inbox; do
             xcrun simctl terminate "$WATCH_UDID" cz.pracovnidenik.app.watchapp >/dev/null 2>&1 || true
@@ -166,6 +173,7 @@ jobs:
             build/*.ipa
             build/*.log
             build/*version.txt
+            build/simulator-devices.json
             build/IPA-SHA256.txt
             build/SIGNED-IPA-SHA256.txt
             build/Tests.xcresult
