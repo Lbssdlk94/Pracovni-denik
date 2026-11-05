@@ -1,5 +1,7 @@
 # SwiftUI: pět záložek a rozklikávací obrazovky (0.7.0 / 8)
 
+**Aktuální stav: sestaveno a ověřeno.** [GitHub běh 42091853829](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/42091853829) úspěšně sestavil zdroj `fccb246efb22c87e81a152fceb620f9b5c28742c` v Xcode 27.1 / SDK 27.1. Prošlo 29 jednotkových a 10 UI testů. Vzniklo nové nepodepsané IPA včetně Watch 0.7.0 (8).
+
 ## Změny
 
 - Nativní `TabView` má pořadí Přehled, Zakázky, Docházka, Zákazníci, Více. Vypnuté moduly se nezpřístupňují. Dosavadní engine zůstává připojený bez reloadu.
@@ -27,19 +29,30 @@ Viditelné ovládací prvky jsou SwiftUI. Původní skrytý `WKWebView` stále z
 - `test-native-client-browser.mjs`: skutečné lokální Worker/D1/R2, oddělení oborů, přiřazení, modulové zákazy, zachování formuláře, zrušení bez zápisu, offline zneplatnění snapshotů.
 - `test-native-screens-browser.mjs`: kompaktní řádky, stabilní ID, samostatné volání, zachované adresy v detailu, zákaznický detail jako stránka, rozbalovací nastavení a kontrakt při 360/390/430 CSS px. Skutečné uložení zákazníka s párovou zahradou, protokolu, podpisu, fotky, vytvoření PDF, značek a mapové polohy; offline uložení a následná synchronizace bez duplikace. Pracovník Garden u společné zahrady neobdrží šachty, vyfukování ani soukromé závlahářské poznámky.
 
-Připravené, ale **nespuštěné** nové Swift/XCTest kontroly:
+Úspěšně spuštěné nové Swift/XCTest kontroly:
 
 - Typování kompaktních řádků a místních kategorií, kompatibilita starého kontraktu a rozlišení detailu od modálního formuláře.
 - Pět záložek v zákaznickém detailu, přepnutí na docházku, kompaktní seznam zahrad a uzavřené podrobnosti, zachování rozepsaného formuláře při pokusu o změnu záložky.
-- Screenshot attachments pro nové seznamy a detail vzniknou až při úspěšném běhu XCTest; starší snímky 0.6.0 nejsou důkazem tohoto rozložení.
+- XCTest vytvořil skutečné snímky kompaktních seznamů, detailu zahrady, přehledu, zakázek, protokolu a přesného příjezdu. Byly vizuálně zkontrolovány. Obrázky obsahují pouze oddělená testovací data.
 
-## Zbývající blokace
+## Sestavení a ověřené hranice
 
-GitHub Actions [běh 42081168803](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/42081168803) pro první implementační commit byl odmítnut před přidělením runneru (žádné kroky Xcode). Anotace GitHubu:
+Dřívější odmítnutí GitHub Actions kvůli účtování je vyřešeno. Nový běh skončil `success`; Xcode kroky se skutečně provedly. Archiv artefaktu `13445709667` byl stažen a jeho SHA-256 porovnán s digestem z GitHub API. V IPA byla zkontrolována verze telefonu i hodinek, původní bundle ID, povolené domény a skutečně přibalená Watch aplikace.
 
-> The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings
+IPA SHA-256: `cc1690c2be8e414080978b68b01a704b0e1db6baa2a4fa611e6dba02d1c1883d`.
 
-Závěrečné změny se proto ukládají s `[skip ci]`, aby se opakovaně nespouštěl stejný zablokovaný běh. Po vyřešení účtování je nutné spustit workflow `iPhone and Apple Watch build and IPA` nad **aktuální hlavou této větve**, ověřit Swift kompilaci, XCTest a nové screenshoty. Následně vydat nové IPA se stejným bundle ID a vlastním podepsáním. V tuto chvíli **není nové IPA, ověřené nativní snímky ani ověření na fyzickém iPhonu**. Poslední úspěšně sestavené IPA zůstává 0.6.0; neobsahuje tyto úpravy ani rozpracované změny Watch z 0.6.1.
+GitHub artefakt se jmenuje `PracovniDenik-builds-and-logs-UNSIGNED` a má životnost 14 dní. K instalaci je potřeba vlastní podepsání stejně jako u dosavadních IPA. TestFlight / App Store nebyly publikovány.
+
+Ověření proběhlo v izolovaném simulátoru iPhone a Watch. Nebyl dostupný fyzický iPhone/Watch, skutečné doručení APNs ani reálný telefonní hovor / odeslání SMS. Přehled a seznamy byly zkontrolovány vizuálně, nové položky More/Settings byly průchozí v UI testech; jejich samostatné snímky tento běh nepořizoval. Kontroly CSS šířek 360/390/430 z předchozí části ověřují datový adaptér v prohlížeči, nikoli plnou nativní matici zařízení.
+
+V testu prvního otevření klávesnice se objevilo jedno diagnostické varování `Invalid frame dimension (negative or non-finite)`. Test psaní a zachování formuláře prošel; příslušný snímek neukázal oříznuté ani ztracené pole. Příčina varování není potvrzená a chování klávesnice na fyzickém zařízení zůstává k ověření. Další dvě varování sestavení pouze oznamují absenci AppIntents; tento modul aplikace nepoužívá.
+
+## Skutečné snímky nové verze
+
+- [Zákazníci](previews/iphone-0.7/zakaznici.png)
+- [Zahrady](previews/iphone-0.7/zahrady.png)
+- [Rozklikávací detail zahrady](previews/iphone-0.7/detail-zahrady.png)
+- [Skutečně vykreslený detail na Watch](previews/iphone-0.7/watch-detail.png)
 
 Provozní zákazníci, zahrady, zakázky, fotky, role a databáze se při testování neupravovaly.
 
@@ -50,4 +63,4 @@ Kompatibilní prezentační adaptér byl úspěšně nasazen bez změn databáze
 - Dr. Závlaha: https://zavlahovy-denik.purplecedar.chatgpt.site — verze Sites 120, zdroj `f896082efc4b9674384ee7d7c34607ef0e9f40f4`.
 - Dr. Garden: https://dr-garden.purplecedar.chatgpt.site — verze Sites 41, zdroj `7505fc72705d80e34dae621f9aa5cc5987093ac2`.
 
-Obě publikace vrátily `succeeded`. Je to podklad pro nové SwiftUI obrazovky; stávající nainstalované IPA se tím nepřepíše. Native zdroje a omezení sestavení jsou v [draft PR #2](https://github.com/Lbssdlk94/Pracovni-denik/pull/2).
+Obě publikace vrátily `succeeded`. Je to podklad pro nové SwiftUI obrazovky; stávající nainstalované IPA se tím nepřepíše. Nativní zdroje a ověření jsou v [PR #2](https://github.com/Lbssdlk94/Pracovni-denik/pull/2).
