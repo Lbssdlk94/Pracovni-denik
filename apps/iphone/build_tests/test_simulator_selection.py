@@ -14,6 +14,11 @@ class SimulatorSelectionTests(unittest.TestCase):
     def test_watch_ignores_phone_runtime_and_respects_sdk(self):
         data={'devices':{'com.apple.CoreSimulator.SimRuntime.iOS-27-0':[device('iPhone 18','phone')],'com.apple.CoreSimulator.SimRuntime.watchOS-27-0':[device('Apple Watch','new-watch')],'com.apple.CoreSimulator.SimRuntime.watchOS-26-0':[device('Apple Watch','watch')]}}
         self.assertEqual(select_simulator(data,'watchOS',26),'watch')
+    def test_standard_portrait_phone_preferred_but_foldable_remains_a_valid_fallback(self):
+        data={'devices':{'com.apple.CoreSimulator.SimRuntime.iOS-27-1':[device('iPhone Duo','foldable'),device('iPhone 18 Pro','portrait')]}}
+        self.assertEqual(select_simulator(data,'iOS',27),'portrait')
+        data['devices']['com.apple.CoreSimulator.SimRuntime.iOS-27-1'].pop()
+        self.assertEqual(select_simulator(data,'iOS',27),'foldable')
     def test_missing_compatible_runtime_fails_instead_of_selecting_unsupported_one(self):
         with self.assertRaises(ValueError): select_simulator({'devices':{'com.apple.CoreSimulator.SimRuntime.iOS-27-0':[device('iPhone 18','future')]}},'iOS',26)
 if __name__=='__main__': unittest.main()

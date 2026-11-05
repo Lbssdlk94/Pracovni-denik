@@ -13,7 +13,9 @@ def select_simulator(payload, platform, sdk_major=None):
         runtimes.append(((major, minor), devices))
     prefix = 'iPhone' if platform == 'iOS' else 'Apple Watch'
     for _, devices in sorted(runtimes, key=lambda entry: entry[0], reverse=True):
-        for device in devices:
+        # Cover a conventional portrait iPhone as well as earlier Duo evidence.
+        ordered = sorted(devices, key=lambda d: platform == 'iOS' and any(part in d.get('name','').lower() for part in ('duo','fold')))
+        for device in ordered:
             if device.get('isAvailable') and device.get('name', '').startswith(prefix):
                 return device['udid']
     raise ValueError('No available compatible ' + prefix + ' simulator')
