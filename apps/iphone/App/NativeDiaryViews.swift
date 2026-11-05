@@ -35,6 +35,10 @@ struct NativeDiaryTabs: View {
                 // Flush native edits before asking the existing engine to leave.
                 // Its dirty-form guard must be allowed to refuse a tab switch.
                 guard await screens.prepareNavigation() else { return }
+                if screens.screen?.isInlineDetail == true, let close = screens.screen?.closeControl {
+                    await screens.perform(close)
+                    guard screens.error == nil else { return }
+                }
                 await store.activate()
                 guard let current = store.context, !store.webVisible else { return }
                 guard target != 1 || current.enabled("jobs"), target != 2 || current.enabled("attendance"), target != 3 || current.enabled("customers") else { return }

@@ -100,6 +100,9 @@ final class NativeDiaryUITests: XCTestCase {
         app.buttons["native-detail-back"].tap()
         XCTAssertTrue(customer.waitForExistence(timeout: 10))
         let image = XCTAttachment(screenshot: app.screenshot()); image.name = "SwiftUI-zakaznici-kompaktni"; image.lifetime = .keepAlways; add(image)
+        customer.tap(); XCTAssertTrue(app.buttons["native-detail-back"].waitForExistence(timeout: 10))
+        selectTab("Docházka", in: app)
+        XCTAssertTrue(app.staticTexts["Dnešní den"].waitForExistence(timeout: 10))
     }
     @MainActor
     func testGardenListShowsNameAndDistanceAndProgressiveDetails() {

@@ -53,7 +53,7 @@ try{
  const customerRow=await node('Jméno se dvěma zahradami','contact');assert.equal(customerRow.id,'customer:ui-both');
  assert.ok(customerRow.children.some(n=>n.kind==='button'&&n.intent==='open'));
  await execute('control',{handle:customerRow.handle,action:'click'});await page.locator('[data-customer-view]').waitFor();
- const customerDetail=await screen();assert.equal(customerDetail.presentation,'page');
+ const customerDetail=await screen();assert.equal(customerDetail.presentation,'page');assert.equal(customerDetail.title,'Jméno se dvěma zahradami');
  assert.ok(customerDetail.nodes.some(n=>n.kind==='category'&&n.text==='Kontakt a adresa'));
  assert.ok(flatten(customerDetail.nodes).some(n=>n.text?.includes('Lipová 1488')),'Address must remain accessible in the details');
  await click('Zavřít');
@@ -67,6 +67,8 @@ try{
  const historyCategory=gardenDetail.nodes.find(n=>n.id==='garden-section:history');assert.ok(historyCategory);
  assert.ok(historyCategory.children.some(n=>n.kind==='button'));
  assert.ok(!gardenDetail.nodes.some(n=>n.kind==='text'&&n.text?.includes('Lipová')),'Full address leaked onto native garden summary');
+ const gardenBack=flatten(gardenDetail.nodes).find(n=>n.intent==='back');assert.ok(gardenBack);
+ await execute('control',{handle:gardenBack.handle,action:'click'});await page.locator('.garden-card[data-garden]').first().waitFor();
  await execute('open',{page:'settings'});await page.locator('.settings-workspace').waitFor();
  const settingsScreen=await screen();assert.ok(settingsScreen.nodes.some(n=>n.kind==='category'));
  assert.ok(!settingsScreen.nodes.some(n=>['field','toggle','select','form'].includes(n.kind)&&!n.id.startsWith('header.')),'Settings forms must start behind categories');
@@ -75,6 +77,7 @@ try{
  await execute('open',{page:'customers'});await page.locator('#customers-new').waitFor();await click('Nový zákazník');await page.locator('#customer-form').waitFor();
  await value('Jméno nebo název','Nativní zákazník');await value('Telefonní číslo','+420777123456');await value('Ulice, číslo','Ukázková 12');await value('Město / obec','Blatná');await click('Uložit zákazníka');await page.locator('#customer-form').waitFor({state:'hidden'});
  assert.equal((await db.prepare("SELECT count(*) n FROM customers WHERE name='Nativní zákazník'").first()).n,1);assert.equal((await db.prepare("SELECT count(*) n FROM gardens WHERE customer_id IN (SELECT id FROM customers WHERE name='Nativní zákazník')").first()).n,1);
+ const savedContact=await node('Nativní zákazník','contact');assert.ok(savedContact.children.some(n=>n.intent==='call'&&n.handle),'Customer row must retain a separate live call action');
  await execute('open',{jobId:'irrigation-job',action:'protocol'});await page.locator('#service-work-form').waitFor();
  await value('Provedené práce','Nativní ovládací prvky – servis systému');
  const canvas=await node('Podpis zákazníka','canvas');await execute('control',{handle:canvas.handle,action:'draw',points:[{x:.1,y:.5},{x:.3,y:.2},{x:.6,y:.8},{x:.8,y:.4}]});
@@ -106,4 +109,16 @@ try{
  await execute('nativePush',{action:'detach'});console.log('PASS native notification settings handoff, honest missing-credentials state and logout cleanup through the real Worker');
 
  await context.close();
+ actor=people.gardenWorker;
+ const gardenContext=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});
+ await gardenContext.addInitScript(()=>{window.webkit={messageHandlers:{workDiaryState:{postMessage:()=>{}}}}});
+ const gardenPage=await gardenContext.newPage();await gardenPage.goto(base);await gardenPage.locator('.shell').waitFor();
+ await gardenPage.evaluate(()=>window.__workDiaryNative.execute('open',{page:'home'}));await gardenPage.locator('.garden-card[data-garden]').first().waitFor();
+ const greenList=await gardenPage.evaluate(()=>window.__workDiaryNative.execute('screen'));
+ const sharedGarden=flatten(greenList.nodes).find(n=>n.kind==='destination'&&n.id==='garden:'+mother);assert.ok(sharedGarden,'Shared garden basic information must stay accessible');
+ await gardenPage.evaluate(handle=>window.__workDiaryNative.execute('control',{handle,action:'click'}),sharedGarden.handle);await gardenPage.locator('.garden-title').waitFor();
+ const greenDetail=await gardenPage.evaluate(()=>window.__workDiaryNative.execute('screen'));
+ assert.ok(!flatten(greenDetail.nodes).some(n=>['garden-section:shafts','garden-section:blowout'].includes(n.id)),'Irrigation-only sections leaked into progressive Garden navigation');
+ assert.ok(!JSON.stringify(greenDetail).includes('IRR_PRIVATE_NOTE'));
+ await gardenContext.close();console.log('PASS progressive shared-garden navigation still excludes irrigation shafts, blowout and private notes for a Garden worker');
 }finally{await browser?.close();if(server){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}await mf?.dispose();}

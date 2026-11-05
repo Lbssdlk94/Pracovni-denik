@@ -55,6 +55,7 @@ struct NativeScreenSnapshot: Decodable {
     }
     var repeatedTitleID: String? { controls.first(where: { $0.kind == "heading" && (modal == true || $0.level == 1) && $0.label == displayTitle })?.id }
     var closeControl: NativeControl? { controls.first(where: { $0.intent == "dismiss" }) ?? controls.first(where: { $0.kind == "button" && $0.label == "Zavřít" }) }
+    var backControl: NativeControl? { controls.first(where: { $0.kind == "button" && $0.intent == "back" }) }
     var primaryControl: NativeControl? { nodes.flatMap(\.presentedDescendants).first(where: { $0.isAction && $0.primary == true && $0.danger != true && $0.intent != "dismiss" }) }
     func find(_ key: String) -> NativeControl? { nodes.compactMap { $0.find(key) }.first }
 }

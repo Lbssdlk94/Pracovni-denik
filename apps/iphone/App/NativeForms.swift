@@ -15,9 +15,14 @@ struct NativeScreenView: View {
                             Button { Task { await store.perform(close) } } label: { Label("Zpět", systemImage: "chevron.left") }
                                 .accessibilityIdentifier("native-detail-back").disabled(store.busy)
                         }
+                    } else if let back = base?.backControl {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button { Task { await store.perform(back) } } label: { Label("Zpět", systemImage: "chevron.left") }
+                                .accessibilityIdentifier("native-detail-back").disabled(store.busy)
+                        }
                     } else if let onBack {
                         ToolbarItem(placement: .topBarLeading) {
-                            Button { Task { await onBack() } } label: { Label("Přehled", systemImage: "chevron.left") }
+                            Button { Task { await onBack() } } label: { Label("Zpět", systemImage: "chevron.left") }
                                 .accessibilityIdentifier("native-screen-back")
                         }
                     }
@@ -52,7 +57,7 @@ private struct NativeScreenContent: View {
     @ObservedObject var store: NativeScreenStore
     let modal: Bool
     private var omitted: Set<String> {
-        Set([screen?.repeatedTitleID, modal ? screen?.closeControl?.id : nil, modal ? screen?.primaryControl?.id : nil].compactMap { $0 })
+        Set([screen?.repeatedTitleID, screen?.backControl?.id, modal ? screen?.closeControl?.id : nil, modal ? screen?.primaryControl?.id : nil].compactMap { $0 })
     }
     var body: some View {
         ScrollView {
