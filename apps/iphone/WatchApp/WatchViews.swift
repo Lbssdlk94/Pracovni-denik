@@ -1,6 +1,23 @@
 import SwiftUI
 
-enum WatchStyle { static let accent = Color(red:0.45,green:0.84,blue:0.67) }
+enum WatchStyle {
+    static let accent = Color(red:0.45,green:0.84,blue:0.67)
+    static let warning = Color(red:1,green:0.72,blue:0.4)
+    static func symbol(_ state: String) -> String {
+        ["planned":"calendar", "on_way":"location.north", "in_progress":"play.circle", "incomplete":"exclamationmark.circle", "done":"checkmark.circle"][state] ?? "circle"
+    }
+}
+struct WatchVisitSummary: View {
+    let job: WatchJob
+    var body: some View {
+        VStack(alignment:.leading,spacing:6) {
+            Text(job.compactTime).font(.headline.monospacedDigit()).foregroundStyle(WatchStyle.accent)
+            Text(job.customerName).font(.headline).fixedSize(horizontal:false,vertical:true)
+            if !job.gardenName.isEmpty { Text(job.gardenName).font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true) }
+            Label(job.stateLabel,systemImage:WatchStyle.symbol(job.status)).font(.caption).foregroundStyle(job.status == "incomplete" ? WatchStyle.warning : Color.secondary)
+        }.padding(.vertical,5).accessibilityElement(children:.combine)
+    }
+}
 struct WatchDayView: View {
     @ObservedObject var store: WatchStore
     @Environment(\.scenePhase) private var scenePhase
@@ -54,11 +71,7 @@ struct WatchDayView: View {
                 if snapshot.jobs.isEmpty { Text("Na dnešek nemáte přiřazené návštěvy.").font(.footnote) }
                 ForEach(snapshot.jobs) { job in
                     NavigationLink { WatchJobView(store:store,id:job.id) } label: {
-                        VStack(alignment:.leading,spacing:5) {
-                            Text(job.customerName).font(.headline).lineLimit(2)
-                            Text(job.compactTime).font(.subheadline).foregroundStyle(WatchStyle.accent)
-                            Text(job.stateLabel).font(.caption).foregroundStyle(job.status == "incomplete" ? .orange : .secondary)
-                        }.padding(.vertical,4)
+                        WatchVisitSummary(job:job)
                     }.accessibilityIdentifier("watch-job-"+job.id)
                 }
                 if snapshot.hasMoreJobs { Text("Další návštěvy najdete v iPhonu.").font(.footnote) }
@@ -79,28 +92,28 @@ struct WatchJobView: View {
                     Section {
                         Text(job.customerName).font(.headline)
                         Text(job.title).font(.footnote).foregroundStyle(.secondary)
-                        Text(job.stateLabel).foregroundStyle(WatchStyle.accent)
+                        Label(job.stateLabel,systemImage:WatchStyle.symbol(job.status)).font(.subheadline).foregroundStyle(job.status == "incomplete" ? WatchStyle.warning : WatchStyle.accent)
                         Text([job.kindLabel,job.disciplineLabel].filter{!$0.isEmpty}.joined(separator:" · ")).font(.caption)
                     }
                     Section("Termín a místo") {
-                        Text(job.workLabel).font(.footnote)
+                        Label(job.workLabel,systemImage:"clock").font(.footnote)
                         if !job.arrivalStart.isEmpty { Text("Příjezd \(job.arrivalStart)" + (job.arrivalEnd.isEmpty ? "" : "–\(job.arrivalEnd)")).font(.footnote) }
                         if !job.originalStart.isEmpty { Text("Původní čas \(job.originalStart)").font(.caption).foregroundStyle(.secondary) }
                         if !job.arrivalTime.isEmpty { Text("Očekávaný příjezd \(job.arrivalTime)").font(.footnote) }
                         if !job.gardenName.isEmpty { Text(job.gardenName).font(.footnote) }
-                        if !job.address.isEmpty { Text(job.address).font(.footnote) }
+                        if !job.address.isEmpty { Label(job.address,systemImage:"mappin").font(.footnote).fixedSize(horizontal:false,vertical:true) }
                         if let url = job.navigationURL { Link(destination:url) { Label("Navigovat",systemImage:"location") } }
                     }
                     Section("Práce") {
-                        if job.canAccept { Button("Převzít zakázku") { Task { await store.perform(.accept,job:job) } } }
+                        if job.canAccept { Button { Task { await store.perform(.accept,job:job) } } label: { Label("Převzít zakázku",systemImage:"checkmark.circle") } }
                         else if job.handoffStatus == "accepted" { Label("Převzato",systemImage:"checkmark.circle").font(.footnote) }
-                        if job.canDepart { Button("Jsem na cestě") { showArrival = true } }
-                        if job.canStart { Button("Zahájit práci") { Task { await store.perform(.start,job:job) } } }
+                        if job.canDepart { Button { showArrival = true } label: { Label("Jsem na cestě",systemImage:"location.north") } }
+                        if job.canStart { Button { Task { await store.perform(.start,job:job) } } label: { Label("Zahájit práci",systemImage:"play.fill") } }
                         if job.canComplete {
                             if job.requiresProtocol { Button("Dokončit na iPhonu") { Task { await store.perform(.openPhone,job:job) } } }
-                            else { Button("Hotovo") { pendingCompletion = job; confirmDone = true }.accessibilityIdentifier("watch-complete") }
+                            else { Button { pendingCompletion = job; confirmDone = true } label: { Label("Hotovo",systemImage:"checkmark") }.accessibilityIdentifier("watch-complete") }
                         }
-                        if job.status == "incomplete" { Text(job.incompleteReason).foregroundStyle(.orange).font(.footnote) }
+                        if job.status == "incomplete" { Text(job.incompleteReason).foregroundStyle(WatchStyle.warning).font(.footnote) }
                         if job.status == "done" { Text(["ready":"Protokol hotový","draft":"Protokol rozpracovaný","missing":"Protokol chybí"][job.protocolStatus] ?? "Protokol chybí").font(.footnote) }
                     }.disabled(store.busy || store.preview)
                     if let message = store.message { Text(message).font(.footnote).foregroundStyle(WatchStyle.accent) }
