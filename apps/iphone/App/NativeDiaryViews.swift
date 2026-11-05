@@ -54,7 +54,7 @@ struct NativeOverview: View {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(spacing: 16) {
                     Image("DiaryMark").resizable().scaledToFit().frame(width: 62, height: 62).clipShape(RoundedRectangle(cornerRadius: 18))
-                    VStack(alignment: .leading, spacing: 4) { Text("Pracovní deník").font(.largeTitle.bold()); Text("Vše pro dnešní práci.").foregroundStyle(.secondary) }
+                    VStack(alignment: .leading, spacing: 4) { Text("Pracovní deník").font(.largeTitle.bold()).accessibilityIdentifier("native-overview-title"); Text("Vše pro dnešní práci.").foregroundStyle(.secondary) }
                 }.padding(.vertical, 12)
                 if let discipline = context.workspace?.selectedDiscipline {
                     DiaryBadge(text: ["irrigation":"Závlaha", "garden":"Garden", "all":"Oba obory"][discipline] ?? discipline)
