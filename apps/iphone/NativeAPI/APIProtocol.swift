@@ -40,7 +40,7 @@ struct APIProtocolEditor:View {
                     }
                     if store.enabled("protocolPhotos") || !snapshot["photos"].array.isEmpty{
                         DisclosureGroup("Fotodokumentace"){
-                            APIFilesView(store:store,path:"/api/jobs/"+jobID+"/service",mode:.service,record:snapshot["job"],attached:{id in var a=value["report"]["photoIds"].array;if !a.contains(.s(id)){a.append(.s(id));value["report"]["photoIds"] = .array(a)};photoUploads.append(id)})
+                            APIFilesView(store:store,path:"/api/jobs/"+jobID+"/service",mode:.service,record:snapshot["job"],attached:{id in var a=value["report"]["photoIds"].array;if !a.contains(.s(id)){a.append(.s(id));value["report"]["photoIds"] = .array(a)};photoUploads.append(id)},selection:Binding(get:{value["report"]["photoIds"]},set:{value["report"]["photoIds"]=$0}))
                         }.diaryCard()
                     }
                     DisclosureGroup("Podpis zákazníka"){APISignature(encoded:Binding(get:{value["report"]["customerSignature"].string},set:{value["report"]["customerSignature"] = .s($0)}))}.diaryCard()
@@ -99,7 +99,7 @@ struct APIWorkChargesEditor:View {
 }
 enum APIProtocolPDF {
     static func lineTotal(_ line:APIValue)->Int { var amount=Decimal(line["priceMinor"].int)*(Decimal(string:line["quantity"].string,locale:Locale(identifier:"en_US_POSIX")) ?? 0);var result=Decimal();NSDecimalRound(&result,&amount,0,.plain);return NSDecimalNumber(decimal:result).intValue }
-    static func make(snapshot:APIValue,report:APIValue,photos:[UIImage]=[])throws->Data {
+    @MainActor static func make(snapshot:APIValue,report:APIValue,photos:[UIImage]=[])throws->Data {
         let renderer=UIGraphicsPDFRenderer(bounds:CGRect(x:0,y:0,width:595,height:842))
         return renderer.pdfData{ctx in
             var y:CGFloat=42

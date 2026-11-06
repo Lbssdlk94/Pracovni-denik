@@ -63,7 +63,7 @@ struct APIFieldEditor: View {
                 TextEditor(text:text).frame(minHeight:100).accessibilityLabel(field.title)
             case .date,.time:
                 if value.string.isEmpty{Button("Nastavit: "+field.title){value = .s(field.kind == .date ? DiaryDate.iso(Date()) : APIAttendanceView.time(.number(Date().timeIntervalSince1970*1000)))}.frame(minHeight:44)}else{DatePicker(field.title,selection:Binding(get:{if field.kind == .date{return DiaryDate.parse(value.string) ?? Date()};let f=DateFormatter();f.timeZone=TimeZone(identifier:"Europe/Prague");f.dateFormat="HH:mm";return f.date(from:value.string) ?? Date()},set:{date in value = .s(field.kind == .date ? DiaryDate.iso(date) : APIAttendanceView.time(.number(date.timeIntervalSince1970*1000)))}),displayedComponents:field.kind == .date ? .date : .hourAndMinute).environment(\.timeZone,TimeZone(identifier:"Europe/Prague")!);if !field.required{Button("Bez hodnoty",role:.destructive){value = .s("")}.font(.caption)}}
-            case .password: SecureField(field.title,text:text).textContentType(.newPassword).frame(minHeight:44)
+            case .password: SecureField(field.title,text:text).textContentType(field.id == "password" ? .newPassword : .oneTimeCode).frame(minHeight:44)
             default:
                 Text(field.title + (field.required ? " *" : "")).font(.caption).foregroundStyle(.secondary)
                 TextField(field.kind == .date ? "RRRR-MM-DD" : field.kind == .time ? "HH:mm" : field.title,text:text,axis:.vertical)
@@ -99,7 +99,7 @@ struct APIEntityEditor: View {
                     if loading { ProgressView("Načítám údaje…") }
                     else { APIFieldsView(fields:fields,value:$value,options:options,edited:{touched.insert($0) }).diaryCard() }
                     if resource.entity == .defects,!value["sourceJobId"].string.isEmpty {APIProtocolPhotoPicker(store:store,jobID:value["sourceJobId"].string,photos:Binding(get:{value["photos"]},set:{value["photos"]=$0})).diaryCard()}
-                    if !overlap.isNull {Button("Přesto uložit po kontrole překryvů"){value["allowOverlaps"] = .bool(true);value["previewRevision"]=overlap["previewRevision"];Task{await save()}}.buttonStyle(.bordered)}
+                    if !overlap.isNull {VStack(alignment:.leading){ForEach(Array(overlap["warnings"].array.enumerated()),id:\.offset){_,warning in Text(warning["message"].string).foregroundStyle(DiaryStyle.warning)};if !overlap["overlaps"].array.isEmpty{Text("Překryvy práce: \(overlap["overlaps"].array.count). Zkontrolujte přiřazení, čas a rezervu mezi návštěvami.").foregroundStyle(DiaryStyle.warning)}};Button("Přesto uložit po kontrole překryvů"){value["allowOverlaps"] = .bool(true);value["previewRevision"]=overlap["revision"];Task{await save()}}.buttonStyle(.bordered)}
                     if let problem { DiaryStatusBanner(text:problem,warning:true) }
                     Text("Koncept se průběžně ukládá v tomto iPhonu.").font(.footnote).foregroundStyle(.secondary)
                 }.padding(18)
@@ -132,7 +132,7 @@ struct APIEntityEditor: View {
     func loadAddresses() async {
         let selected=value["customerId"].string
         guard !selected.isEmpty else {options["addresses"]=[];return}
-        do { let customer=try await store.get("/api/customers/"+value["customerId"].string);guard selected==value["customerId"].string else{return};options["addresses"]=customer["customer"]["addresses"].array } catch { problem=error.localizedDescription }
+        do { let customer=try await store.get("/api/customers/"+value["customerId"].string);guard selected==value["customerId"].string else{return};options["addresses"]=customer["customer"]["addresses"].array;if resource.entity == .jobs && !touched.contains("customerName"){value["customerName"]=customer["customer"]["name"]} } catch { problem=error.localizedDescription }
     }
     func hydrateGarden() {
         guard let garden=options["gardens"]?.first(where:{$0.id==value["gardenId"].string}) else { return }
@@ -149,6 +149,6 @@ struct APIEntityEditor: View {
             if resource.entity == .jobs && !value["customerId"].string.isEmpty && value["gardenId"].string.isEmpty && options["gardens",default:[]].filter({$0["customerId"] == value["customerId"]}).count > 1 { throw APIError.local("Zákazník má více zahrad. Vyberte konkrétní zahradu.") }
             try await APIDomainLogic.save(resource:resource,value:value,isNew:isNew,operationID:operationID,draftKey:key,store:store)
             dismiss()
-        } catch let error as APIError { if !error.details["previewRevision"].isNull{overlap=error.details};problem=error.localizedDescription } catch{problem=error.localizedDescription}
+        } catch let error as APIError { if !error.details["preview"]["revision"].isNull{overlap=error.details["preview"]};problem=error.localizedDescription } catch{problem=error.localizedDescription}
     }
 }

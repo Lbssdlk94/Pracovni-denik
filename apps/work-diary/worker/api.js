@@ -35,7 +35,7 @@ import {handleServiceReminders} from './service-reminders.js';
 import {handleApprovedImport} from './approved-import.js';
 import {handleCustomers} from './customers.js';
 import {handleNotifications,dispatchNotifications} from './notifications.js';
-import {handleDrive} from './drive.js';
+import {handleDrive,nativeDriveMember} from './drive.js';
 import {handleJobPhotos} from './job-photos.js';
 import {handleJobs} from './jobs.js';
 import {handleBlowout} from './blowout.js';
@@ -216,7 +216,7 @@ async function workspaceRawApi(request,env,ctx){
     }
     if(path==='/api/access-logout'&&method==='POST'){const c=(request.headers.get('cookie')||'').split(';').map(x=>x.trim()).find(x=>x.startsWith(ACCESS_COOKIE+'='));if(c)await execute(env.DB,'UPDATE access_sessions SET revoked_at=? WHERE token_hash=?',Date.now(),await accessHash(c.slice(ACCESS_COOKIE.length+1)));const response=json({ok:true});response.headers.set('set-cookie',accessCookie(''));return response;}
     if(['/api/workspace/identity-invite','/api/workspace/link-identity'].includes(path))fail(403,'Propojení přes osobní přístupový odkaz bylo zrušeno.',{code:'access_link_disabled'});
-    const m=await memberFor(request,env);Object.assign(env,await workspaceRequestContext(env,request,m));
+    const m=await nativeDriveMember(request,env,{one,fail})||await memberFor(request,env);Object.assign(env,await workspaceRequestContext(env,request,m));
     if(m._mustChange&&!['/api/auth/account','/api/auth/password'].includes(path))fail(403,'Před prvním použitím si změňte dočasné heslo.',{code:'password_change_required'});
     await workspaceResourceAccess(request,env,m,fail);env._workspaceScope=m._workspace||null;
     if(['/api/auth/account','/api/auth/password','/api/auth/policy'].includes(path))return await handleLocalSelf(request,env,m,{body,json,fail});

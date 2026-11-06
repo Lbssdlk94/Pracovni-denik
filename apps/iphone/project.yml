@@ -41,6 +41,9 @@ targets:
       path: Info.plist
       properties:
         CFBundleDisplayName: Pracovní deník
+        CFBundleURLTypes:
+          - CFBundleURLName: cz.pracovnidenik.google-drive
+            CFBundleURLSchemes: [pracovnidenik]
         NativePushEnvironment: $(APNS_ENVIRONMENT)
         CFBundleDevelopmentRegion: cs
         CFBundleLocalizations: [cs]

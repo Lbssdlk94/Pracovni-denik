@@ -55,6 +55,7 @@ struct APIFilesView:View {
     let mode:Mode
     let record:APIValue
     var attached:((String)->Void)? = nil
+    var selection:Binding<APIValue>? = nil
     @State private var picked:PhotosPickerItem?
     @State private var camera=false
     @State private var importing=false
@@ -62,23 +63,31 @@ struct APIFilesView:View {
     @State private var problem:String?
     @State private var preview:APIFile?
     @State private var busy=false
+    @State private var category="during"
+    @State private var note=""
+    @State private var photoAction:APIDomainAction?
+    @State private var removePhoto:APIValue = .null
+    @State private var confirmRemoval=false
     var allowed:Bool { store.writer && store.enabled("photoUploads") && (mode != .service || store.enabled("protocolPhotos")) && (mode != .receipts || store.enabled("fleetReceipts")) && (mode != .job || store.enabled("drivePhotos") && store.enabled("googleDrive")) }
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
             if mode != .vehicle && mode != .plan {
-                ForEach(Array(files.enumerated()),id:\.offset){_,file in Button(file["name"].string.isEmpty ? file["fileName"].string : file["name"].string){Task{await open(file)}}.frame(minHeight:44)}
+                ForEach(Array(files.enumerated()),id:\.offset){_,file in VStack(alignment:.leading){Button(file["name"].string.isEmpty ? file["fileName"].string : file["name"].string){Task{await open(file)}}.frame(minHeight:44);if let selection{Toggle("Zahrnout do protokolu",isOn:Binding(get:{selection.wrappedValue.array.contains(.s(file.id))},set:{on in var ids=selection.wrappedValue.array;ids.removeAll{$0 == .s(file.id)};if on{ids.append(.s(file.id))};selection.wrappedValue = .array(ids)}))};if mode == .job{if !file["note"].string.isEmpty{Text(file["note"].string).font(.footnote)};if store.writer{Button("Upravit poznámku"){photoAction=APIDomainAction(title:"Poznámka k fotografii",path:path+"/"+file.id,method:"PATCH",fields:[.field("note","Poznámka",.notes)],value:.object(["version":file["version"],"note":file["note"]]))}};if store.manager{Button("Přesunout do koše na Disku",role:.destructive){removePhoto=file;confirmRemoval=true}}}}}
             }
             if allowed {
+                if mode == .job{Picker("Kategorie fotografií",selection:$category){Text("Před prací").tag("before");Text("Průběh").tag("during");Text("Hotová práce").tag("after")};TextField("Poznámka k nové fotografii",text:$note,axis:.vertical)}
                 PhotosPicker(selection:$picked,matching:.images){Label("Vybrat fotografii",systemImage:"photo")}.frame(minHeight:44)
                 if UIImagePickerController.isSourceTypeAvailable(.camera){Button{camera=true}label:{Label("Vyfotit",systemImage:"camera")}.frame(minHeight:44)}
                 if mode == .plan {Button("Nahrát PDF nebo obrázek plánu"){importing=true}.frame(minHeight:44)}
             }
             if busy{ProgressView("Nahrávám…")}
             if let problem{Text(problem).foregroundStyle(DiaryStyle.warning).font(.callout)}
-        }.disabled(busy).onChange(of:picked){_,item in Task{do{if let bytes=try await item?.loadTransferable(type:Data.self),let image=UIImage(data:bytes),let jpg=APIImage.jpeg(image){await upload(jpg,type:"image/jpeg",name:"Fotografie.jpg")}}catch{problem=error.localizedDescription};picked=nil}}
+        }.disabled(busy).onChange(of:picked){_,item in Task{do{if let bytes=try await item?.loadTransferable(type:Data.self){let mime=item?.supportedContentTypes.first(where:{$0.conforms(to:.image)})?.preferredMIMEType ?? "image/jpeg";if (mode == .service || mode == .job) && ["image/jpeg","image/png","image/heic","image/heif"].contains(mime){await upload(bytes,type:mime,name:"Fotografie."+(UTType(mimeType:mime)?.preferredFilenameExtension ?? "jpg"))}else if let image=UIImage(data:bytes),let jpg=APIImage.jpeg(image){await upload(jpg,type:"image/jpeg",name:"Fotografie.jpg")}else{throw APIError.local("Fotografii nelze otevřít.")}}}catch{problem=error.localizedDescription};picked=nil}}
             .sheet(isPresented:$camera){APICamera{bytes in Task{await upload(bytes,type:"image/jpeg",name:"Fotografie.jpg")}}}
             .sheet(item:$preview,onDismiss:{}){file in APIQuickLook(url:file.url).onDisappear{try? FileManager.default.removeItem(at:file.url.deletingLastPathComponent())}}
-            .fileImporter(isPresented:$importing,allowedContentTypes:[.pdf,.image]){result in Task{do{let url=try result.get();let access=url.startAccessingSecurityScopedResource();defer{if access{url.stopAccessingSecurityScopedResource()}};let data=try Data(contentsOf:url);await upload(data,type:url.pathExtension.lowercased()=="pdf" ? "application/pdf" : "image/jpeg",name:url.lastPathComponent)}catch{problem=error.localizedDescription}}}
+            .fileImporter(isPresented:$importing,allowedContentTypes:[.pdf,.image]){result in Task{do{let url=try result.get();let access=url.startAccessingSecurityScopedResource();defer{if access{url.stopAccessingSecurityScopedResource()}};let data=try Data(contentsOf:url);if url.pathExtension.lowercased()=="pdf"{await upload(data,type:"application/pdf",name:url.lastPathComponent)}else if let image=UIImage(data:data),let jpeg=APIImage.jpeg(image){await upload(jpeg,type:"image/jpeg",name:url.deletingPathExtension().lastPathComponent+".jpg")}else{throw APIError.local("Plán není podporovaný obrázek ani PDF.")}}catch{problem=error.localizedDescription}}}
+            .sheet(item:$photoAction){APIActionEditor(store:store,action:$0)}
+            .confirmationDialog("Přesunout tuto fotografii do koše Google Disku?",isPresented:$confirmRemoval,titleVisibility:.visible){Button("Přesunout do koše",role:.destructive){Task{do{_ = try await store.write(path+"/"+removePhoto.id,method:"DELETE",body:.object(["version":removePhoto["version"],"confirm":.s("TRASH_GOOGLE_DRIVE_PHOTO")]));await load()}catch{problem=error.localizedDescription}}};Button("Zrušit",role:.cancel){}}
             .task(id:store.revision){await load()}
     }
     func load() async {
@@ -101,7 +110,7 @@ struct APIFilesView:View {
             case .receipts:try await store.upload(path+"/"+id,bytes:data,type:type)
             case .service:try await store.upload(path+"/photos/"+id,bytes:data,type:type,headers:["x-file-name":name.addingPercentEncoding(withAllowedCharacters:.urlPathAllowed) ?? name],offline:true,id:id);attached?(id)
             case .plan:var form=APIMultipart();form.field("version",record["version"].string);form.file("plan",filename:name,type:type,bytes:data);try await store.upload(path,bytes:form.finished,type:form.type)
-            case .job:try await APIJobPhotoUpload.upload(store:store,path:path,data:data,type:type,name:name,id:id)
+            case .job:try await APIJobPhotoUpload.upload(store:store,path:path,data:data,type:type,name:name,id:id,category:category,note:note)
             }
             problem=nil;await load()
         }catch{problem=error.localizedDescription}

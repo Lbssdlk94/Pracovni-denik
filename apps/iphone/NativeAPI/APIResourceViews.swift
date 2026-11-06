@@ -9,6 +9,7 @@ struct APIResourceList: View {
     @State private var problem: String?
     @State private var loading = false
     @State private var requestID=UUID()
+    @StateObject private var location=APILocation()
     @State private var categories:[APIValue]=[]
     @State private var category=""
     @State private var onlyMine = false
@@ -19,13 +20,14 @@ struct APIResourceList: View {
     } }
     var body: some View {
         List {
+            if resource.entity == .gardens && store.enabled("location") && store.enabled("nearby"){Button("Ukázat přibližné vzdálenosti"){Task{_ = await location.capture()}}}
             if resource.entity == .materials {Picker("Kategorie",selection:$category){Text("Všechny kategorie").tag("");ForEach(categories,id:\.id){Text($0.title).tag($0.id)}};if store.manager{NavigationLink("Správa kategorií"){APIResourceList(store:store,resource:APIResource(entity:.categories))}}}
             if resource.entity == .subscriptions && store.manager{NavigationLink("Správa tarifů"){APIResourceList(store:store,resource:APIResource(entity:.tariffs))}}
             if resource.entity == .defects { Section { Toggle("Moje závady",isOn:$onlyMine) } }
             if loading && rows.isEmpty { ProgressView("Načítám…") }
             if let problem { Text(problem).foregroundStyle(DiaryStyle.warning) }
             ForEach(Array(visible.enumerated()),id:\.offset) { _,row in
-                NavigationLink { APIEntityDetail(store:store,resource:resource,initial:row) } label: { APIRecordRow(entity:resource.entity,value:row) }
+                NavigationLink { APIEntityDetail(store:store,resource:resource,initial:row) } label: { APIRecordRow(entity:resource.entity,value:row,distance:resource.entity == .gardens ? APIPlaces.distance(row,from:location.position) : nil) }
                     .listRowBackground(DiaryStyle.surface).accessibilityIdentifier("api-record-"+row.id)
             }
             if !loading && visible.isEmpty { Text("Žádné záznamy pro tento výběr.").foregroundStyle(.secondary) }
@@ -57,11 +59,13 @@ struct APIResourceList: View {
 struct APIRecordRow: View {
     let entity: APIEntity
     let value: APIValue
+    var distance:String?=nil
     var body: some View {
         HStack(spacing:13) {
             Image(systemName:entity.symbol).font(.title3).foregroundStyle(DiaryStyle.accent).frame(width:42,height:42).background(DiaryStyle.soft,in:RoundedRectangle(cornerRadius:13))
             VStack(alignment:.leading,spacing:5) {
                 Text(entity == .jobs && !value["customerName"].string.isEmpty ? value["customerName"].string : value.title).font(.headline).fixedSize(horizontal:false,vertical:true)
+                if let distance{Text(distance).font(.caption).foregroundStyle(.secondary)}
                 if entity == .jobs {
                     if value.title != value["customerName"].string {Text(value.title).font(.subheadline).foregroundStyle(.secondary)}
                     Text([APIFormat.status(value["status"].string),value["dueDate"].string,value["plannedStart"].string].filter{!$0.isEmpty}.joined(separator:" · ")).font(.caption).foregroundStyle(.secondary)

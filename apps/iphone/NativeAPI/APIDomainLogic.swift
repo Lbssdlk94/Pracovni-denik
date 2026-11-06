@@ -3,6 +3,7 @@ import Foundation
 enum APIDomainLogic {
     static func referenceLabel(_ row: APIValue, kind: String) -> String {
         if kind == "gardens" { return [row["name"].string,row["addressDetails"]["city"].string,row["address"].string.replacingOccurrences(of:", Česká republika",with:"")].filter{!$0.isEmpty}.joined(separator:" · ") }
+        if kind == "addresses"{return [row["label"].string,row["address"].string,row["city"].string,row["name"].string].filter{!$0.isEmpty}.joined(separator:" · ")}
         if kind == "materials" { return [row["name"].string,row["sku"].string,row["unit"].string].filter{!$0.isEmpty}.joined(separator:" · ") }
         return row.title
     }
@@ -31,11 +32,12 @@ enum APIDomainLogic {
         let id=value.id.isEmpty ? UUID().uuidString : value.id
         var body=value.selecting(resource.fields.map(\.id)+["version"])
         if body["version"].isNull { body["version"] = .n(0) }
+        for key in ["customerId","customerAddressId","gardenId","assignedTo","sourceJobId","vehicleId"] where body.object[key] != nil && body[key].string.isEmpty{body[key] = .null}
         if store.me["workspace"].isNull { var fields=body.object;fields.removeValue(forKey:"discipline");body = .object(fields) }
         var path=resource.recordPath(id),method="PUT",offline=false
         switch resource.entity {
         case .jobs:
-            body=body.merged(["customerAddressId":value["customerAddressId"],"assignedTo":value["assignedTos"].array.first ?? value["assignedTo"],"status":value["status"].isNull ? .s("planned") : value["status"],"incompleteReason":value["incompleteReason"].isNull ? .s("") : value["incompleteReason"]])
+            body=body.merged(["customerAddressId":value["customerAddressId"].string.isEmpty ? .null : value["customerAddressId"],"assignedTo":value["assignedTos"].array.first ?? value["assignedTo"],"status":value["status"].isNull ? .s("planned") : value["status"],"incompleteReason":value["incompleteReason"].isNull ? .s("") : value["incompleteReason"]])
             if !value["previewRevision"].isNull { body["previewRevision"]=value["previewRevision"];body["allowOverlaps"]=value["allowOverlaps"] }
         case .gardens: if isNew { path="/api/gardens";method="POST";body["id"] = .s(id) } else { method="PATCH" }
         case .defects:

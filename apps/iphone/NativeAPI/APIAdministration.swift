@@ -24,8 +24,8 @@ struct APIRecordLinksView:View {
     func load(more:Bool=false)async{do{let result=try await store.get("/api/record-links?kind="+kind+(more ? "&after="+cursor : ""));records=more ? records+result["records"].array : result["records"].array;cursor=result["nextCursor"].string;problem=nil}catch{problem=error.localizedDescription}}
 }
 enum APIJobPhotoUpload {
-    @MainActor static func upload(store:APIStore,path:String,data:Data,type:String,name:String,id:String)async throws{
-        let metadata:APIValue = .object(["id":.s(id),"category":.s("during"),"note":.s(""),"originalName":.s(name),"mimeType":.s(type),"size":.n(data.count),"sha256":.s(SHA256.hash(data:data).map{String(format:"%02x",$0)}.joined())])
+    @MainActor static func upload(store:APIStore,path:String,data:Data,type:String,name:String,id:String,category:String="during",note:String="")async throws{
+        let metadata:APIValue = .object(["id":.s(id),"category":.s(category),"note":.s(note),"originalName":.s(name),"mimeType":.s(type),"size":.n(data.count),"sha256":.s(SHA256.hash(data:data).map{String(format:"%02x",$0)}.joined())])
         guard store.enabled("googleDrive"),store.enabled("drivePhotos"),store.enabled("photoUploads")else{throw APIError.local("Nahrávání fotografií není povolené.")}
         if let vault=store.vault,store.enabled("offline"),vault.offlineAllowed(){try vault.enqueue(APIMutation(id:id,path:path,method:"DRIVE_PHOTO",body:metadata,bytes:data,contentType:type,headers:[:],scope:store.scope,dependsOn:[],draftKey:nil));store.updateOutbox();if store.online{await store.sync()}}
         else{try await send(store:store,path:path,data:data,metadata:metadata)}
@@ -44,12 +44,22 @@ enum APIJobPhotoUpload {
 }
 struct APIDriveSettings:View {
     @ObservedObject var store:APIStore
+    @StateObject private var authorization=APIGoogleAuthorization()
     @State private var value:APIValue = .null
     @State private var config:APIValue = .object([:])
     @State private var problem:String?
     @State private var disconnect=false
-    var body:some View{Form{Text("Google Disk slouží pouze jako úložiště souborů. Rozhraní deníku běží ve Swiftu.").font(.footnote);APIDataPairs(value:value,labels:["state":"Stav připojení","email":"Připojený účet","rootName":"Kořenová složka"]);if store.owner{DisclosureGroup("OAuth nastavení"){APIFieldsView(fields:[.text("clientId","Google Client ID",true),.field("clientSecret","Nový Client Secret",.password)],value:$config);Button("Uložit připojení"){Task{do{_ = try await store.write("/api/drive/config",method:"PUT",body:config.merged(["version":value["version"]]));config = .object([:]);await load()}catch{problem=error.localizedDescription}}}}};Text("Stávající připojení a fotografie zůstávají dostupné. Nové přihlášení ke Googlu vyžaduje nakonfigurované OAuth přesměrování pro nativní klient.").font(.footnote);if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}}.navigationTitle("Google Disk").task{await load()}}
-    func load()async{do{value=try await store.get("/api/drive/status")}catch{problem=error.localizedDescription}}
+    var active:APIValue{value["connections"].array.first{$0.id==value["activeId"].string} ?? .null}
+    var body:some View{Form{
+        Section("Připojení"){if !active.isNull{Text(active["email"].string).font(.headline);Text(active["rootName"].string.isEmpty ? "Není vybraná složka" : active["rootName"].string);Text(active["state"].string)}else{Text("Google Disk není připojený.")}
+            if value["nativeOAuth"].bool && value["configured"].bool{Button("Připojit Google účet"){Task{await authorization.connect(store:store,mode:"connect",finished:{Task{await load()}})}}else if !value["nativeOAuth"].bool{Text("Pro nové připojení je potřeba aktualizace API s nativním OAuth. Již připojený účet zůstává použitelný.").font(.footnote)}
+            if !active.isNull && active["state"].string=="connected"{Button("Ověřit přístup"){Task{await command("check",body:.object([:]))}};Button("Vytvořit výchozí soukromou složku"){Task{await command("root",body:.object(["version":value["version"]]))}};if value["nativeOAuth"].bool{Button("Vybrat existující složku"){Task{await authorization.connect(store:store,mode:"pick",finished:{Task{await load()}})}};Button("Odpojit Google Disk",role:.destructive){disconnect=true}}
+        }
+        if store.owner{Section("OAuth nastavení"){Text("Použije se stávající webový OAuth klient na serveru. Jeho tajný klíč se do aplikace nestahuje.").font(.footnote);Text(value["redirectUri"].string).font(.caption).textSelection(.enabled);APIFieldsView(fields:[.text("clientId","Google Client ID",true),.field("clientSecret","Nový Client Secret",.password)],value:$config);Button("Uložit nastavení OAuth"){Task{await command("config",method:"PUT",body:config.merged(["version":value["version"]]));config["clientSecret"] = .s("")}}}}
+        if authorization.busy{ProgressView("Probíhá přihlášení ke Googlu…")};if let message=authorization.message{Text(message).font(.callout)};if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}
+    }.navigationTitle("Google Disk").task{await load()}.disabled(authorization.busy).confirmationDialog("Odpojit aktuální Google Disk? Soubory na Disku zůstanou zachované.",isPresented:$disconnect,titleVisibility:.visible){Button("Odpojit",role:.destructive){Task{await command("disconnect",body:.object(["version":value["version"],"confirm":.s("DISCONNECT_GOOGLE_DRIVE")]))}};Button("Zrušit",role:.cancel){}}.onDisappear{authorization.cancel()}}
+    func load()async{do{value=try await store.get("/api/drive/status");config["clientId"]=value["clientId"]}catch{problem=error.localizedDescription}}
+    func command(_ name:String,method:String="POST",body:APIValue)async{do{_ = try await store.write("/api/drive/"+name,method:method,body:body);problem=nil;await load()}catch{problem=error.localizedDescription}}
 }
 struct APIProtocolEmailView:View {
     @ObservedObject var store:APIStore

@@ -2,13 +2,54 @@ import SwiftUI
 import MapKit
 import PhotosUI
 
-struct APIMapPoint:Identifiable {let id:String;let name:String;let latitude:Double;let longitude:Double}
+struct APIMapPoint:Identifiable {
+    let id:String
+    let job:APIValue
+    let candidate:APIValue
+    let confirmed:Bool
+    var position:CLLocationCoordinate2D{CLLocationCoordinate2D(latitude:candidate["position"]["latitude"].double,longitude:candidate["position"]["longitude"].double)}
+}
+struct APIMapGroup:Identifiable {
+    let id:String
+    let points:[APIMapPoint]
+    var position:CLLocationCoordinate2D{points[0].position}
+}
+enum APIPlaces {
+    static func normalize(_ value:String)->String{value.precomposedStringWithCompatibilityMapping.trimmingCharacters(in:.whitespacesAndNewlines).replacingOccurrences(of:"\\s+",with:" ",options:.regularExpression).lowercased(with:Locale(identifier:"cs_CZ"))}
+    static func address(_ job:APIValue)->String{let address=job["address"].string,city=job["city"].string;guard !address.isEmpty else{return ""};return [address,!city.isEmpty && !normalize(address).components(separatedBy:",").map{$0.trimmingCharacters(in:.whitespaces)}.contains(normalize(city)) ? city : ""].filter{!$0.isEmpty}.joined(separator:", ")}
+    static func valid(_ candidate:APIValue)->Bool{let p=candidate["position"];return !p["latitude"].isNull && !p["longitude"].isNull && abs(p["latitude"].double)<=90 && abs(p["longitude"].double)<=180}
+    static func automatic(_ values:[APIValue],addressOnly:Bool)->APIValue?{guard let first=values.first,valid(first),["address","street"].contains(first["precision"].string),!addressOnly || first["precision"].string=="address"else{return nil};let p=CLLocation(latitude:first["position"]["latitude"].double,longitude:first["position"]["longitude"].double);guard values.allSatisfy({valid($0) && p.distance(from:CLLocation(latitude:$0["position"]["latitude"].double,longitude:$0["position"]["longitude"].double))<250})else{return nil};return first}
+    static func points(_ jobs:[APIValue])->[APIMapGroup]{var groups:[String:[APIMapPoint]]=[:];for job in jobs{let geo=job["geocode"];guard geo["address"].string==normalize(address(job))else{continue};let candidates=geo["candidates"].array.filter{valid($0)};let selected=candidates.first{$0.id==geo["selectedId"].string} ?? automatic(candidates,addressOnly:true);for candidate in selected.map({[$0]}) ?? candidates{let p=APIMapPoint(id:job.id+":"+candidate.id,job:job,candidate:candidate,confirmed:selected != nil);let key=String(format:"%.6f,%.6f",p.position.latitude,p.position.longitude);groups[key,default:[]].append(p)}};return groups.keys.sorted().map{APIMapGroup(id:$0,points:groups[$0]!)}}
+    static func distance(_ garden:APIValue,from position:CLLocation?)->String?{guard let position,garden["geocode"]["address"].string==normalize(garden["address"].string),let candidate=automatic(garden["geocode"]["candidates"].array,addressOnly:false)else{return nil};let meters=position.distance(from:CLLocation(latitude:candidate["position"]["latitude"].double,longitude:candidate["position"]["longitude"].double));return meters<1000 ? "≈ \(Int(meters.rounded())) m" : String(format:"≈ %.1f km",meters/1000)}
+}
 struct APIJobsMap:View {
     @ObservedObject var store:APIStore
     let jobs:[APIValue]
-    @State private var points:[APIMapPoint]=[]
-    @State private var missing:[String]=[]
-    var body:some View{VStack{if store.manager{Map{ForEach(points){p in Annotation(p.name,coordinate:CLLocationCoordinate2D(latitude:p.latitude,longitude:p.longitude)){Image(systemName:"mappin.circle.fill").font(.title).foregroundStyle(DiaryStyle.accent)}}}.mapControls{MapCompass();MapScaleView()};if !missing.isEmpty{DisclosureGroup("\(missing.count) míst bez potvrzené polohy"){ScrollView{ForEach(missing,id:\.self){Text($0).font(.footnote)}}.frame(maxHeight:140)}.padding()};Text("Poloha je zobrazena pouze z uložených souřadnic. Vzdálenosti nejsou výpočtem trasy.").font(.caption).foregroundStyle(.secondary).padding()}else{ContentUnavailableView("Mapa je určena správci",systemImage:"lock")}}.navigationTitle("Mapa zakázek").task{guard store.manager else{return};do{let gardens=try await store.get("/api/gardens");var p:[APIMapPoint]=[];var m:[String]=[];for job in jobs{let garden=gardens["gardens"].array.first{$0.id==job["gardenId"].string};let candidates=garden?["geocode"]["candidates"].array ?? [];let location=job["position"].isNull ? (garden?["position"] ?? .null) : job["position"];let chosen=candidates.count==1 ? candidates[0] : location;let lat=chosen["latitude"].isNull ? chosen["lat"] : chosen["latitude"],lon=chosen["longitude"].isNull ? chosen["lon"] : chosen["longitude"];if !lat.isNull && !lon.isNull && abs(lat.double)<=90 && abs(lon.double)<=180{p.append(APIMapPoint(id:job.id,name:job["customerName"].string.isEmpty ? job.title : job["customerName"].string,latitude:lat.double,longitude:lon.double))}else{m.append(job.title+" · "+job["address"].string)}};points=p;missing=m}catch{store.error=error.localizedDescription}}}
+    @State private var rows:[APIValue]=[]
+    @State private var selected:APIMapGroup?
+    @State private var problem:String?
+    @State private var busy=false
+    private var groups:[APIMapGroup]{APIPlaces.points(rows)}
+    var body:some View{
+        VStack(spacing:0){
+            if store.manager{
+                Map{ForEach(groups){group in
+                    Annotation(group.points.count>1 ? "\(group.points.count) zakázky" : group.points[0].job["customerName"].string,coordinate:group.position){
+                        Button{selected=group}label:{Image(systemName:group.points.allSatisfy(\.confirmed) ? "mappin.circle.fill" : "questionmark.circle.fill").font(.largeTitle).foregroundStyle(group.points.allSatisfy(\.confirmed) ? DiaryStyle.accent : DiaryStyle.warning)}
+                    }
+                }}.mapControls{MapCompass();MapScaleView()}
+                DisclosureGroup("Upřesnění míst · \(rows.count) zakázek"){
+                    ScrollView{VStack(alignment:.leading,spacing:12){ForEach(rows,id:\.id){job in
+                        VStack(alignment:.leading){Text(job["customerName"].string.isEmpty ? job.title : job["customerName"].string).font(.headline);Text(APIPlaces.address(job)).font(.caption);if job["geocode"]["candidates"].array.isEmpty{Button("Dohledat adresu"){Task{await locate(job)}}.disabled(busy)}else{ForEach(job["geocode"]["candidates"].array,id:\.id){candidate in Button((candidate.id==job["geocode"]["selectedId"].string ? "✓ " : "")+candidate["label"].string){Task{await choose(job,candidate:candidate)}}.frame(minHeight:44)}}}
+                    }}}.frame(maxHeight:230)
+                }.padding(12)
+                if let problem{Text(problem).font(.caption).foregroundStyle(DiaryStyle.warning).padding(8)}
+                Text("Neověřená místa označuje otazník. Body na stejné adrese jsou seskupené.").font(.caption).foregroundStyle(.secondary).padding(8)
+            }else{ContentUnavailableView("Mapa je určena správci",systemImage:"lock")}
+        }.navigationTitle("Mapa zakázek").task{rows=jobs}.sheet(item:$selected){group in NavigationStack{List(group.points){point in NavigationLink{APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:point.job)}label:{VStack(alignment:.leading){Text(point.job["customerName"].string).font(.headline);Text(point.job.title).font(.subheadline);Text(point.confirmed ? "Potvrzené místo" : "Místo je třeba upřesnit").font(.caption)}}}.navigationTitle("Zakázky na místě")}}
+    }
+    func locate(_ job:APIValue)async{busy=true;defer{busy=false};do{let result=try await store.write("/api/jobs/"+job.id+"/geocode",method:"POST",body:.object(["address":.s(APIPlaces.normalize(APIPlaces.address(job)))]));if let index=rows.firstIndex(where:{$0.id==job.id}){rows[index]["geocode"]=result["geocode"]};problem=nil}catch{problem=error.localizedDescription}}
+    func choose(_ job:APIValue,candidate:APIValue)async{do{let result=try await store.write("/api/jobs/"+job.id+"/geocode",method:"PUT",body:.object(["address":job["geocode"]["address"],"version":job["geocode"]["version"],"selectedId":.s(candidate.id)]));if let index=rows.firstIndex(where:{$0.id==job.id}){rows[index]["geocode"]=result["geocode"]};problem=nil}catch{problem=error.localizedDescription}}
 }
 struct APIZonesView:View {
     @ObservedObject var store:APIStore
