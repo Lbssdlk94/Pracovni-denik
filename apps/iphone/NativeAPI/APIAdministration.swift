@@ -67,6 +67,7 @@ struct APIProtocolEmailView:View {
     let pdf:Data
     let jobVersion:APIValue
     let reportVersion:APIValue
+    var initialRecipient=""
     @State private var recipient=""
     @State private var requests:[APIValue]=[]
     @State private var problem:String?
@@ -74,7 +75,7 @@ struct APIProtocolEmailView:View {
     @State private var review:APIValue = .null
     @State private var approve=false
     var path:String{"/api/jobs/"+jobID+"/protocol-emails"}
-    var body:some View{Form{TextField("E-mail zákazníka",text:$recipient).textContentType(.emailAddress).keyboardType(.emailAddress).textInputAutocapitalization(.never);Button("Připravit žádost ke schválení"){Task{await prepare()}};ForEach(requests,id:\.id){request in DisclosureGroup(request["recipient"].string+" · "+request["state"].string){Text(request["createdByName"].string);Button("Otevřít přesný PDF soubor ke kontrole"){Task{do{let r=try await store.file(path+"/"+request.id+"/pdf");share=APIFile(url:APIImage.temporary(r.data,name:"Vykaz.pdf"))}catch{problem=error.localizedDescription}}};if ["pending","failed"].contains(request["state"].string){Button("Schválit odeslání"){review=request;approve=true};Button("Zamítnout",role:.destructive){Task{await decide(request,action:"reject")}}}}};if let problem{Text(problem)}}.navigationTitle("Odeslání výkazu").task{await load()}.confirmationDialog("Odeslat zkontrolovaný výkaz zákazníkovi?",isPresented:$approve,titleVisibility:.visible){Button("Schválit a odeslat"){Task{await decide(review,action:review["state"].string=="failed" ? "retry" : "approve")}};Button("Zrušit",role:.cancel){}}.sheet(item:$share){APIQuickLook(url:$0.url)}}
+    var body:some View{Form{TextField("E-mail zákazníka",text:$recipient).textContentType(.emailAddress).keyboardType(.emailAddress).textInputAutocapitalization(.never);Button("Připravit žádost ke schválení"){Task{await prepare()}};ForEach(requests,id:\.id){request in DisclosureGroup(request["recipient"].string+" · "+request["state"].string){Text(request["createdByName"].string);Button("Otevřít přesný PDF soubor ke kontrole"){Task{do{let r=try await store.file(path+"/"+request.id+"/pdf");share=APIFile(url:APIImage.temporary(r.data,name:"Vykaz.pdf"))}catch{problem=error.localizedDescription}}};if ["pending","failed"].contains(request["state"].string){Button("Schválit odeslání"){review=request;approve=true};Button("Zamítnout",role:.destructive){Task{await decide(request,action:"reject")}}}}};if let problem{Text(problem)}}.navigationTitle("Odeslání výkazu").task{if recipient.isEmpty{recipient=initialRecipient};await load()}.confirmationDialog("Odeslat zkontrolovaný výkaz zákazníkovi?",isPresented:$approve,titleVisibility:.visible){Button("Schválit a odeslat"){Task{await decide(review,action:review["state"].string=="failed" ? "retry" : "approve")}};Button("Zrušit",role:.cancel){}}.sheet(item:$share){APIQuickLook(url:$0.url)}}
     @State private var share:APIFile?
     func load()async{do{let r=try await store.get(path);requests=r["requests"].array}catch{problem=error.localizedDescription}}
     func prepare()async{do{var form=APIMultipart();form.field("metadata",String(data:try APIValue.object(["recipient":.s(recipient),"jobVersion":jobVersion,"reportVersion":reportVersion]).data(),encoding:.utf8)!);form.file("pdf",filename:"Vykaz.pdf",type:"application/pdf",bytes:pdf);try await store.upload(path+"/"+requestID,bytes:form.finished,type:form.type);requestID=UUID().uuidString;await load()}catch{problem=error.localizedDescription}}
@@ -89,6 +90,7 @@ struct APIDraftDestination:View {
     @ViewBuilder var body:some View{
         if parts.first=="protocol",parts.count==2{APIProtocolEditor(store:store,jobID:parts[1])}
         else if parts.first=="shaft"{APIShaftEditor(store:store,initial:draft.value,isNew:draft.value["version"].int==0)}
+        else if parts.first=="plan",parts.count==2{APIPlanView(store:store,garden:.object(["id":.s(parts[1])]))}
         else if parts.first=="blowout",parts.count==2{APIBlowoutView(store:store,garden:.object(["id":.s(parts[1])]))}
         else if let name=parts.first,let entity=APIEntity(rawValue:name),parts.count>=3{APIEntityEditor(store:store,resource:APIResource(entity:entity,parent:parts[1]),original:draft.value,isNew:draft.value["version"].int==0)}
         else{Text("Koncept lze exportovat; tento typ nelze otevřít samostatně.")}

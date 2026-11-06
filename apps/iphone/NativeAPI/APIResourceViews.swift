@@ -13,8 +13,9 @@ struct APIResourceList: View {
     @State private var categories:[APIValue]=[]
     @State private var category=""
     @State private var onlyMine = false
+    private var serverSearch:Bool{[APIEntity.customers,.jobs].contains(resource.entity)}
     var visible: [APIValue] { rows.filter { row in
-        let matches=query.isEmpty || [row.title,row["address"].string,row["sku"].string,row["customerName"].string].joined(separator:" ").localizedCaseInsensitiveContains(query)
+        let matches=serverSearch || query.isEmpty || [row.title,row["address"].string,row["sku"].string,row["customerName"].string].joined(separator:" ").localizedStandardContains(query)
         let garden=resource.seed["gardenId"].string,customer=resource.seed["customerId"].string
         return matches && (category.isEmpty || row["categoryId"].string==category) && (garden.isEmpty || row["gardenId"].string == garden || resource.entity == .gardens && row.id == garden) && (customer.isEmpty || row["customerId"].string == customer) && (!onlyMine || row["assignedTo"].string == store.userID)
     } }
@@ -26,7 +27,7 @@ struct APIResourceList: View {
             if resource.entity == .defects { Section { Toggle("Moje závady",isOn:$onlyMine) } }
             if loading && rows.isEmpty { ProgressView("Načítám…") }
             if let problem { Text(problem).foregroundStyle(DiaryStyle.warning) }
-            ForEach(Array(visible.enumerated()),id:\.offset) { _,row in
+            ForEach(visible,id:\.id) { row in
                 NavigationLink { APIEntityDetail(store:store,resource:resource,initial:row) } label: { APIRecordRow(entity:resource.entity,value:row,distance:resource.entity == .gardens ? APIPlaces.distance(row,from:location.position) : nil) }
                     .listRowBackground(DiaryStyle.surface).accessibilityIdentifier("api-record-"+row.id)
             }
@@ -35,7 +36,7 @@ struct APIResourceList: View {
         }.listStyle(.insetGrouped).scrollContentBackground(.hidden).background(DiaryStyle.background)
             .navigationTitle(resource.title).navigationBarTitleDisplayMode(.inline).searchable(text:$query,prompt:"Hledat")
             .toolbar { if resource.entity.canCreate && resource.editable(store) { ToolbarItem(placement:.topBarTrailing) { Button { create() } label:{Image(systemName:"plus")}.accessibilityLabel("Přidat záznam") } } }
-            .task(id:store.scope+store.revision.uuidString) { await load() }.refreshable { await store.resume();await load() }
+            .task(id:store.scope+store.revision.uuidString+(serverSearch || resource.entity == .materials ? query : "")) { await load() }.refreshable { await store.resume();await load() }
     }
     func create() {
         if resource.entity == .subscriptions { store.route = APIRoute(resource:resource,value:resource.initial(store),isNew:true) }
@@ -45,14 +46,15 @@ struct APIResourceList: View {
         if more && loading{return};let ticket=UUID();requestID=ticket;loading=true;defer{if requestID==ticket{loading=false}};let scope=store.scope
         do {
             var c=URLComponents(string:resource.listPath)!
+            if serverSearch && !query.isEmpty{if !more{try await Task.sleep(for:.milliseconds(300))};var q=c.queryItems ?? [];q.append(URLQueryItem(name:"q",value:String(query.prefix(100))));c.queryItems=q}
             if more { var q=c.queryItems ?? [];q.append(URLQueryItem(name:resource.entity == .materials ? "after" : "cursor",value:cursor));c.queryItems=q }
             let page=try await store.get(c.string!)
             guard scope==store.scope,requestID==ticket else {return}
             let values=page[resource.listKey].array
             if resource.entity == .materials{categories=page["categories"].array}
             rows=more ? rows+values.filter { value in !rows.contains(where:{$0.id==value.id}) } : values
-            cursor=page["nextCursor"].string;problem=nil
-            if (!resource.seed["gardenId"].string.isEmpty || !resource.seed["customerId"].string.isEmpty) && !cursor.isEmpty{loading=false;await load(more:true)}
+            cursor=resource.entity == .categories ? "" : page["nextCursor"].string;problem=page["partial"].bool ? "Server v tomto přehledu vrací jen nejnovější část historie." : nil
+            if (!resource.seed["gardenId"].string.isEmpty || !resource.seed["customerId"].string.isEmpty || resource.entity == .materials && !query.isEmpty) && !cursor.isEmpty{loading=false;await load(more:true)}
         } catch is CancellationError{} catch {if requestID==ticket{problem=error.localizedDescription}}
     }
 }
@@ -133,7 +135,7 @@ struct APIEntityDetail: View {
                 }
             }.padding(18)
         }.background(DiaryStyle.background).navigationTitle(record.title).navigationBarTitleDisplayMode(.inline)
-            .toolbar { if resource.editable(store) && !resource.fields.isEmpty { ToolbarItem(placement:.topBarTrailing){Button("Upravit"){store.route=APIRoute(resource:resource,value:record)}} } }
+            .toolbar { if resource.editable(store) && !resource.fields.isEmpty && (resource.entity != .entries || store.manager || record["createdBy"].string==store.userID) { ToolbarItem(placement:.topBarTrailing){Button("Upravit"){store.route=APIRoute(resource:resource,value:record)}} } }
             .task(id:store.scope+store.revision.uuidString){await load()}.refreshable{await store.resume();await load()}
             .sheet(item:$action) { APIActionEditor(store:store,action:$0) }
             .confirmationDialog("Opravdu smazat tento záznam?",isPresented:$deleteConfirm,titleVisibility:.visible){Button("Smazat",role:.destructive){Task{await remove()}};Button("Zrušit",role:.cancel){}}

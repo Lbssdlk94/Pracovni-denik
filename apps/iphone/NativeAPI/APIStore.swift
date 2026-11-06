@@ -32,7 +32,8 @@ final class APIStore: ObservableObject {
     var company: String { me["installation"]["name"].string.isEmpty ? (transport.origin.host?.hasPrefix("dr-garden") == true ? "Dr. Garden" : "Dr. Závlaha") : me["installation"]["name"].string }
     var today: String { let f = DateFormatter(); f.calendar = Calendar(identifier:.gregorian); f.timeZone = TimeZone(identifier:"Europe/Prague"); f.dateFormat = "yyyy-MM-dd"; return f.string(from: Date()) }
     var scope: String { vault?.scope ?? "" }
-    func enabled(_ key: String) -> Bool { me["features"][key].bool }
+    var canIrrigate:Bool{me["workspace"].isNull || me["workspace"]["disciplines"].array.contains(.s("irrigation"))}
+    func enabled(_ key:String)->Bool{if ["shafts","plans","blowout","pump","zoneManagement","pictureExport"].contains(key) && !canIrrigate{return false};return me["features"][key].bool}
     init(fixture: Bool = false, transport: APITransport? = nil) {
         self.fixture = fixture
         let saved=URL(string:UserDefaults.standard.string(forKey:"native-api-installation") ?? "")
@@ -153,7 +154,8 @@ final class APIStore: ObservableObject {
     }
     func sync() async {
         guard !syncing, online, let local = vault, !local.state.outbox.isEmpty else { return }
-        syncing = true; defer { syncing = false; updateOutbox() }
+        let initialIDs=Set(local.state.outbox.map(\.id))
+        syncing = true; defer {syncing=false;updateOutbox();if online,local.scope==scope,local.state.outbox.contains(where:{$0.state=="pending" && !initialIDs.contains($0.id)}){Task{await self.sync()}}}
         let ticket = generation
         do { try bind(await transport.request("/api/me")) } catch { if let e = error as? APIError, [401,403].contains(e.status) { lock() }; self.error = error.localizedDescription; return }
         guard ticket == generation, local.scope == scope else { error = "Oprávnění se změnila. Původní neodeslané změny zůstaly zabezpečené."; return }

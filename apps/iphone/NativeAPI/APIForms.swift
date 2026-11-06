@@ -93,10 +93,16 @@ struct APIEntityEditor: View {
     private var key: String { resource.id+":"+original.id }
     private var fields:[APIField]{
         var result=resource.fields.filter{($0.feature==nil || store.enabled($0.feature!)) && (!$0.ownerOnly || store.owner) && ($0.id != "discipline" || !store.me["workspace"].isNull)}
+        if !store.enabled("customers"){result=result.filter{$0.id != "customerId" && $0.id != "customerAddressId"}}
+        if !store.enabled("gardens"){result=result.filter{$0.id != "gardenId"}}
+        if !store.canIrrigate{result=result.filter{$0.id != "pumpType"}}
+        if resource.entity == .customers && !isNew{result=result.filter{$0.id != "discipline"}}
+        result=result.map{field in var f=field;if f.id=="discipline"{f.required=true;f.choices=f.choices.filter{store.me["workspace"]["disciplines"].array.contains(.s($0.id))}};return f}
         if resource.entity == .entries{result=result.map{field in var f=field;if f.id=="kind"{f.choices=f.choices.filter{store.enabled(["fuel":"fleetFuel","service":"fleetService","expense":"fleetExpenses"][$0.id] ?? "vehicles")}};if f.id=="litersMilli"{f.required=value["kind"].string=="fuel"};return f}.filter{!["litersMilli","full","station"].contains($0.id) || value["kind"].string=="fuel"}}
         if resource.entity == .vehicles{let gates=["inspectionDate":"fleetStk","vignetteDate":"fleetVignette","leadDays":"fleetAlerts","odometer":"fleetOdometer"];result=result.filter{field in gates[field.id].map{store.enabled($0)} ?? true}}
         return result
     }
+    private var visibleOptions:[String:[APIValue]]{var result=options;if resource.entity == .jobs && !value["customerId"].string.isEmpty{result["gardens"]=options["gardens",default:[]].filter{$0["customerId"]==value["customerId"]}};return result}
     private var extras:Set<String>{resource.entity == .jobs ? ["arrivalWindowStart","arrivalWindowEnd","legacyTimeMeaning","startTime","endTime","customerName","discipline"] : resource.entity == .vehicles ? ["model","vin","inspectionDate","vignetteDate","leadDays","notes"] : []}
 
     var body: some View {
@@ -104,7 +110,7 @@ struct APIEntityEditor: View {
             ScrollView {
                 VStack(alignment:.leading,spacing:18) {
                     if loading { ProgressView("Načítám údaje…") }
-                    else { APIFieldsView(fields:fields.filter{!extras.contains($0.id)},value:$value,options:options,edited:edited).diaryCard();if !fields.filter({extras.contains($0.id)}).isEmpty{DisclosureGroup("Doplňující údaje"){APIFieldsView(fields:fields.filter{extras.contains($0.id)},value:$value,options:options,edited:edited)}.diaryCard()} }
+                    else { APIFieldsView(fields:fields.filter{!extras.contains($0.id)},value:$value,options:visibleOptions,edited:edited).diaryCard();if !fields.filter({extras.contains($0.id)}).isEmpty{DisclosureGroup("Doplňující údaje"){APIFieldsView(fields:fields.filter{extras.contains($0.id)},value:$value,options:visibleOptions,edited:edited)}.diaryCard()} }
                     if resource.entity == .defects,!value["sourceJobId"].string.isEmpty {APIProtocolPhotoPicker(store:store,jobID:value["sourceJobId"].string,photos:Binding(get:{value["photos"]},set:{value["photos"]=$0})).diaryCard()}
                     if !overlap.isNull {VStack(alignment:.leading){ForEach(Array(overlap["warnings"].array.enumerated()),id:\.offset){_,warning in Text(warning["message"].string).foregroundStyle(DiaryStyle.warning)};if !overlap["overlaps"].array.isEmpty{Text("Překryvy práce: \(overlap["overlaps"].array.count). Zkontrolujte přiřazení, čas a rezervu mezi návštěvami.").foregroundStyle(DiaryStyle.warning)}};Button("Přesto uložit po kontrole překryvů"){value["allowOverlaps"] = .bool(true);value["previewRevision"]=overlap["revision"];Task{await save()}}.buttonStyle(.bordered)}
                     if let problem { DiaryStatusBanner(text:problem,warning:true) }
@@ -122,6 +128,7 @@ struct APIEntityEditor: View {
                 }.interactiveDismissDisabled().editLease(store)
         }.task { await load() }
             .onChange(of:value) { _,_ in if !loading {persist()} }
+            .onChange(of:value["discipline"].string){_,discipline in if resource.entity == .gardens && !touched.contains("notes") && !value["workNotes"][discipline].isNull{value["notes"]=value["workNotes"][discipline]}}
             .onChange(of:value["gardenId"].string) { _,_ in if !loading { hydrateGarden() } }
             .onChange(of:value["customerAddressId"].string){_,id in if touched.contains("customerAddressId"),let address=options["addresses"]?.first(where:{$0.id==id}) {if !touched.contains("address"){value["address"]=address["address"]};if !touched.contains("city"),!address["city"].string.isEmpty{value["city"]=address["city"]}}}
             .onChange(of:value["customerId"].string) { _,_ in if !loading { Task { await loadAddresses() } } }
@@ -131,6 +138,7 @@ struct APIEntityEditor: View {
     func load() async {
         let initial = isNew ? resource.initial(store).merged(original.object) : original
         let draft=store.draft(key,fallback:initial);value=draft.value;operationID=draft.operationID;touched=draft.touchedFields ?? []
+        if resource.entity == .gardens && !store.me["workspace"].isNull{if value["discipline"].string.isEmpty{value["discipline"]=resource.initial(store)["discipline"]};if !touched.contains("notes") && !value["workNotes"][value["discipline"].string].isNull{value["notes"]=value["workNotes"][value["discipline"].string]}}
         do {
             let refs=Set(fields.flatMap { [$0.reference].compactMap{$0} + $0.children.compactMap(\.reference) })
             for ref in refs { options[ref] = try await APIDomainLogic.referenceRows(ref,store:store) }

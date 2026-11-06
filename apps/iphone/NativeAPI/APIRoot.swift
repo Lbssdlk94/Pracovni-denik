@@ -7,6 +7,8 @@ struct APIRoot:View {
     @ObservedObject private var watch=WatchPhoneCoordinator.shared
     @Environment(\.scenePhase) private var scenePhase
     @State private var outbox=false
+    @State private var inbox=false
+    @State private var followUp:APIPhoneFollowUp?
     var body:some View {
         ZStack{
             if store.needsPasswordChange{APIPasswordView(store:store,mandatory:true)}
@@ -31,17 +33,25 @@ struct APIRoot:View {
                     else{APIEntityEditor(store:store,resource:route.resource,original:route.value,isNew:route.isNew)}
                 }
             }
+            .sheet(isPresented:$inbox){NavigationStack{APIResourceList(store:store,resource:APIResource(entity:.notifications))}}
+            .sheet(item:$followUp,onDismiss:{watch.clearFollowUp()}){request in Group{if request.action=="protocol"{APIProtocolEditor(store:store,jobID:request.job.id,completing:true)}else if request.action=="travelSms"{APIDepartureEditor(store:store,job:request.job,composeOnly:true)}else{NavigationStack{APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:request.job)}}}}
             .sheet(isPresented:$outbox){NavigationStack{APIOutboxView(store:store)}}
             .sheet(isPresented:$push.showSettings){NativePushSettings(push:push)}
             .sheet(isPresented:$watch.showSettings){WatchPhoneSettings()}
-            .onChange(of:push.inboxRequest){_,_ in if push.pendingInbox{store.route=nil;store.tab=4;push.pendingInbox=false}}
+            .onChange(of:push.inboxRequest){_,_ in openInbox()}
+            .onChange(of:watch.pendingJobId){_,_ in Task{await openWatchRequest()}}
+            .onChange(of:store.authenticated){_,authenticated in if authenticated{openInbox()}}
+            .onChange(of:store.editing){_,editing in if !editing{openInbox();Task{await openWatchRequest()}}}
             .onChange(of:scenePhase){_,phase in if phase == .active{Task{await store.resume();await push.refresh()}}else{try? store.vault?.persist()}}
-            .onChange(of:store.scope){_,_ in push.invalidatePresentation();watch.invalidate()}
+            .onChange(of:store.scope){_,_ in outbox=false;inbox=false;followUp=nil;push.invalidatePresentation();watch.invalidate()}
             .task{
                 await store.restore();push.attach(store);watch.attach(store);await push.refresh()
                 while !Task.isCancelled{do{try await Task.sleep(for:.seconds(45));try Task.checkCancellation()}catch{break};if scenePhase == .active{await store.resume()}}
             }
     }
+    func openInbox(){guard push.pendingInbox,store.authenticated,store.enabled("notifications"),!store.editing else{return};push.pendingInbox=false;inbox=true}
+    func openWatchRequest()async{guard store.authenticated,!store.editing,followUp==nil,let id=watch.pendingJobId else{return};let scope=store.scope,action=watch.pendingAction ?? "detail";do{let result=try await store.get("/api/jobs/"+id);guard scope==store.scope,!store.editing else{return};followUp=APIPhoneFollowUp(job:result["job"],action:action)}catch{store.error=error.localizedDescription;watch.clearFollowUp()}}
+
 }
 struct APILogin:View {
     @ObservedObject var store:APIStore
@@ -99,20 +109,18 @@ struct APIJobsScreen:View {
     @State private var loading=false
     @State private var requestID=UUID()
     private var day:String{let f=DateFormatter();f.timeZone=TimeZone(identifier:"Europe/Prague");f.dateFormat="yyyy-MM-dd";return f.string(from:date)}
-    private var filterKey:String{[day,String(allDates),String(mine),state,protocolState,store.scope,store.revision.uuidString].joined(separator:"|")}
+    private var filterKey:String{[day,String(allDates),String(mine),state,protocolState,String(query.prefix(100)),store.scope,store.revision.uuidString].joined(separator:"|")}
     private var count:Int{(state=="all" ? 0 : 1)+(protocolState.isEmpty ? 0 : 1)}
     var body:some View{List{
         Section{
-            HStack{Button("Dnes"){date=Date();allDates=false};Button("Zítra"){date=Calendar.current.date(byAdding:.day,value:1,to:Date())!;allDates=false};Button("Kalendář"){calendar=true};Spacer();Button{filters=true}label:{Label("Filtry\(count>0 ? " (\(count))" : "")",systemImage:"line.3.horizontal.decrease")}}
+            HStack{Button("Dnes"){date=Date();allDates=false};Button("Zítra"){date=Calendar.current.date(byAdding:.day,value:1,to:Date())!;allDates=false};if store.enabled("jobCalendar"){Button("Kalendář"){calendar=true}};Spacer();Button{filters=true}label:{Label("Filtry\(count>0 ? " (\(count))" : "")",systemImage:"line.3.horizontal.decrease")}}
             if store.manager{Picker("Tým",selection:$mine){Text("Moje").tag(true);Text("Celý tým").tag(false)}.pickerStyle(.segmented)}
             if store.manager&&store.enabled("jobMap")&&store.enabled("location"){Button("Mapa zakázek"){map=true}}
-            Toggle("Všechny dny",isOn:$allDates)
+            if store.enabled("jobList"){Toggle("Všechny dny",isOn:$allDates)}
         }.listRowBackground(Color.clear)
         if loading&&rows.isEmpty{ProgressView("Načítám zakázky…")}
-        ForEach(Array(rows.filter{query.isEmpty||[$0.title,$0["customerName"].string,$0["address"].string].joined(separator:" ").localizedCaseInsensitiveContains(query)}.enumerated()),id:\.offset){_,job in
-            NavigationLink{APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:job)}label:{APIRecordRow(entity:.jobs,value:job)}.accessibilityIdentifier("native-job-"+job.id)
-        }
-        if rows.isEmpty && !loading{Text("Pro tento výběr nejsou návštěvy.").foregroundStyle(.secondary)}
+        ForEach(rows,id:\.id){job in APIJobListRow(store:store,job:job)}
+        if rows.isEmpty && !loading{Text("Pro tento výběr nejsou návštěvy.").foregroundStyle(.secondary);if day==store.today && !allDates{APIUpcomingVisits(store:store,mine:mine)}}
         if !cursor.isEmpty{Button("Načíst další zakázky"){Task{await load(more:true)}}}
         if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}
     }.listStyle(.insetGrouped).scrollContentBackground(.hidden).background(DiaryStyle.background).navigationTitle("Zakázky").navigationBarTitleDisplayMode(.inline).searchable(text:$query,prompt:"Hledat")
@@ -122,12 +130,12 @@ struct APIJobsScreen:View {
         .sheet(isPresented:$filters){NavigationStack{Form{Picker("Stav",selection:$state){ForEach(["all","planned","on_way","in_progress","incomplete","done"],id:\.self){Text($0=="all" ? "Všechny" : APIFormat.status($0)).tag($0)}};Picker("Protokol",selection:$protocolState){Text("Všechny").tag("");Text("Chybí nebo rozpracovaný").tag("unfinished");Text("Chybí").tag("missing");Text("Rozpracovaný").tag("draft");Text("Hotový").tag("ready")};Button("Vymazat filtry"){state="all";protocolState=""}}.navigationTitle("Filtry").toolbar{ToolbarItem(placement:.confirmationAction){Button("Hotovo"){filters=false}}}}}
         .sheet(isPresented:$map){NavigationStack{APIJobsMap(store:store,jobs:rows)}}
     }
-    func load(more:Bool=false)async{if more && loading{return};let ticket=UUID();requestID=ticket;loading=true;defer{if requestID==ticket{loading=false}};let scope=store.scope;do{var c=URLComponents(string:"/api/jobs")!;var q=[URLQueryItem(name:"state",value:state),URLQueryItem(name:"order",value:"schedule")];if !allDates{q += [URLQueryItem(name:"month",value:String(day.prefix(7))),URLQueryItem(name:"day",value:day)]};if mine || !store.manager{q.append(URLQueryItem(name:"assignee",value:store.userID))};if !protocolState.isEmpty{q.append(URLQueryItem(name:"protocol",value:protocolState))};if more{q.append(URLQueryItem(name:"cursor",value:cursor))};c.queryItems=q;let page=try await store.get(c.string!);guard scope==store.scope,requestID==ticket else{return};rows=more ? rows+page["jobs"].array.filter{j in !rows.contains{$0.id==j.id}} : page["jobs"].array;cursor=page["nextCursor"].string;problem=nil}catch is CancellationError{}catch{if requestID==ticket{problem=error.localizedDescription}}}
+    func load(more:Bool=false)async{if more && loading{return};let ticket=UUID();requestID=ticket;loading=true;defer{if requestID==ticket{loading=false}};let scope=store.scope;do{var c=URLComponents(string:"/api/jobs")!;var q=[URLQueryItem(name:"state",value:state),URLQueryItem(name:"order",value:"schedule")];if !allDates{q += [URLQueryItem(name:"month",value:String(day.prefix(7))),URLQueryItem(name:"day",value:day)]};if mine || !store.manager{q.append(URLQueryItem(name:"assignee",value:store.userID))};if !protocolState.isEmpty{q.append(URLQueryItem(name:"protocol",value:protocolState))};if more{q.append(URLQueryItem(name:"cursor",value:cursor))};if !query.isEmpty{q.append(URLQueryItem(name:"q",value:String(query.prefix(100))));if !more{try await Task.sleep(for:.milliseconds(300))}};c.queryItems=q;let page=try await store.get(c.string!);guard scope==store.scope,requestID==ticket else{return};rows=more ? rows+page["jobs"].array.filter{j in !rows.contains{$0.id==j.id}} : page["jobs"].array;cursor=page["nextCursor"].string;problem=nil}catch is CancellationError{}catch{if requestID==ticket{problem=error.localizedDescription}}}
 }
 struct APIMore:View {
     @ObservedObject var store:APIStore
     var body:some View{ScrollView{VStack(spacing:16){HStack{Image(systemName:"person.crop.circle.fill").font(.largeTitle);VStack(alignment:.leading){Text(store.me["user"]["name"].string).font(.headline);Text(store.company).foregroundStyle(.secondary)}}.diaryCard()
-        category("Práce v terénu","leaf",entities:[.gardens,.defects])
+        category("Práce v terénu","leaf",entities:[.gardens,.defects,.shafts])
         category("Firemní agenda","building.2",entities:[.materials,.vehicles,.subscriptions])
         if store.manager && store.enabled("teamManagement"){NavigationLink{APIResourceList(store:store,resource:APIResource(entity:.team))}label:{row("Tým","person.2")}}
         if store.enabled("notifications"){NavigationLink{APIResourceList(store:store,resource:APIResource(entity:.notifications))}label:{row("Upozornění","bell")}}
@@ -137,3 +145,5 @@ struct APIMore:View {
     @ViewBuilder func category(_ title:String,_ symbol:String,entities:[APIEntity])->some View{let allowed=entities.filter{store.enabled($0.feature)&&(!$0.managerOnly||store.manager)};if !allowed.isEmpty{NavigationLink{ScrollView{VStack(spacing:16){ForEach(allowed,id:\.self){entity in if entity == .vehicles{NavigationLink{APIVehiclesHome(store:store)}label:{row(entity.title,entity.symbol)}}else{NavigationLink{APIResourceList(store:store,resource:APIResource(entity:entity))}label:{row(entity.title,entity.symbol)}}}}.padding(18)}.background(DiaryStyle.background).navigationTitle(title)}label:{row(title,symbol)}}}
     func row(_ title:String,_ symbol:String)->some View{HStack(spacing:14){Image(systemName:symbol).frame(width:44,height:44).background(DiaryStyle.soft,in:RoundedRectangle(cornerRadius:14));Text(title).font(.headline);Spacer();Image(systemName:"chevron.right").font(.caption)}.foregroundStyle(DiaryStyle.accent).frame(minHeight:48).diaryCard().accessibilityElement(children:.combine).accessibilityLabel(title)}
 }
+
+struct APIPhoneFollowUp:Identifiable{let id=UUID();let job:APIValue;let action:String}

@@ -69,7 +69,7 @@ struct APIFilesView:View {
     @State private var photoAction:APIDomainAction?
     @State private var removePhoto:APIValue = .null
     @State private var confirmRemoval=false
-    var allowed:Bool { store.writer && store.enabled("photoUploads") && (mode != .service || store.enabled("protocolPhotos")) && (mode != .receipts || store.enabled("fleetReceipts")) && (mode != .job || store.enabled("drivePhotos") && store.enabled("googleDrive")) }
+    var allowed:Bool { store.writer && store.enabled("photoUploads") && (mode != .service || store.enabled("protocolPhotos")) && (mode != .receipts || store.enabled("fleetReceipts") && (store.manager || record["createdBy"].string==store.userID)) && (mode != .job || store.enabled("drivePhotos") && store.enabled("googleDrive")) }
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
             if mode != .vehicle && mode != .plan {
@@ -125,15 +125,17 @@ struct APIFilesView:View {
 struct APISignature:View {
     @Binding var encoded:String
     @State private var strokes:[[CGPoint]]=[]
-    var body:some View {
-        VStack(alignment:.leading,spacing:10){Text("Podpis zákazníka").font(.headline)
+    @State private var drawing=false
+    var body:some View{VStack(alignment:.leading,spacing:10){
+        Text("Podpis zákazníka").font(.headline)
+        GeometryReader{geometry in
             Canvas{context,size in
                 if let data=Data(base64Encoded:encoded.components(separatedBy:",").last ?? ""),let image=UIImage(data:data){context.draw(Image(uiImage:image),in:CGRect(origin:.zero,size:size))}
-                for points in strokes{var path=Path();if let p=points.first{path.move(to:CGPoint(x:p.x*size.width,y:p.y*size.height));for point in points.dropFirst(){path.addLine(to:CGPoint(x:point.x*size.width,y:point.y*size.height))};context.stroke(path,with:.color(.black),lineWidth:2)}}
-            }.frame(height:120).background(Color.white,in:RoundedRectangle(cornerRadius:12)).overlay(RoundedRectangle(cornerRadius:12).stroke(.gray.opacity(0.3)))
-                .gesture(DragGesture(minimumDistance:0).onChanged{g in let point=CGPoint(x:max(0,min(1,g.location.x/320)),y:max(0,min(1,g.location.y/120)));if g.translation == .zero{strokes.append([point])}else{if strokes.isEmpty{strokes.append([])};strokes[strokes.count-1].append(point)}}.onEnded{_ in render()})
-            Button("Vymazat podpis",role:.destructive){encoded="";strokes=[]}.frame(minHeight:44)
-        }
-    }
-    func render(){let renderer=UIGraphicsImageRenderer(size:CGSize(width:320,height:120));let image=renderer.image{ctx in UIColor.white.setFill();ctx.fill(CGRect(x:0,y:0,width:320,height:120));if let d=Data(base64Encoded:encoded.components(separatedBy:",").last ?? ""),let old=UIImage(data:d){old.draw(in:CGRect(x:0,y:0,width:320,height:120))};ctx.cgContext.setStrokeColor(UIColor.black.cgColor);ctx.cgContext.setLineWidth(2);for points in strokes{guard let p=points.first else{continue};ctx.cgContext.beginPath();ctx.cgContext.move(to:CGPoint(x:p.x*320,y:p.y*120));for q in points.dropFirst(){ctx.cgContext.addLine(to:CGPoint(x:q.x*320,y:q.y*120))};ctx.cgContext.strokePath()}};if let data=image.pngData(),data.count<35000{encoded="data:image/png;base64,"+data.base64EncodedString();strokes=[]}}
+                for points in strokes{var path=Path();if let first=points.first{path.move(to:CGPoint(x:first.x*size.width,y:first.y*size.height));for p in points.dropFirst(){path.addLine(to:CGPoint(x:p.x*size.width,y:p.y*size.height))};context.stroke(path,with:.color(.black),lineWidth:2)}}
+            }.background(Color.white,in:RoundedRectangle(cornerRadius:12)).overlay(RoundedRectangle(cornerRadius:12).stroke(.gray.opacity(0.3)))
+            .gesture(DragGesture(minimumDistance:0).onChanged{gesture in if !drawing{drawing=true;strokes.append([])};let point=CGPoint(x:max(0,min(1,gesture.location.x/max(1,geometry.size.width))),y:max(0,min(1,gesture.location.y/max(1,geometry.size.height))));strokes[strokes.count-1].append(point)}.onEnded{_ in drawing=false;render()})
+        }.frame(height:120)
+        Button("Vymazat podpis",role:.destructive){encoded="";strokes=[];drawing=false}.frame(minHeight:44)
+    }}
+    func render(){let image=UIGraphicsImageRenderer(size:CGSize(width:320,height:120)).image{context in UIColor.white.setFill();context.fill(CGRect(x:0,y:0,width:320,height:120));if let bytes=Data(base64Encoded:encoded.components(separatedBy:",").last ?? ""),let old=UIImage(data:bytes){old.draw(in:CGRect(x:0,y:0,width:320,height:120))};context.cgContext.setStrokeColor(UIColor.black.cgColor);context.cgContext.setLineWidth(2);for points in strokes{guard let first=points.first else{continue};context.cgContext.beginPath();context.cgContext.move(to:CGPoint(x:first.x*320,y:first.y*120));for p in points.dropFirst(){context.cgContext.addLine(to:CGPoint(x:p.x*320,y:p.y*120))};context.cgContext.strokePath()}};if let bytes=image.pngData(),bytes.count<35000{encoded="data:image/png;base64,"+bytes.base64EncodedString();strokes=[]}}
 }

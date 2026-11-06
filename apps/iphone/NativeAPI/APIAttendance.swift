@@ -66,6 +66,6 @@ struct APIAttendanceAction:View {
     @State private var end=Date()
     @State private var closed=true
     @State private var problem:String?
-    var correction:Bool{action.value["kind"].string=="edit"}
+    var correction:Bool{action.path=="/api/attendance/corrections" && action.value["kind"].string=="edit"}
     var body:some View{NavigationStack{Form{if correction{DatePicker("Příchod",selection:$start);Toggle("Směna má odchod",isOn:$closed);if closed{DatePicker("Odchod",selection:$end)}};APIFieldsView(fields:action.fields,value:$value);if let message=action.confirmation{Text(message)};if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)};Button("Potvrdit"){Task{do{var body=value;if correction{body["startAt"] = .number((start.timeIntervalSince1970*1000).rounded());body["endAt"] = closed ? .number((end.timeIntervalSince1970*1000).rounded()) : .null};_=try await store.write(action.path,method:action.method,body:body);dismiss()}catch{problem=error.localizedDescription}}}}.navigationTitle(action.title).toolbar{ToolbarItem(placement:.cancellationAction){Button("Zavřít"){dismiss()}}}}.task{value=action.value;start=Date(timeIntervalSince1970:value["startAt"].double/1000);end=value["endAt"].isNull ? Date() : Date(timeIntervalSince1970:value["endAt"].double/1000);closed = !value["endAt"].isNull}}
 }

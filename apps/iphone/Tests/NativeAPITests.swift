@@ -40,4 +40,7 @@ final class NativeAPITests:XCTestCase {
         try archive(name:"../manifest.json").write(to:url);XCTAssertThrowsError(try APITar.entries(url));var damaged=archive(name:"manifest.json");damaged[20]=13;try damaged.write(to:url);XCTAssertThrowsError(try APITar.entries(url))
     }
 
+    func testWorkAndTravelUseStartedBlocksAndStoredRates(){let charges:APIValue = .object(["hours":.number(1.1),"kilometers":.number(30.1),"hourlyMinor":.n(80000),"travelRateMinor":.n(30000)]);XCTAssertEqual(APIProtocolPDF.chargeTotal(charges),220000);XCTAssertNil(APIProtocolPDF.chargeTotal(.object(["hours":.n(2),"kilometers":.n(60)])))}
+    @MainActor func testGardenWorkerCannotOpenIrrigationSections(){let store=APIStore(fixture:true);var me=APIFixtureProtocol.fixtureData()["context"];me["user"]["role"] = .s("worker");me["workspace"]["disciplines"] = .array([.s("garden")]);try? store.bind(me);for feature in ["shafts","blowout","plans","zoneManagement"]{XCTAssertFalse(store.enabled(feature))};XCTAssertTrue(store.enabled("gardens"))}
+
 }

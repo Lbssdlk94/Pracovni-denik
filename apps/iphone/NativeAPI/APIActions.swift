@@ -54,7 +54,7 @@ struct APIJobDetailContent:View {
                 if job["status"].string=="incomplete"{Text("Důvod: "+job["incompleteReason"].string).foregroundStyle(DiaryStyle.warning)}
             }
             if !job["address"].string.isEmpty{DiarySection(title:"Místo",symbol:"mappin"){Text(job["address"].string);if let url=APIFormat.navigation(job["address"].string){Link("Navigovat",destination:url).frame(minHeight:44)}}}
-            if (assigned||store.manager){
+            if (assigned||store.manager) && store.writer{
                 HStack{if store.writer && store.enabled("jobTravel") && !["done","incomplete"].contains(job["status"].string){Button("Jsem na cestě"){departure=true}.buttonStyle(.borderedProminent)};Button("Změnit stav"){status=true}.buttonStyle(.bordered)}.frame(minHeight:44)
             }
             if store.enabled("jobHandoffs"){
@@ -115,6 +115,7 @@ struct APIJobStatusEditor:View {
 struct APIDepartureEditor:View {
     @ObservedObject var store:APIStore
     let job:APIValue
+    var composeOnly=false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var value:APIValue = .object([:])
@@ -124,7 +125,7 @@ struct APIDepartureEditor:View {
     var body:some View {
         NavigationStack{Form{APIFieldsView(fields:[.field("arrivalDate","Datum příjezdu",.date,true),.field("arrivalTime","Přesný čas příjezdu",.time,true)],value:$value);if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)};Button(sent ? "Odjezd uložen" : "Potvrdit odjezd"){Task{await send()}}.disabled(sent)}}
             .navigationTitle("Jsem na cestě").toolbar{ToolbarItem(placement:.cancellationAction){Button("Zavřít"){dismiss()}}}
-            .task{value = .object(["arrivalDate":.s(store.today),"arrivalTime":.s("")])}
+            .task{value = .object(["arrivalDate":composeOnly ? job["arrivalDate"] : .s(store.today),"arrivalTime":composeOnly ? job["arrivalTime"] : .s("")]);if composeOnly{sent=true;sms=true}}
             .confirmationDialog("Informovat zákazníka",isPresented:$sms,titleVisibility:.visible){Button("Připravit SMS"){compose()};Button("Hotovo",role:.cancel){dismiss()}} message:{Text("Zprávu zkontrolujete a odešlete v aplikaci Zprávy.")}
     }
     func send()async{do{guard value["arrivalTime"].string.range(of:"^([01][0-9]|2[0-3]):[0-5][0-9]$",options:.regularExpression) != nil else{throw APIError.local("Zadejte přesný čas HH:mm.")};_=try await store.write("/api/jobs/"+job.id+"/departure",method:"POST",body:value.merged(["version":job["version"]]));sent=true;sms=true}catch{problem=error.localizedDescription}}

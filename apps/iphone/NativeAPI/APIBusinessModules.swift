@@ -57,7 +57,7 @@ struct APIVehiclesHome:View {
     @State private var problem:String?
     var vehicle:APIValue{data["vehicles"].array.first{$0.id==selected} ?? .null}
     var body:some View{ScrollView{VStack(alignment:.leading,spacing:18){Picker("Vybrat auto",selection:$selected){Text("Vyberte auto").tag("");ForEach(Array(data["vehicles"].array.enumerated()),id:\.offset){_,v in Text(v["name"].string+" · "+v["plate"].string).tag(v.id)}}.pickerStyle(.menu).diaryCard()
-        if !store.manager && data["driver"]["enabled"].bool && store.enabled("fleetDriverSelection"){Button("Uložit moje auto"){Task{await select()}}.frame(minHeight:44)}
+        if data["driver"]["enabled"].bool && store.enabled("fleetDriverSelection"){Button("Uložit moje auto"){Task{await select()}}.frame(minHeight:44)}
         if !vehicle.isNull{
             if store.enabled("fleetFuel") && store.writer{DiaryTile(title:"Přidat tankování",subtitle:vehicle["name"].string,symbol:"fuelpump"){let r=APIResource(entity:.entries,parent:selected,seed:.object(["odometer":vehicle["odometer"]]));store.route=APIRoute(resource:r,value:r.initial(store),isNew:true)}}
             NavigationLink{APIEntityDetail(store:store,resource:APIResource(entity:.vehicles),initial:vehicle)}label:{Label("Podrobnosti vozidla",systemImage:"chevron.right").frame(minHeight:44).diaryCard()}
