@@ -14,14 +14,14 @@ final class WatchPhoneCoordinator: NSObject, ObservableObject, WCSessionDelegate
     @Published var problem: String?
     @Published var pendingJobId: String?
     @Published var pendingAction: String?
-    private weak var browser: BrowserSession?
+    private weak var api: APIStore?
     private var transport: WCSession?
     private var epoch = 0
     private var busy = false
     private var ledger = WatchRequestLedger()
-    func attach(_ browser: BrowserSession) {
-        self.browser = browser
-        guard !browser.usesIsolatedNativeFixture, !ProcessInfo.processInfo.arguments.contains("--ui-testing"), WCSession.isSupported(), transport == nil else { return }
+    func attach(_ api: APIStore) {
+        self.api = api
+        guard !api.fixture, !ProcessInfo.processInfo.arguments.contains("--ui-testing"), WCSession.isSupported(), transport == nil else { return }
         let session = WCSession.default
         transport = session; session.delegate = self; session.activate()
         updateState(session)
@@ -55,8 +55,8 @@ final class WatchPhoneCoordinator: NSObject, ObservableObject, WCSessionDelegate
             let reply: WatchReply
             if let call { reply = try await call(payload) }
             else {
-                guard let browser, browser.hasDocument else { throw WatchContractError.unreachable }
-                reply = try await browser.nativeCall("watch",payload)
+                guard let api, api.authenticated else { throw WatchContractError.unreachable }
+                reply = try await APIWatchService.execute(api,input:payload)
             }
             guard ticket == epoch, reply.requestId == request.requestId else { throw DiaryBridgeError(message:"Přístup se změnil. Obnovte hodinky.") }
             let encoded = try JSONEncoder().encode(reply)

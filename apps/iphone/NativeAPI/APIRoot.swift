@@ -1,0 +1,137 @@
+import SwiftUI
+import UIKit
+
+struct APIRoot:View {
+    @ObservedObject var store:APIStore
+    @ObservedObject private var push=NativePushController.shared
+    @ObservedObject private var watch=WatchPhoneCoordinator.shared
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var outbox=false
+    var body:some View {
+        ZStack{
+            if store.needsPasswordChange{APIPasswordView(store:store,mandatory:true)}
+            else if store.authenticated{
+                TabView(selection:$store.tab){
+                    NavigationStack{APIOverview(store:store)}.tabItem{Label("Přehled",systemImage:"square.grid.2x2")}.tag(0)
+                    if store.enabled("jobs"){NavigationStack{APIJobsScreen(store:store)}.tabItem{Label("Zakázky",systemImage:"list.clipboard")}.tag(1)}
+                    if store.enabled("attendance"){NavigationStack{APIAttendanceView(store:store)}.tabItem{Label("Docházka",systemImage:"clock")}.tag(2)}
+                    if store.enabled("customers"){NavigationStack{APIResourceList(store:store,resource:APIResource(entity:.customers))}.tabItem{Label("Zákazníci",systemImage:"person.crop.rectangle")}.tag(3)}
+                    NavigationStack{APIMore(store:store)}.tabItem{Label("Více",systemImage:"ellipsis")}.tag(4)
+                }.id(store.scope)
+            }else{APILogin(store:store)}
+            if scenePhase != .active{DiaryStyle.background.ignoresSafeArea().overlay{Text("Pracovní deník").font(.title2.bold())}}
+        }.tint(DiaryStyle.accent)
+            .safeAreaInset(edge:.top,spacing:0){if store.authenticated && (!store.online || !store.outbox.isEmpty){Button{outbox=true}label:{HStack{Image(systemName:store.online ? "arrow.triangle.2.circlepath" : "wifi.slash");Text(store.online ? "\(store.outbox.count) neodeslaných změn" : "Offline · změny zůstávají v iPhonu").font(.caption);Spacer();Image(systemName:"chevron.right")}.padding(12).background(DiaryStyle.soft)}}}
+            .safeAreaInset(edge:.bottom){if store.authenticated,let error=store.error {Text(error).font(.caption).padding(8).background(.regularMaterial).onTapGesture{store.error=nil}}}
+            .sheet(item:$store.route,onDismiss:{store.editing=false}){route in
+                Group{
+                    if route.resource.entity == .subscriptions{APISubscriptionActivation(store:store,initial:route.value)}
+                    else if route.resource.entity == .shafts{APIShaftEditor(store:store,initial:route.value,isNew:route.isNew)}
+                    else if route.resource.entity == .team{APILocalAccountEditor(store:store)}
+                    else{APIEntityEditor(store:store,resource:route.resource,original:route.value,isNew:route.isNew)}
+                }.onAppear{store.editing=true}
+            }
+            .sheet(isPresented:$outbox){NavigationStack{APIOutboxView(store:store)}}
+            .sheet(isPresented:$push.showSettings){NativePushSettings(push:push)}
+            .sheet(isPresented:$watch.showSettings){WatchPhoneSettings()}
+            .onChange(of:push.inboxRequest){_,_ in if push.pendingInbox{store.route=nil;store.tab=4;push.pendingInbox=false}}
+            .onChange(of:scenePhase){_,phase in if phase == .active{Task{await store.resume();await push.refresh()}}else{try? store.vault?.persist()}}
+            .onChange(of:store.scope){_,_ in push.invalidatePresentation();watch.invalidate()}
+            .task{
+                await store.restore();push.attach(store);watch.attach(store);await push.refresh()
+                while !Task.isCancelled{do{try await Task.sleep(for:.seconds(45));try Task.checkCancellation()}catch{break};if scenePhase == .active{await store.resume()}}
+            }
+    }
+}
+struct APILogin:View {
+    @ObservedObject var store:APIStore
+    @State private var username=""
+    @State private var password=""
+    @State private var company="zavlahovy-denik.purplecedar.chatgpt.site"
+    @State private var recovery=false
+    var body:some View {
+        NavigationStack{ScrollView{VStack(alignment:.leading,spacing:22){Image("DiaryMark").resizable().frame(width:72,height:72).clipShape(RoundedRectangle(cornerRadius:18));Text("Pracovní deník").font(.largeTitle.bold());Text("Přihlaste se firemním účtem.").foregroundStyle(.secondary)
+            VStack(spacing:15){Picker("Firma",selection:$company){Text("Dr. Závlaha").tag("zavlahovy-denik.purplecedar.chatgpt.site");Text("Dr. Garden").tag("dr-garden.purplecedar.chatgpt.site")}.pickerStyle(.menu)
+                TextField("Přihlašovací jméno",text:$username).textContentType(.username).textInputAutocapitalization(.never).autocorrectionDisabled().frame(minHeight:44).accessibilityIdentifier("api-login-username")
+                SecureField("Heslo",text:$password).textContentType(.password).frame(minHeight:44).accessibilityIdentifier("api-login-password")
+                Button("Přihlásit se"){Task{if store.transport.origin.host != company{try? await store.switchInstallation(URL(string:"https://"+company+"/")!)};await store.login(username:username,password:password);password=""}}.buttonStyle(.borderedProminent).frame(minHeight:44).disabled(store.busy)
+            }.diaryCard()
+            Button("Zapomenuté heslo"){recovery=true}.frame(minHeight:44)
+            if store.busy{ProgressView("Ověřuji přihlášení…")};if let error=store.error{Text(error).foregroundStyle(DiaryStyle.warning)}
+        }.padding(24)}.background(DiaryStyle.background).navigationTitle(store.company).navigationBarTitleDisplayMode(.inline)}
+            .alert("Obnovení hesla",isPresented:$recovery){Button("Rozumím",role:.cancel){}}message:{Text("Požádejte administrátora firmy o nové dočasné heslo. Obnovení odkazem ani e-mailem není dostupné.")}
+    }
+}
+struct APIOverview:View {
+    @ObservedObject var store:APIStore
+    @State private var jobs:[APIValue]=[]
+    @State private var next:APIValue = .null
+    @State private var problem:String?
+    var body:some View{ScrollView{VStack(alignment:.leading,spacing:18){HStack(spacing:16){Image("DiaryMark").resizable().frame(width:62,height:62).clipShape(RoundedRectangle(cornerRadius:18));VStack(alignment:.leading,spacing:4){Text("Pracovní deník").font(.largeTitle.bold()).accessibilityIdentifier("native-overview-title");Text("Vše pro dnešní práci.").foregroundStyle(.secondary)}}.padding(.vertical,12)
+        if store.enabled("attendance"){DiaryTile(title:"Docházka",subtitle:"Příchod, odchod a pracovní dny",symbol:"clock"){store.tab=2}}
+        if store.enabled("jobs")&&store.enabled("jobDay"){DiaryTile(title:"Dnešní návštěvy",subtitle:"\(jobs.count) aktivních",symbol:"calendar"){store.tab=1}}
+        if store.enabled("jobs"){DiaryTile(title:"Zakázky",subtitle:"Přehled a plánování práce",symbol:"list.clipboard"){store.tab=1}}
+        if store.enabled("customers"){DiaryTile(title:"Zákazníci",subtitle:"Kontakty a jejich zahrady",symbol:"person.crop.rectangle"){store.tab=3}}
+        if !next.isNull{Text("Další návštěva").font(.title3.bold());NavigationLink{APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:next)}label:{APIRecordRow(entity:.jobs,value:next).diaryCard()}.buttonStyle(.plain)}else if store.enabled("jobs"){Text("Na dnešek není naplánovaná další aktivní návštěva.").foregroundStyle(.secondary)}
+        if let problem{Text(problem).font(.footnote).foregroundStyle(.secondary)}
+    }.padding(20)}.background(DiaryStyle.background).navigationTitle(store.company).navigationBarTitleDisplayMode(.inline).toolbar{APIHeader(store:store)}.task(id:store.revision){await load()}.refreshable{await store.resume();await load()}}
+    func load()async{guard store.enabled("jobs")&&store.enabled("jobDay")else{return};do{let page=try await store.get("/api/jobs?state=all&order=schedule&month="+String(store.today.prefix(7))+"&day="+store.today+"&assignee="+store.userID);jobs=page["jobs"].array.filter{!["done","incomplete"].contains($0["status"].string)};next=jobs.first ?? .null;if next.isNull{let future=try await store.get("/api/jobs?state=active&order=schedule&after="+store.today+"&assignee="+store.userID);next=future["jobs"].array.first{!["done","incomplete"].contains($0["status"].string)} ?? .null};problem=nil}catch{problem=error.localizedDescription}}
+}
+struct APIHeader:ToolbarContent {
+    @ObservedObject var store:APIStore
+    var body:some ToolbarContent{ToolbarItem(placement:.topBarTrailing){if store.enabled("notifications"){NavigationLink{APIResourceList(store:store,resource:APIResource(entity:.notifications))}label:{Image(systemName:"bell")}.accessibilityLabel("Upozornění")}}}
+}
+struct APIJobsScreen:View {
+    @ObservedObject var store:APIStore
+    @State private var date=Date()
+    @State private var allDates=false
+    @State private var mine=true
+    @State private var state="all"
+    @State private var protocolState=""
+    @State private var query=""
+    @State private var rows:[APIValue]=[]
+    @State private var cursor=""
+    @State private var filters=false
+    @State private var calendar=false
+    @State private var map=false
+    @State private var problem:String?
+    @State private var loading=false
+    private var day:String{let f=DateFormatter();f.timeZone=TimeZone(identifier:"Europe/Prague");f.dateFormat="yyyy-MM-dd";return f.string(from:date)}
+    private var filterKey:String{[day,String(allDates),String(mine),state,protocolState,store.scope,store.revision.uuidString].joined(separator:"|")}
+    private var count:Int{(state=="all" ? 0 : 1)+(protocolState.isEmpty ? 0 : 1)}
+    var body:some View{List{
+        Section{
+            HStack{Button("Dnes"){date=Date();allDates=false};Button("Zítra"){date=Calendar.current.date(byAdding:.day,value:1,to:Date())!;allDates=false};Button("Kalendář"){calendar=true};Spacer();Button{filters=true}label:{Label("Filtry\(count>0 ? " (\(count))" : "")",systemImage:"line.3.horizontal.decrease")}}
+            if store.manager{Picker("Tým",selection:$mine){Text("Moje").tag(true);Text("Celý tým").tag(false)}.pickerStyle(.segmented)}
+            if store.manager&&store.enabled("jobMap")&&store.enabled("location"){Button("Mapa zakázek"){map=true}}
+            Toggle("Všechny dny",isOn:$allDates)
+        }.listRowBackground(Color.clear)
+        if loading&&rows.isEmpty{ProgressView("Načítám zakázky…")}
+        ForEach(Array(rows.filter{query.isEmpty||[$0.title,$0["customerName"].string,$0["address"].string].joined(separator:" ").localizedCaseInsensitiveContains(query)}.enumerated()),id:\.offset){_,job in
+            NavigationLink{APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:job)}label:{APIRecordRow(entity:.jobs,value:job)}.accessibilityIdentifier("native-job-"+job.id)
+        }
+        if rows.isEmpty && !loading{Text("Pro tento výběr nejsou návštěvy.").foregroundStyle(.secondary)}
+        if !cursor.isEmpty{Button("Načíst další zakázky"){Task{await load(more:true)}}}
+        if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}
+    }.listStyle(.insetGrouped).scrollContentBackground(.hidden).background(DiaryStyle.background).navigationTitle("Zakázky").navigationBarTitleDisplayMode(.inline).searchable(text:$query,prompt:"Hledat")
+        .toolbar{APIHeader(store:store);if store.manager{ToolbarItem(placement:.topBarTrailing){Button{let r=APIResource(entity:.jobs);store.route=APIRoute(resource:r,value:r.initial(store),isNew:true)}label:{Image(systemName:"plus")}.accessibilityLabel("Nová zakázka")}}}
+        .task(id:filterKey){await load()}.refreshable{await store.resume();await load()}
+        .sheet(isPresented:$calendar){NavigationStack{DatePicker("Den návštěvy",selection:$date,displayedComponents:.date).datePickerStyle(.graphical).padding().toolbar{ToolbarItem(placement:.confirmationAction){Button("Hotovo"){allDates=false;calendar=false}}}}}
+        .sheet(isPresented:$filters){NavigationStack{Form{Picker("Stav",selection:$state){ForEach(["all","planned","on_way","in_progress","incomplete","done"],id:\.self){Text($0=="all" ? "Všechny" : APIFormat.status($0)).tag($0)}};Picker("Protokol",selection:$protocolState){Text("Všechny").tag("");Text("Chybí nebo rozpracovaný").tag("unfinished");Text("Chybí").tag("missing");Text("Rozpracovaný").tag("draft");Text("Hotový").tag("ready")};Button("Vymazat filtry"){state="all";protocolState=""}}.navigationTitle("Filtry").toolbar{ToolbarItem(placement:.confirmationAction){Button("Hotovo"){filters=false}}}}}
+        .sheet(isPresented:$map){NavigationStack{APIJobsMap(store:store,jobs:rows)}}
+    }
+    func load(more:Bool=false)async{guard !loading else{return};loading=true;defer{loading=false};let scope=store.scope;do{var c=URLComponents(string:"/api/jobs")!;var q=[URLQueryItem(name:"state",value:state),URLQueryItem(name:"order",value:"schedule")];if !allDates{q += [URLQueryItem(name:"month",value:String(day.prefix(7))),URLQueryItem(name:"day",value:day)]};if mine || !store.manager{q.append(URLQueryItem(name:"assignee",value:store.userID))};if !protocolState.isEmpty{q.append(URLQueryItem(name:"protocol",value:protocolState))};if more{q.append(URLQueryItem(name:"cursor",value:cursor))};c.queryItems=q;let page=try await store.get(c.string!);guard scope==store.scope else{return};rows=more ? rows+page["jobs"].array.filter{j in !rows.contains{$0.id==j.id}} : page["jobs"].array;cursor=page["nextCursor"].string;problem=nil}catch{problem=error.localizedDescription}}
+}
+struct APIMore:View {
+    @ObservedObject var store:APIStore
+    var body:some View{ScrollView{VStack(spacing:16){HStack{Image(systemName:"person.crop.circle.fill").font(.largeTitle);VStack(alignment:.leading){Text(store.me["user"]["name"].string).font(.headline);Text(store.company).foregroundStyle(.secondary)}}.diaryCard()
+        category("Práce v terénu","leaf",entities:[.gardens,.defects])
+        category("Firemní agenda","building.2",entities:[.materials,.vehicles,.subscriptions])
+        if store.manager && store.enabled("teamManagement"){NavigationLink{APIResourceList(store:store,resource:APIResource(entity:.team))}label:{row("Tým","person.2")}}
+        if store.enabled("notifications"){NavigationLink{APIResourceList(store:store,resource:APIResource(entity:.notifications))}label:{row("Upozornění","bell")}}
+        NavigationLink{APISettings(store:store)}label:{row("Nastavení","gearshape")}
+        NavigationLink{APIOutboxView(store:store)}label:{row("Koncepty a synchronizace","arrow.triangle.2.circlepath")}
+    }.padding(18)}.background(DiaryStyle.background).navigationTitle("Více").navigationBarTitleDisplayMode(.inline)}
+    @ViewBuilder func category(_ title:String,_ symbol:String,entities:[APIEntity])->some View{let allowed=entities.filter{store.enabled($0.feature)&&(!$0.managerOnly||store.manager)};if !allowed.isEmpty{NavigationLink{ScrollView{VStack(spacing:16){ForEach(allowed,id:\.self){entity in if entity == .vehicles{NavigationLink{APIVehiclesHome(store:store)}label:{row(entity.title,entity.symbol)}}else{NavigationLink{APIResourceList(store:store,resource:APIResource(entity:entity))}label:{row(entity.title,entity.symbol)}}}}.padding(18)}.background(DiaryStyle.background).navigationTitle(title)}label:{row(title,symbol)}}}
+    func row(_ title:String,_ symbol:String)->some View{HStack(spacing:14){Image(systemName:symbol).frame(width:44,height:44).background(DiaryStyle.soft,in:RoundedRectangle(cornerRadius:14));Text(title).font(.headline);Spacer();Image(systemName:"chevron.right").font(.caption)}.foregroundStyle(DiaryStyle.accent).frame(minHeight:48).diaryCard().accessibilityElement(children:.combine).accessibilityLabel(title)}
+}

@@ -1,64 +1,23 @@
 import SwiftUI
 import UIKit
-import WebKit
 
 @main
 @MainActor
-struct PracovniDenikApp: App {
+struct PracovniDenikApp:App {
     @UIApplicationDelegateAdaptor(PushAppDelegate.self) private var pushDelegate
-    @StateObject private var session = BrowserSession(testing: ProcessInfo.processInfo.arguments.contains("--ui-testing") || ProcessInfo.processInfo.arguments.contains("--native-ui-testing"), nativeTesting: ProcessInfo.processInfo.arguments.contains("--native-ui-testing"))
-    var body: some Scene {
-        WindowGroup { HybridDiaryScreen(session: session) }
+    @StateObject private var store:APIStore
+    init(){
+        #if DEBUG
+        let fixture=ProcessInfo.processInfo.arguments.contains("--native-api-testing")
+        #else
+        let fixture=false
+        #endif
+        _store=StateObject(wrappedValue:APIStore(fixture:fixture))
     }
+    var body:some Scene{WindowGroup{APIRoot(store:store)}}
 }
-
-struct DiaryWebView: UIViewRepresentable {
-    let webView: WKWebView
-    var interactive = true
-    func makeUIView(context: Context) -> WKWebView { webView.isHidden = false; webView.isUserInteractionEnabled = interactive; webView.accessibilityElementsHidden = !interactive; webView.accessibilityElements = interactive ? nil : []; return webView }
-    func updateUIView(_ view: WKWebView, context: Context) { view.isHidden = false; view.isUserInteractionEnabled = interactive; view.accessibilityElementsHidden = !interactive; view.accessibilityElements = interactive ? nil : [] /* Keep the current page and form. */ }
-}
-struct FileShare: UIViewControllerRepresentable {
-    let url: URL
-    func makeUIViewController(context: Context) -> UIActivityViewController { UIActivityViewController(activityItems: [url], applicationActivities: nil) }
-    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
-}
-struct DiaryScreen: View {
-    @ObservedObject var session: BrowserSession
-    private let green = Color(red: 0.09, green: 0.25, blue: 0.21)
-    var body: some View {
-        ZStack {
-            Color(red: 0.969, green: 0.976, blue: 0.965).ignoresSafeArea()
-            DiaryWebView(webView: session.webView, interactive: ProcessInfo.processInfo.arguments.contains("--ui-testing"))
-            if session.initialLoading && !session.hasDocument {
-                ProgressView("Otevírám Pracovní deník…").padding(24).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
-            }
-        }
-        .tint(green)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if let message = session.problem {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text(message).font(.callout)
-                    Button("Znovu načíst", action: session.retry).buttonStyle(.borderedProminent)
-                }.padding().frame(maxWidth: .infinity, alignment: .leading).background(Color.white)
-            }
-        }
-        .sheet(item: $session.authentication) { page in
-            NavigationStack {
-                DiaryWebView(webView: page.webView)
-                    .navigationTitle("Přihlášení")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Zavřít") { session.authentication = nil } } }
-            }
-        }
-        .sheet(item: $session.sharedFile) { file in FileShare(url: file.url) }
-        .sheet(item: $session.document) { page in
-            NavigationStack {
-                DiaryWebView(webView: page.webView)
-                    .navigationTitle("Dokument")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Zavřít") { session.document = nil } } }
-            }
-        }
-    }
+struct FileShare:UIViewControllerRepresentable {
+    let url:URL
+    func makeUIViewController(context:Context)->UIActivityViewController{UIActivityViewController(activityItems:[url],applicationActivities:nil)}
+    func updateUIViewController(_ controller:UIActivityViewController,context:Context){}
 }

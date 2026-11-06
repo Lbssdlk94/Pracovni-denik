@@ -25,7 +25,7 @@ final class NativePushController: ObservableObject {
     @Published var message: String?
     @Published var pendingInbox = false
     @Published var inboxRequest = UUID()
-    private weak var browser: BrowserSession?
+    private weak var api: APIStore?
     private var actorKey: String?
     private var token: String?
     private var registering = false
@@ -33,22 +33,22 @@ final class NativePushController: ObservableObject {
     private var desired: Bool { actorKey.map { UserDefaults.standard.bool(forKey:"native-push-enabled:"+$0) } ?? false }
     private func desire(_ value: Bool) { if let actorKey { UserDefaults.standard.set(value,forKey:"native-push-enabled:"+actorKey) } }
     func invalidatePresentation() { generation+=1;status=nil;actorKey=nil;message=nil;showSettings=false }
-    func attach(_ browser: BrowserSession) { self.browser=browser }
+    func attach(_ api: APIStore) { self.api=api }
     private func call(_ action: String, extra: [String:Any] = [:]) async throws -> NativePushStatus {
-        guard let browser else { throw DiaryBridgeError(message:"Nejdříve se přihlaste do deníku.") }
-        var values=extra;values["action"]=action;return try await browser.nativeCall("nativePush",values)
+        guard let api else { throw DiaryBridgeError(message:"Nejdříve se přihlaste do deníku.") }
+        var values=extra;values["action"]=action;return try await api.push(action,extra:extra)
     }
     func refresh() async {
-        guard !busy, let browser, !browser.usesIsolatedNativeFixture || browser.hasDocument else { return }
+        guard !busy, let api, api.authenticated else { return }
         busy=true;let ticket=generation;defer{busy=false}
         permission=await UNUserNotificationCenter.current().notificationSettings().authorizationStatus
         do {
             let config=try await call("config")
             guard generation == ticket else{return}
-            let key=(browser.webView.url?.host ?? "")+"|"+(config.userId ?? "")
+            let key=(api.transport.origin.host ?? "")+"|"+(config.userId ?? "")
             if key != actorKey { generation+=1;actorKey=key;status=nil;message=nil }
             status=config
-            if desired && config.configured == true && config.enabled != false && [.authorized,.provisional,.ephemeral].contains(permission) && !browser.usesIsolatedNativeFixture {
+            if desired && config.configured == true && config.enabled != false && [.authorized,.provisional,.ephemeral].contains(permission) && !api.fixture {
                 // Re-register at launch/foreground; APNs tokens are never persisted.
                 UIApplication.shared.registerForRemoteNotifications()
             }
