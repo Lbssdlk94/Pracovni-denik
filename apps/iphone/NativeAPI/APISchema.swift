@@ -50,7 +50,6 @@ struct APIResource: Identifiable {
         case .materials,.categories: return "/api/materials"
         case .entries: return "/api/vehicles/"+parent
         case .drivers: return "/api/vehicles/drivers"
-        case .shafts: return [.text("name","Název šachty",true),.ref("gardenId","Zahrada","gardens"),.text("location","Přesné místo"),.field("notes","Poznámka",.notes),.array("markers","Značky",[.text("zoneName","Zóna")])]
         case .services: return "/api/gardens/"+parent+"/services"
         case .history: return "/api/gardens/"+parent+"/history"
         default: return "/api/"+entity.rawValue
@@ -63,7 +62,6 @@ struct APIResource: Identifiable {
         case .categories: return "/api/materials/categories/"+id
         case .entries: return "/api/vehicles/"+parent+"/entries/"+id
         case .drivers: return "/api/vehicles/drivers/"+id
-        case .shafts: return [.text("name","Název šachty",true),.ref("gardenId","Zahrada","gardens"),.text("location","Přesné místo"),.field("notes","Poznámka",.notes),.array("markers","Značky",[.text("zoneName","Zóna")])]
         case .services: return "/api/gardens/"+parent+"/services/"+id
         default: return "/api/"+entity.rawValue+"/"+id
         }
