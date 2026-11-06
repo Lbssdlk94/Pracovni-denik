@@ -13,6 +13,16 @@ struct APIField: Identifiable {
     var advanced = false
     var feature: String? = nil
     var ownerOnly = false
+    var initial:APIValue {
+        switch kind {
+        case .toggle:return .bool(["active","autoPlan","deduct","included"].contains(id))
+        case .array:return .array([])
+        case .object:return .object(Dictionary(uniqueKeysWithValues:children.map{($0.id,$0.initial)}))
+        case .integer,.decimal,.money,.liters:return .n(0)
+        case .choice:return .s(choices.first?.id ?? "")
+        default:return .s("")
+        }
+    }
     static func text(_ id: String, _ title: String, _ required: Bool = false) -> APIField { APIField(id:id,title:title,required:required) }
     static func field(_ id: String, _ title: String, _ kind: APIFieldKind, _ required: Bool = false) -> APIField { APIField(id:id,title:title,kind:kind,required:required) }
     static func choice(_ id: String, _ title: String, _ values: String) -> APIField { APIField(id:id,title:title,kind:.choice,choices:values.split(separator:"|").map { let p=$0.split(separator:":",maxSplits:1,omittingEmptySubsequences:false);return APIChoice(id:String(p[0]),title:String(p.count>1 ? p[1] : p[0])) }) }
@@ -86,7 +96,10 @@ struct APIResource: Identifiable {
     }
     func initial(_ store: APIStore) -> APIValue {
         var v = APIValue.object(["id":.s(UUID().uuidString),"version":.n(0),"active":.bool(true),"date":.s(store.today),"discoveredOn":.s(store.today),"status":.s(entity == .defects ? "new" : "planned"),"priority":.s("normal"),"jobType":.s("service"),"kind":.s("fuel"),"currency":.s("CZK"),"unit":.s("ks"),"legacyTimeMeaning":.s("unknown"),"leadDays":.n(30),"odometer":.n(0),"full":.bool(false)])
-        for field in fields where v[field.id].isNull { if field.kind == .array { v[field.id] = .array([]) } else if field.kind == .object { v[field.id] = .object([:]) } else if field.kind == .text || field.kind == .notes || field.kind == .date || field.kind == .time { v[field.id] = .s("") } }
+        for field in fields where v[field.id].isNull {v[field.id]=field.initial}
+        if entity == .tariffs {v["definition"]["currency"] = .s("CZK");v["definition"]["billingPeriod"] = .s("yearly")}
+
+        if !store.me["workspace"].isNull {let selected=store.transport.discipline;v["discipline"] = .s(["garden","irrigation"].contains(selected) ? selected : store.transport.origin.host?.hasPrefix("dr-garden")==true ? "garden" : "irrigation")}
         if store.me["workspace"]["disciplines"].array.count == 1 { v["discipline"] = store.me["workspace"]["disciplines"].array[0] }
         return v.merged(seed.object)
     }

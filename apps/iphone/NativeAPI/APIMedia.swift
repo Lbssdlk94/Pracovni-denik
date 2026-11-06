@@ -4,6 +4,7 @@ import UIKit
 import QuickLook
 import MapKit
 import UniformTypeIdentifiers
+import ImageIO
 
 struct APIFile:Identifiable { let id=UUID();let url:URL }
 struct APIMultipart {
@@ -17,14 +18,14 @@ struct APIMultipart {
 struct APIAuthenticatedImage:View {
     @ObservedObject var store:APIStore
     let path:String
-    @State private var data:Data?
+    @State private var thumbnail:UIImage?
     @State private var problem:String?
     var body:some View {
         Group {
-            if let data,let image=UIImage(data:data){Image(uiImage:image).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius:18))}
+            if let thumbnail{Image(uiImage:thumbnail).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius:18))}
             else if let problem{Text(problem).font(.footnote).foregroundStyle(.secondary)}
             else{ProgressView("Načítám fotografii…")}
-        }.task(id:store.scope+path){let scope=store.scope;do{let r=try await store.file(path);guard scope==store.scope else{return};data=r.data;problem=nil}catch{data=nil;problem=error.localizedDescription}}
+        }.task(id:store.scope+path){let scope=store.scope;do{let r=try await store.file(path);guard scope==store.scope else{return};thumbnail=APIImage.thumbnail(r.data);problem=nil}catch{thumbnail=nil;problem=error.localizedDescription}}
     }
 }
 struct APIQuickLook:UIViewControllerRepresentable {
@@ -43,6 +44,7 @@ struct APICamera:UIViewControllerRepresentable {
     final class Coordinator:NSObject,UINavigationControllerDelegate,UIImagePickerControllerDelegate {let parent:APICamera;init(parent:APICamera){self.parent=parent};func imagePickerControllerDidCancel(_ picker:UIImagePickerController){parent.dismiss()};func imagePickerController(_ picker:UIImagePickerController,didFinishPickingMediaWithInfo info:[UIImagePickerController.InfoKey:Any]){if let image=info[.originalImage] as? UIImage,let data=APIImage.jpeg(image){parent.selected(data)};parent.dismiss()}}
 }
 enum APIImage {
+    static func thumbnail(_ data:Data,maxPixels:Int=1600)->UIImage?{guard let source=CGImageSourceCreateWithData(data as CFData,nil),let image=CGImageSourceCreateThumbnailAtIndex(source,0,[kCGImageSourceCreateThumbnailFromImageAlways:true,kCGImageSourceCreateThumbnailWithTransform:true,kCGImageSourceThumbnailMaxPixelSize:maxPixels] as CFDictionary)else{return nil};return UIImage(cgImage:image)}
     static func jpeg(_ image:UIImage)->Data? { let scale=min(1,2048/max(image.size.width,image.size.height));let size=CGSize(width:max(1,image.size.width*scale),height:max(1,image.size.height*scale));return UIGraphicsImageRenderer(size:size).image{_ in image.draw(in:CGRect(origin:.zero,size:size))}.jpegData(compressionQuality:0.85) }
     static func temporary(_ data:Data,name:String)->URL {let directory=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString,isDirectory:true);try? FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true);let url=directory.appendingPathComponent(name.replacingOccurrences(of:"/",with:"_"));try? data.write(to:url,options:[.atomic,.completeFileProtectionUntilFirstUserAuthentication]);return url}
 }

@@ -54,7 +54,7 @@ struct APIFieldEditor: View {
                             Button("Odebrat",role:.destructive) { var a=value.array;if a.indices.contains(index){a.remove(at:index);value = .array(a)} }.frame(minHeight:44)
                         }.padding(.vertical,10)
                     }
-                    Button { var a=value.array;var new=APIValue.object(["id":.s(UUID().uuidString)]);for f in field.children { new[f.id] = f.kind == .toggle ? .bool(false) : f.kind == .integer ? .n(0) : .s("") };a.append(field.children.count == 1 && field.children[0].id == "value" ? .s("") : new);value = .array(a) } label:{Label("Přidat položku",systemImage:"plus")}.frame(minHeight:44)
+                    Button { var a=value.array;var new=APIValue.object(["id":.s(UUID().uuidString)]);for f in field.children { new[f.id] = f.initial };a.append(field.children.count == 1 && field.children[0].id == "value" ? .s("") : new);value = .array(a) } label:{Label("Přidat položku",systemImage:"plus")}.frame(minHeight:44)
                 }
             case .object:
                 DisclosureGroup(field.title) { AnyView(APIFieldsView(fields:field.children,value:$value,options:options)).padding(.vertical,12) }
@@ -96,6 +96,7 @@ struct APIEntityEditor: View {
                 VStack(alignment:.leading,spacing:18) {
                     if loading { ProgressView("Načítám údaje…") }
                     else { APIFieldsView(fields:fields,value:$value,options:options,edited:{touched.insert($0) }).diaryCard() }
+                    if resource.entity == .defects,!value["sourceJobId"].string.isEmpty {APIProtocolPhotoPicker(store:store,jobID:value["sourceJobId"].string,photos:Binding(get:{value["photos"]},set:{value["photos"]=$0})).diaryCard()}
                     if !overlap.isNull {Button("Přesto uložit po kontrole překryvů"){value["allowOverlaps"] = .bool(true);value["previewRevision"]=overlap["previewRevision"];Task{await save()}}.buttonStyle(.bordered)}
                     if let problem { DiaryStatusBanner(text:problem,warning:true) }
                     Text("Koncept se průběžně ukládá v tomto iPhonu.").font(.footnote).foregroundStyle(.secondary)
@@ -113,12 +114,13 @@ struct APIEntityEditor: View {
         }.task { await load() }
             .onChange(of:value) { _,_ in if !loading {persist()} }
             .onChange(of:value["gardenId"].string) { _,_ in if !loading { hydrateGarden() } }
+            .onChange(of:value["customerAddressId"].string){_,id in if touched.contains("customerAddressId"),let address=options["addresses"]?.first(where:{$0.id==id}) {if !touched.contains("address"){value["address"]=address["address"]};if !touched.contains("city"),!address["city"].string.isEmpty{value["city"]=address["city"]}}}
             .onChange(of:value["customerId"].string) { _,_ in if !loading { Task { await loadAddresses() } } }
     }
-    func persist() { store.saveDraft(key,draft:APIDraft(value:value,baseVersion:original["version"].int,operationID:operationID,updatedAt:Date())) }
+    func persist() { store.saveDraft(key,draft:APIDraft(value:value,baseVersion:original["version"].int,operationID:operationID,updatedAt:Date(),touchedFields:touched)) }
     func load() async {
         let initial = isNew ? resource.initial(store) : original
-        let draft=store.draft(key,fallback:initial);value=draft.value;operationID=draft.operationID
+        let draft=store.draft(key,fallback:initial);value=draft.value;operationID=draft.operationID;touched=draft.touchedFields ?? []
         do {
             let refs=Set(fields.flatMap { [$0.reference].compactMap{$0} + $0.children.compactMap(\.reference) })
             for ref in refs { options[ref] = try await APIDomainLogic.referenceRows(ref,store:store) }
@@ -126,8 +128,9 @@ struct APIEntityEditor: View {
         } catch { problem=error.localizedDescription;loading=false }
     }
     func loadAddresses() async {
-        guard !value["customerId"].string.isEmpty else { return }
-        do { let customer=try await store.get("/api/customers/"+value["customerId"].string);options["addresses"]=customer["customer"]["addresses"].array } catch { problem=error.localizedDescription }
+        let selected=value["customerId"].string
+        guard !selected.isEmpty else {options["addresses"]=[];return}
+        do { let customer=try await store.get("/api/customers/"+value["customerId"].string);guard selected==value["customerId"].string else{return};options["addresses"]=customer["customer"]["addresses"].array } catch { problem=error.localizedDescription }
     }
     func hydrateGarden() {
         guard let garden=options["gardens"]?.first(where:{$0.id==value["gardenId"].string}) else { return }

@@ -59,6 +59,7 @@ struct APILogin:View {
             Button("Zapomenuté heslo"){recovery=true}.frame(minHeight:44)
             if store.busy{ProgressView("Ověřuji přihlášení…")};if let error=store.error{Text(error).foregroundStyle(DiaryStyle.warning)}
         }.padding(24)}.background(DiaryStyle.background).navigationTitle(store.company).navigationBarTitleDisplayMode(.inline)}
+            .onAppear{company=store.transport.origin.host ?? company}
             .alert("Obnovení hesla",isPresented:$recovery){Button("Rozumím",role:.cancel){}}message:{Text("Požádejte administrátora firmy o nové dočasné heslo. Obnovení odkazem ani e-mailem není dostupné.")}
     }
 }
@@ -96,6 +97,7 @@ struct APIJobsScreen:View {
     @State private var map=false
     @State private var problem:String?
     @State private var loading=false
+    @State private var requestID=UUID()
     private var day:String{let f=DateFormatter();f.timeZone=TimeZone(identifier:"Europe/Prague");f.dateFormat="yyyy-MM-dd";return f.string(from:date)}
     private var filterKey:String{[day,String(allDates),String(mine),state,protocolState,store.scope,store.revision.uuidString].joined(separator:"|")}
     private var count:Int{(state=="all" ? 0 : 1)+(protocolState.isEmpty ? 0 : 1)}
@@ -120,7 +122,7 @@ struct APIJobsScreen:View {
         .sheet(isPresented:$filters){NavigationStack{Form{Picker("Stav",selection:$state){ForEach(["all","planned","on_way","in_progress","incomplete","done"],id:\.self){Text($0=="all" ? "Všechny" : APIFormat.status($0)).tag($0)}};Picker("Protokol",selection:$protocolState){Text("Všechny").tag("");Text("Chybí nebo rozpracovaný").tag("unfinished");Text("Chybí").tag("missing");Text("Rozpracovaný").tag("draft");Text("Hotový").tag("ready")};Button("Vymazat filtry"){state="all";protocolState=""}}.navigationTitle("Filtry").toolbar{ToolbarItem(placement:.confirmationAction){Button("Hotovo"){filters=false}}}}}
         .sheet(isPresented:$map){NavigationStack{APIJobsMap(store:store,jobs:rows)}}
     }
-    func load(more:Bool=false)async{guard !loading else{return};loading=true;defer{loading=false};let scope=store.scope;do{var c=URLComponents(string:"/api/jobs")!;var q=[URLQueryItem(name:"state",value:state),URLQueryItem(name:"order",value:"schedule")];if !allDates{q += [URLQueryItem(name:"month",value:String(day.prefix(7))),URLQueryItem(name:"day",value:day)]};if mine || !store.manager{q.append(URLQueryItem(name:"assignee",value:store.userID))};if !protocolState.isEmpty{q.append(URLQueryItem(name:"protocol",value:protocolState))};if more{q.append(URLQueryItem(name:"cursor",value:cursor))};c.queryItems=q;let page=try await store.get(c.string!);guard scope==store.scope else{return};rows=more ? rows+page["jobs"].array.filter{j in !rows.contains{$0.id==j.id}} : page["jobs"].array;cursor=page["nextCursor"].string;problem=nil}catch{problem=error.localizedDescription}}
+    func load(more:Bool=false)async{if more && loading{return};let ticket=UUID();requestID=ticket;loading=true;defer{if requestID==ticket{loading=false}};let scope=store.scope;do{var c=URLComponents(string:"/api/jobs")!;var q=[URLQueryItem(name:"state",value:state),URLQueryItem(name:"order",value:"schedule")];if !allDates{q += [URLQueryItem(name:"month",value:String(day.prefix(7))),URLQueryItem(name:"day",value:day)]};if mine || !store.manager{q.append(URLQueryItem(name:"assignee",value:store.userID))};if !protocolState.isEmpty{q.append(URLQueryItem(name:"protocol",value:protocolState))};if more{q.append(URLQueryItem(name:"cursor",value:cursor))};c.queryItems=q;let page=try await store.get(c.string!);guard scope==store.scope,requestID==ticket else{return};rows=more ? rows+page["jobs"].array.filter{j in !rows.contains{$0.id==j.id}} : page["jobs"].array;cursor=page["nextCursor"].string;problem=nil}catch is CancellationError{}catch{if requestID==ticket{problem=error.localizedDescription}}}
 }
 struct APIMore:View {
     @ObservedObject var store:APIStore

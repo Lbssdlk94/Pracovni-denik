@@ -8,6 +8,7 @@ struct APIResourceList: View {
     @State private var cursor = ""
     @State private var problem: String?
     @State private var loading = false
+    @State private var requestID=UUID()
     @State private var onlyMine = false
     var visible: [APIValue] { rows.filter { row in
         let matches=query.isEmpty || [row.title,row["address"].string,row["sku"].string,row["customerName"].string].joined(separator:" ").localizedCaseInsensitiveContains(query)
@@ -35,16 +36,17 @@ struct APIResourceList: View {
         else { store.route=APIRoute(resource:resource,value:resource.initial(store),isNew:true) }
     }
     func load(more:Bool=false) async {
-        guard !loading else { return };loading=true;defer{loading=false};let scope=store.scope
+        if more && loading{return};let ticket=UUID();requestID=ticket;loading=true;defer{if requestID==ticket{loading=false}};let scope=store.scope
         do {
             var c=URLComponents(string:resource.listPath)!
             if more { var q=c.queryItems ?? [];q.append(URLQueryItem(name:resource.entity == .materials ? "after" : "cursor",value:cursor));c.queryItems=q }
             let page=try await store.get(c.string!)
-            guard scope==store.scope else {return}
+            guard scope==store.scope,requestID==ticket else {return}
             let values=page[resource.listKey].array
             rows=more ? rows+values.filter { value in !rows.contains(where:{$0.id==value.id}) } : values
             cursor=page["nextCursor"].string;problem=nil
-        } catch { problem=error.localizedDescription }
+            if (!resource.seed["gardenId"].string.isEmpty || !resource.seed["customerId"].string.isEmpty) && !cursor.isEmpty{loading=false;await load(more:true)}
+        } catch is CancellationError{} catch {if requestID==ticket{problem=error.localizedDescription}}
     }
 }
 struct APIRecordRow: View {
@@ -54,8 +56,9 @@ struct APIRecordRow: View {
         HStack(spacing:13) {
             Image(systemName:entity.symbol).font(.title3).foregroundStyle(DiaryStyle.accent).frame(width:42,height:42).background(DiaryStyle.soft,in:RoundedRectangle(cornerRadius:13))
             VStack(alignment:.leading,spacing:5) {
-                Text(value.title).font(.headline).fixedSize(horizontal:false,vertical:true)
+                Text(entity == .jobs && !value["customerName"].string.isEmpty ? value["customerName"].string : value.title).font(.headline).fixedSize(horizontal:false,vertical:true)
                 if entity == .jobs {
+                    if value.title != value["customerName"].string {Text(value.title).font(.subheadline).foregroundStyle(.secondary)}
                     Text([APIFormat.status(value["status"].string),value["dueDate"].string,value["plannedStart"].string].filter{!$0.isEmpty}.joined(separator:" · ")).font(.caption).foregroundStyle(.secondary)
                     if value["status"].string == "done" { Text(APIFormat.protocolState(value["protocolStatus"].string)).font(.caption).foregroundStyle(DiaryStyle.accent) }
                 }
@@ -83,12 +86,14 @@ struct APIEntityDetail: View {
     @State private var detail: APIValue = .null
     @State private var defects: [APIValue] = []
     @State private var problem: String?
+    @State private var unavailable=false
     @State private var deleteConfirm = false
     @State private var action: APIDomainAction?
     private var record: APIValue { value.isNull ? initial : value }
     var body: some View {
         ScrollView {
             VStack(alignment:.leading,spacing:18) {
+                if unavailable{Text("Záznam není dostupný pro tento účet.")}else{
                 if !defects.isEmpty {
                     NavigationLink { APIResourceList(store:store,resource:APIResource(entity:.defects,seed:.object(["gardenId":record["gardenId"].isNull ? .s(record.id) : record["gardenId"]]))) } label:{Label("Pozor: \(defects.count) nevyřešené závady",systemImage:"exclamationmark.triangle.fill").font(.headline).foregroundStyle(DiaryStyle.warning).diaryCard()}
                 }
@@ -107,6 +112,7 @@ struct APIEntityDetail: View {
                         APIFilesView(store:store,path:"/api/vehicles/"+resource.parent+"/entries/"+record.id+"/receipts",mode:.receipts,record:record)
                     }
                     if resource.entity == .history { APIHistoryVisit(store:store,visit:record) }
+                }
                 }
                 if let problem { DiaryStatusBanner(text:problem,warning:true) }
                 DisclosureGroup("Doplňující údaje") { Text("ID: "+record.id).font(.caption).textSelection(.enabled);Text("Verze: "+record["version"].string).font(.caption) }.diaryCard()
@@ -183,7 +189,7 @@ struct APIEntityDetail: View {
             let garden=resource.entity == .gardens ? record.id : record["gardenId"].string
             if !garden.isEmpty && store.enabled("defects") { let response=try await store.get("/api/defects?gardenId="+garden);guard scope==store.scope else{return};defects=response["defects"].array.filter{$0["status"].string != "resolved"} }
             problem=nil
-        }catch{problem=error.localizedDescription}
+        }catch{if let e=error as? APIError,[403,404].contains(e.status){unavailable=true;value = .null;detail = .null;defects=[]};problem=error.localizedDescription}
     }
     func planRepair() async {
         do {

@@ -32,7 +32,9 @@ final class APIStore: ObservableObject {
     func enabled(_ key: String) -> Bool { me["features"][key].bool }
     init(fixture: Bool = false, transport: APITransport? = nil) {
         self.fixture = fixture
-        self.transport = transport ?? APITransport(origin: EndpointPolicy.home, fixture: fixture)
+        let saved=URL(string:UserDefaults.standard.string(forKey:"native-api-installation") ?? "")
+        let origin = !fixture && saved.map{EndpointPolicy.isDiary($0)} == true ? saved! : EndpointPolicy.home
+        self.transport = transport ?? APITransport(origin:origin,fixture:fixture)
         if !fixture {
             monitor.pathUpdateHandler = { [weak self] path in Task { @MainActor in
                 guard let self else { return }; let reconnect = !self.online && path.status == .satisfied
@@ -44,7 +46,7 @@ final class APIStore: ObservableObject {
     func bind(_ value: APIValue) throws {
         let id = value["user"]["id"].string
         guard !id.isEmpty else { throw APIError.local("Odpověď neobsahuje ověřený účet.") }
-        let fingerprint = APIValue.object(["role":value["user"]["role"],"permissions":value["permissions"],"workspace":value["workspace"],"features":value["features"],"installation":value["installation"]["id"]])
+        let fingerprint = APIValue.object(["role":value["user"]["role"],"permissions":value["permissions"],"workspace":value["workspace"].selecting(["workspaceId","state","authorizationVersion","userId","role","disciplines","selectedDiscipline","identityBindings"]),"discipline":.s(transport.discipline),"features":value["features"],"installation":value["installation"]["id"]])
         let authorization = APIVault.hash(String(data: try fingerprint.data(), encoding: .utf8)!)
         let next = transport.origin.host! + "|" + id + "|" + authorization
         if activeScope != next {
@@ -91,7 +93,7 @@ final class APIStore: ObservableObject {
     }
     func switchInstallation(_ origin: URL) async throws {
         guard vault?.state.outbox.isEmpty != false else { throw APIError.local("Nejdříve vyřešte neodeslané změny této firmy.") }
-        lock(); transport = APITransport(origin:origin,fixture:fixture); await restore()
+        lock(); transport = APITransport(origin:origin,fixture:fixture);if !fixture{UserDefaults.standard.set(origin.absoluteString,forKey:"native-api-installation")};await restore()
     }
     func switchDiscipline(_ discipline: String) async throws {
         guard ["all","irrigation","garden"].contains(discipline), vault?.state.outbox.isEmpty != false else { throw APIError.local("Před změnou oboru odešlete neodeslanou práci.") }
@@ -132,6 +134,7 @@ final class APIStore: ObservableObject {
         let ticket = generation; try bind(await transport.request("/api/me"))
         guard ticket == generation else { throw APIError.local("Oprávnění se změnila. Zkontrolujte rozepsané údaje.") }
         let result = try await transport.request(path,method:method,body:body)
+        applyAcknowledgement(path:path,result:result)
         guard ticket == generation else { throw APIError.local("Účet se změnil.") }
         if let draftKey { self.vault?.state.drafts.removeValue(forKey:draftKey) }
         try self.vault?.persist(); revision = UUID(); return result
@@ -155,16 +158,17 @@ final class APIStore: ObservableObject {
             guard generation == ticket, op.scope == scope else { return }
             if op.dependsOn.contains(where: { dependency in local.state.outbox.contains { $0.id == dependency } }) { continue }
             do {
-                if op.method == "DRIVE_PHOTO", let bytes=op.bytes, let metadata=op.body { try await APIJobPhotoUpload.send(store:self,path:op.path,data:bytes,metadata:metadata) }
-                else if let bytes = op.bytes { _ = try await transport.bytes(op.path,method:op.method,data:bytes,type:op.contentType,headers:op.headers) }
-                else { _ = try await transport.request(op.path,method:op.method,body:op.body) }
+                let pendingBytes=try local.mutationBytes(op)
+                if op.method == "DRIVE_PHOTO", let bytes=pendingBytes, let metadata=op.body { try await APIJobPhotoUpload.send(store:self,path:op.path,data:bytes,metadata:metadata) }
+                else if let bytes = pendingBytes { _ = try await transport.bytes(op.path,method:op.method,data:bytes,type:op.contentType,headers:op.headers) }
+                else { let result=try await transport.request(op.path,method:op.method,body:op.body);applyAcknowledgement(path:op.path,result:result) }
                 guard generation == ticket else { return }
                 local.state.outbox.removeAll { $0.id == op.id }
                 if let key = op.draftKey, var draft=local.state.drafts[key], draft.operationID == op.id {
                     if draft.value == op.draftSnapshot { local.state.drafts.removeValue(forKey:key) }
                     else { draft.operationID=UUID().uuidString;local.state.drafts[key]=draft }
                 }
-                try local.persist(); revision = UUID()
+                try local.persist();if let key=op.binaryKey{local.removeBlob(key)}; revision = UUID()
             } catch let e as APIError {
                 if e.status == 401 { lock(); return }
                 if !e.isTransient, let index = local.state.outbox.firstIndex(where: { $0.id == op.id }) {
@@ -173,6 +177,15 @@ final class APIStore: ObservableObject {
                 // One failed record never prevents unrelated reads or writes.
             } catch { self.error = error.localizedDescription }
         }
+    }
+    func applyAcknowledgement(path:String,result:APIValue){
+        guard let vault else{return}
+        let roots:[String:String]=["jobs":"job","customers":"customer","defects":"defect","vehicles":"vehicle","subscriptions":"subscription"]
+        let parts=path.split(separator:"/");guard parts.count>=2,let singular=roots[String(parts[1])]else{return}
+        var entity=result[singular];guard !entity.id.isEmpty else{return}
+        if singular=="job",!result["report"].isNull{entity["protocolStatus"]=result["report"]["documentState"].string=="ready" ? .s("ready") : .s("draft")}
+        func patch(_ value:APIValue)->APIValue{switch value{case .object(let fields):if value.id==entity.id{return value.merged(entity.object)};return .object(fields.mapValues{patch($0)});case .array(let values):return .array(values.map{patch($0)});default:return value}}
+        for key in vault.state.cache.keys where key.hasPrefix("/api/"+String(parts[1])){vault.state.cache[key]=patch(vault.state.cache[key]!)}
     }
     func draft(_ key: String, fallback: APIValue) -> APIDraft { vault?.state.drafts[key] ?? APIDraft(value:fallback,baseVersion:fallback["version"].int,operationID:UUID().uuidString,updatedAt:Date()) }
     func saveDraft(_ key: String, draft: APIDraft) { do { vault?.state.drafts[key] = draft; try vault?.persist() } catch { self.error = error.localizedDescription } }

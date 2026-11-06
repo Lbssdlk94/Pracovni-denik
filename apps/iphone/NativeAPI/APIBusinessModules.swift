@@ -12,7 +12,7 @@ struct APISubscriptionContent:View {
             DisclosureGroup(period["startDate"].string+"–"+period["endDate"].string){
                 Text(period["snapshot"]["name"].string).font(.headline)
                 if store.manager{Text("Sjednaná cena: "+APIFormat.money(period["agreedPrice"],currency:period["snapshot"]["currency"].string));Text(APIFormat.status(period["paymentStatus"].string))}
-                ForEach(Array(period["balances"].array.enumerated()),id:\.offset){_,s in Text(s["name"].string+": zbývá "+s["remaining"].string)}
+                ForEach(Array(period["services"].array.enumerated()),id:\.offset){_,s in Text(s["name"].string+": zbývá "+s["remaining"].string)}
                 if store.manager{
                     Button("Potvrdit plán a plánovat postupně"){action=make("confirm-plan",title:"Potvrdit plán",period:period,fields:[],extra:[:])}
                     Button("Přidat návštěvu"){let services=period["snapshot"]["services"].array;action=make("visit",title:"Naplánovat návštěvu",period:period,fields:[APIField(id:"serviceId",title:"Služba",kind:.choice,required:true,choices:services.map{APIChoice(id:$0.id,title:$0["name"].string)}),.field("date","Datum",.date,true),.ref("assignedTo","Pracovník","people",required:true),.field("startTime","Původní čas od",.time),.field("endTime","Původní čas do",.time)],extra:["jobId":.s(UUID().uuidString),"date":.s(store.today),"confirm":.bool(true)])}
@@ -21,7 +21,7 @@ struct APISubscriptionContent:View {
             }.diaryCard()
         }
         if store.manager{
-            Button("Změnit nebo prodloužit tarif"){let r=APIResource(entity:.subscriptions,seed:.object(["existingId":.s(subscription.id),"version":subscription["version"]]));contract=APIRoute(resource:r,value:r.initial(store))}.frame(minHeight:44)
+            Button("Změnit nebo prodloužit tarif"){let r=APIResource(entity:.subscriptions,seed:.object(["existingId":.s(subscription.id),"version":subscription["version"],"customerId":subscription["customerId"],"gardenId":subscription["gardenId"]]));contract=APIRoute(resource:r,value:r.initial(store))}.frame(minHeight:44)
             Button("Stav předplatného"){action=APIDomainAction(title:"Stav předplatného",path:"/api/subscriptions/"+subscription.id+"/state",fields:[.choice("status","Stav","active:Aktivní|paused:Pozastavené|ended:Ukončené")],value:.object(["version":subscription["version"],"operationId":.s(UUID().uuidString),"status":subscription["status"]]))}.frame(minHeight:44)
         }
         DisclosureGroup("Plánované návštěvy"){ForEach(Array(subscription["jobs"].array.enumerated()),id:\.offset){_,job in NavigationLink(job["title"].string+" · "+job["dueDate"].string){APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:job)}}}.diaryCard()

@@ -6,18 +6,21 @@ struct APIDraft: Codable, Equatable {
     let baseVersion: Int
     var operationID: String
     var updatedAt: Date
+    var touchedFields: Set<String>? = nil
 }
 struct APIMutation: Codable, Identifiable, Equatable {
     let id: String
     let path: String
     let method: String
     let body: APIValue?
-    let bytes: Data?
+    var bytes: Data?
     let contentType: String
     let headers: [String:String]
     let scope: String
     let dependsOn: [String]
     let draftKey: String?
+    var binaryKey:String? = nil
+    var binaryDigest:String? = nil
     var draftSnapshot: APIValue? = nil
     var state: String = "pending"
     var error: String = ""
@@ -35,6 +38,7 @@ final class APIVault {
     private let url: URL
     private let key: SymmetricKey
     private let memoryOnly: Bool
+    private var memoryBlobs:[String:Data]=[:]
     var state: APILocalState
     init(scope: String, memoryOnly: Bool = false, directory: URL? = nil) throws {
         self.scope = scope; self.memoryOnly = memoryOnly
@@ -57,15 +61,18 @@ final class APIVault {
         } else { state = APILocalState() }
     }
     func saveBlob(_ data: Data, path: String) throws {
-        guard !memoryOnly else { return }
+        if memoryOnly {memoryBlobs[path]=data;return}
         let sealed = try AES.GCM.seal(data, using:key, authenticating:Data((scope+path).utf8))
         try sealed.combined?.write(to: url.deletingLastPathComponent().appendingPathComponent(Self.hash(scope+path)+".blob"), options:[.atomic,.completeFileProtectionUntilFirstUserAuthentication])
     }
     func blob(_ path: String) throws -> Data? {
+        if memoryOnly{return memoryBlobs[path]}
         let file=url.deletingLastPathComponent().appendingPathComponent(Self.hash(scope+path)+".blob")
         guard !memoryOnly, FileManager.default.fileExists(atPath:file.path) else { return nil }
         return try AES.GCM.open(AES.GCM.SealedBox(combined:Data(contentsOf:file)),using:key,authenticating:Data((scope+path).utf8))
     }
+    func removeBlob(_ path:String){memoryBlobs.removeValue(forKey:path);try? FileManager.default.removeItem(at:url.deletingLastPathComponent().appendingPathComponent(Self.hash(scope+path)+".blob"))}
+    func mutationBytes(_ op:APIMutation)throws->Data?{if let key=op.binaryKey{guard let data=try blob(key)else{throw APIError.local("Chybí čekající příloha. Znovu ji vyberte; zápis zůstává neodeslaný.")};return data};return op.bytes}
     static func hash(_ string: String) -> String { SHA256.hash(data: Data(string.utf8)).map { String(format:"%02x",$0) }.joined() }
     func persist() throws {
         guard !memoryOnly else { return }
@@ -78,10 +85,13 @@ final class APIVault {
     }
     func enqueue(_ operation: APIMutation) throws {
         guard operation.scope == scope else { throw APIError.local("Změna patří jinému účtu nebo oboru.") }
-        if let existing = state.outbox.first(where: { $0.id == operation.id }) {
-            guard existing.path == operation.path && existing.body == operation.body && existing.bytes == operation.bytes else { throw APIError.local("Identifikátor už patří jiné rozepsané změně.") }; return
+        var incoming=operation
+        if let bytes=incoming.bytes{incoming.binaryDigest=SHA256.hash(data:bytes).map{String(format:"%02x",$0)}.joined()}
+        if let existing=state.outbox.first(where:{$0.id==incoming.id}){
+            guard existing.path==incoming.path,existing.method==incoming.method,existing.contentType==incoming.contentType,existing.headers==incoming.headers,existing.body==incoming.body,existing.binaryDigest==incoming.binaryDigest else{throw APIError.local("Identifikátor už patří jiné rozepsané změně.")};return
         }
-        state.outbox.append(operation); try persist()
+        if let bytes=incoming.bytes{let key="outbox:"+incoming.id;try saveBlob(bytes,path:key);incoming.bytes=nil;incoming.binaryKey=key}
+        state.outbox.append(incoming);try persist()
     }
     func offlineAllowed(at date: Date = Date()) -> Bool {
         guard !state.session["user"]["id"].string.isEmpty, date.timeIntervalSince(state.verifiedAt) >= 0, date.timeIntervalSince(state.verifiedAt) < 86400,

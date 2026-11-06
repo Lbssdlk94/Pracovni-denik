@@ -33,7 +33,7 @@ final class APITransport {
     init(origin: URL, fixture: Bool = false, configuration: URLSessionConfiguration? = nil) {
         precondition(EndpointPolicy.isDiary(origin))
         self.origin = origin; self.fixture = fixture
-        cookie = APIKeychain.read("session:" + origin.host!).flatMap { String(data: $0, encoding: .utf8) }
+        cookie = fixture ? nil : APIKeychain.read("session:" + origin.host!).flatMap { String(data: $0, encoding: .utf8) }
         let config = configuration ?? .ephemeral
         config.httpCookieStorage = nil; config.httpShouldSetCookies = false
         config.urlCache = nil; config.requestCachePolicy = .reloadIgnoringLocalCacheData
