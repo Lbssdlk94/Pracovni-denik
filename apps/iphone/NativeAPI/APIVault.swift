@@ -40,11 +40,12 @@ final class APIVault {
     private let memoryOnly: Bool
     private var memoryBlobs:[String:Data]=[:]
     var state: APILocalState
-    init(scope: String, memoryOnly: Bool = false, directory: URL? = nil) throws {
+    init(scope: String, memoryOnly: Bool = false, directory: URL? = nil, keyMaterial:Data?=nil) throws {
         self.scope = scope; self.memoryOnly = memoryOnly
         let account = "vault:" + scope
         let secret: Data
-        if memoryOnly { secret = Data(repeating: 17, count: 32) }
+        if let keyMaterial{guard keyMaterial.count==32 else{throw APIError.local("Neplatný šifrovací klíč úložiště.")};secret=keyMaterial}
+        else if memoryOnly { secret = Data(repeating: 17, count: 32) }
         else if let old = APIKeychain.read(account) { secret = old }
         else {
             secret = SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) }
@@ -53,6 +54,7 @@ final class APIVault {
         key = SymmetricKey(data: secret)
         let base = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("NativeAPI", isDirectory: true)
         try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        var directoryURL=base;var attributes=URLResourceValues();attributes.isExcludedFromBackup=true;try? directoryURL.setResourceValues(attributes)
         url = base.appendingPathComponent(Self.hash(scope) + ".sealed")
         if !memoryOnly, FileManager.default.fileExists(atPath: url.path) {
             let sealed = try AES.GCM.SealedBox(combined: Data(contentsOf: url))
@@ -63,7 +65,8 @@ final class APIVault {
     func saveBlob(_ data: Data, path: String) throws {
         if memoryOnly {memoryBlobs[path]=data;return}
         let sealed = try AES.GCM.seal(data, using:key, authenticating:Data((scope+path).utf8))
-        try sealed.combined?.write(to: url.deletingLastPathComponent().appendingPathComponent(Self.hash(scope+path)+".blob"), options:[.atomic,.completeFileProtectionUntilFirstUserAuthentication])
+        guard let encrypted=sealed.combined else{throw APIError.local("Přílohu se nepodařilo zabezpečit.")}
+        try encrypted.write(to: url.deletingLastPathComponent().appendingPathComponent(Self.hash(scope+path)+".blob"), options:[.atomic,.completeFileProtectionUntilFirstUserAuthentication])
     }
     func blob(_ path: String) throws -> Data? {
         if memoryOnly{return memoryBlobs[path]}
@@ -95,7 +98,7 @@ final class APIVault {
     }
     func offlineAllowed(at date: Date = Date()) -> Bool {
         guard !state.session["user"]["id"].string.isEmpty, date.timeIntervalSince(state.verifiedAt) >= 0, date.timeIntervalSince(state.verifiedAt) < 86400,
-              state.session["features"]["offline"] != .bool(false) else { return false }
+              state.session["features"]["offline"].bool else { return false }
         let license = state.session["license"]
         return license.isNull || (license["active"].bool && license["expiresAt"].double > date.timeIntervalSince1970 * 1000)
     }

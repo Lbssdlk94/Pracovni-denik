@@ -50,6 +50,7 @@ struct APIResource: Identifiable {
         case .materials,.categories: return "/api/materials"
         case .entries: return "/api/vehicles/"+parent
         case .drivers: return "/api/vehicles/drivers"
+        case .shafts: return [.text("name","Název šachty",true),.ref("gardenId","Zahrada","gardens"),.text("location","Přesné místo"),.field("notes","Poznámka",.notes),.array("markers","Značky",[.text("zoneName","Zóna")])]
         case .services: return "/api/gardens/"+parent+"/services"
         case .history: return "/api/gardens/"+parent+"/history"
         default: return "/api/"+entity.rawValue
@@ -62,6 +63,7 @@ struct APIResource: Identifiable {
         case .categories: return "/api/materials/categories/"+id
         case .entries: return "/api/vehicles/"+parent+"/entries/"+id
         case .drivers: return "/api/vehicles/drivers/"+id
+        case .shafts: return [.text("name","Název šachty",true),.ref("gardenId","Zahrada","gardens"),.text("location","Přesné místo"),.field("notes","Poznámka",.notes),.array("markers","Značky",[.text("zoneName","Zóna")])]
         case .services: return "/api/gardens/"+parent+"/services/"+id
         default: return "/api/"+entity.rawValue+"/"+id
         }
@@ -87,8 +89,9 @@ struct APIResource: Identifiable {
         case .materials: return [.text("name","Název",true),.ref("categoryId","Kategorie","categories",required:true),.text("sku","Rozměr, varianta nebo kód"),.text("unit","Jednotka",true),.field("priceMinor","Cena za jednotku",.money,true),.text("currency","Měna",true),.field("active","V nabídce",.toggle)]
         case .categories: return [.text("name","Název kategorie",true),.field("sortOrder","Pořadí",.integer),.field("active","Aktivní",.toggle)]
         case .vehicles: return [.text("name","Název vozidla",true),.text("plate","SPZ"),.text("model","Model"),.text("vin","VIN"),.field("odometer","Stav tachometru (km)",.integer,true),.field("inspectionDate","Platnost STK",.date),.field("vignetteDate","Platnost dálniční známky",.date),.field("leadDays","Upozornit dní předem",.integer),.field("notes","Poznámka",.notes)]
-        case .entries: return [.choice("kind","Druh záznamu","fuel:Tankování|service:Servis|other:Jiný náklad"),.field("date","Datum",.date,true),.field("costMinor","Částka",.money,true),.field("litersMilli","Litry",.liters),.field("odometer","Tachometr (km)",.integer,true),.field("full","Plná nádrž",.toggle),.text("station","Čerpací stanice"),.field("note","Poznámka",.notes)]
+        case .entries: return [.choice("kind","Druh záznamu","fuel:Tankování|service:Servis|expense:Jiný náklad"),.field("date","Datum",.date,true),.field("costMinor","Částka",.money,true),.field("litersMilli","Litry",.liters),.field("odometer","Tachometr (km)",.integer,true),.field("full","Plná nádrž",.toggle),.text("station","Čerpací stanice"),.field("note","Poznámka",.notes)]
         case .drivers: return [.field("enabled","Řidič",.toggle),.ref("vehicleId","Přiřazené vozidlo","vehicles")]
+        case .shafts: return [.text("name","Název šachty",true),.ref("gardenId","Zahrada","gardens"),.text("location","Přesné místo"),.field("notes","Poznámka",.notes),.array("markers","Značky",[.text("zoneName","Zóna")])]
         case .services: return [.field("date","Datum provedení",.date,true),.field("work","Provedené práce",.notes,true),.field("parts","Použitý materiál",.notes),.field("notes","Poznámka",.notes),.choice("discipline","Obor","irrigation:Závlaha|garden:Garden")]
         case .tariffs: return [.field("active","Aktivní tarif",.toggle),.object("definition","Podmínky tarifu",APISchemas.tariff)]
         default: return []

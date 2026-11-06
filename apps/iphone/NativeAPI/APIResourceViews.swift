@@ -95,6 +95,7 @@ struct APIEntityDetail: View {
     @State private var detail: APIValue = .null
     @State private var defects: [APIValue] = []
     @State private var problem: String?
+    @Environment(\.dismiss) private var dismiss
     @State private var unavailable=false
     @State private var deleteConfirm = false
     @State private var action: APIDomainAction?
@@ -111,6 +112,7 @@ struct APIEntityDetail: View {
                 else if resource.entity == .gardens { garden }
                 else if resource.entity == .defects { defect }
                 else if resource.entity == .vehicles { vehicle }
+                else if resource.entity == .shafts {APIShaftContent(store:store,record:record)}
                 else if resource.entity == .notifications { APINoticeContent(store:store,notice:record) }
                 else if resource.entity == .subscriptions { APISubscriptionContent(store:store,snapshot:detail,subscription:record,action:$action) }
                 else if resource.entity == .team { APITeamContent(store:store,member:record,action:$action) }
@@ -178,7 +180,7 @@ struct APIEntityDetail: View {
     }
     private var vehicle: some View {
         VStack(spacing:18) {
-            if record["hasPhoto"].bool { APIAuthenticatedImage(store:store,path:resource.recordPath(record.id)+"/photo") }
+            if record["hasPhoto"].bool { APIAuthenticatedImage(store:store,path:resource.recordPath(record.id)+"/photo",version:record["photoVersion"]) }
             if store.writer && store.enabled("fleetFuel") { Button("Přidat tankování"){let r=APIResource(entity:.entries,parent:record.id,seed:.object(["odometer":record["odometer"]]));store.route=APIRoute(resource:r,value:r.initial(store),isNew:true)}.buttonStyle(.borderedProminent).frame(minHeight:44) }
             link("Tankování a provozní záznamy",.entries,parent:record.id)
             DisclosureGroup("Podrobnosti vozidla"){APIReadFields(value:record,fields:resource.fields)}.diaryCard()
@@ -211,8 +213,8 @@ struct APIEntityDetail: View {
     }
     func remove() async {
         do {
-            var body=APIValue.object(["version":record["version"]]);if [.vehicles,.entries,.subscriptions].contains(resource.entity){body["operationId"] = .s(UUID().uuidString)}
-            _=try await store.write(resource.recordPath(record.id),method:"DELETE",body:body)
+            var body=APIValue.object(["version":record["version"]]);if resource.entity == .materials{body["remove"] = .bool(true)};if [.vehicles,.entries,.subscriptions].contains(resource.entity){body["operationId"] = .s(UUID().uuidString)}
+            _=try await store.write(resource.recordPath(record.id),method:"DELETE",body:body);dismiss()
         }catch{problem=error.localizedDescription}
     }
 }

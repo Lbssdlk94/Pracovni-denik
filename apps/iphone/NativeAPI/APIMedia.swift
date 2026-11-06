@@ -18,6 +18,7 @@ struct APIMultipart {
 struct APIAuthenticatedImage:View {
     @ObservedObject var store:APIStore
     let path:String
+    var version:APIValue = .null
     @State private var thumbnail:UIImage?
     @State private var problem:String?
     var body:some View {
@@ -25,7 +26,7 @@ struct APIAuthenticatedImage:View {
             if let thumbnail{Image(uiImage:thumbnail).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius:18))}
             else if let problem{Text(problem).font(.footnote).foregroundStyle(.secondary)}
             else{ProgressView("Načítám fotografii…")}
-        }.task(id:store.scope+path){let scope=store.scope;do{let r=try await store.file(path);guard scope==store.scope else{return};thumbnail=APIImage.thumbnail(r.data);problem=nil}catch{thumbnail=nil;problem=error.localizedDescription}}
+        }.task(id:store.scope+path+version.string){let scope=store.scope;thumbnail=nil;do{let r=try await store.file(path,version:version);guard scope==store.scope else{return};thumbnail=APIImage.thumbnail(r.data);problem=nil}catch{thumbnail=nil;problem=error.localizedDescription}}
     }
 }
 struct APIQuickLook:UIViewControllerRepresentable {

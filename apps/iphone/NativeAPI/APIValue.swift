@@ -33,7 +33,7 @@ indirect enum APIValue: Codable, Equatable, Sendable {
         switch self { case .string(let v): return v; case .number(let v): return v.rounded() == v ? String(format: "%.0f", v) : String(v); case .bool(let v): return v ? "true" : "false"; default: return "" }
     }
     var double: Double { if case .number(let v) = self { return v }; return Double(string.replacingOccurrences(of: ",", with: ".")) ?? 0 }
-    var int: Int { Int(double) }
+    var int:Int{let value=double;guard value.isFinite,value>=Double(Int.min),value<Double(Int.max)else{return 0};return Int(value)}
     var bool: Bool { if case .bool(let v) = self { return v }; return false }
     var isNull: Bool { self == .null }
     var id: String { self["id"].string.isEmpty ? self["userId"].string : self["id"].string }

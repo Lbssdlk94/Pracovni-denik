@@ -18,18 +18,26 @@ final class NativeAPITests:XCTestCase {
     @MainActor func testEncryptedVaultRestoresDraftWithoutPlaintext()throws{
         let directory=FileManager.default.urls(for:.applicationSupportDirectory,in:.userDomainMask)[0].appendingPathComponent("VaultTest-"+UUID().uuidString,isDirectory:true)
         let scope="vault-test-"+UUID().uuidString
-        defer{if FileManager.default.fileExists(atPath:directory.path){try? FileManager.default.removeItem(at:directory)};try? APIKeychain.write(nil,account:"vault:"+scope)}
+        defer{if FileManager.default.fileExists(atPath:directory.path){try? FileManager.default.removeItem(at:directory)}}
         let vault:APIVault
-        do{vault=try APIVault(scope:scope,directory:directory)}catch{XCTFail("Vault initialization: \(error)");return}
+        do{vault=try APIVault(scope:scope,directory:directory,keyMaterial:Data(repeating:29,count:32))}catch{XCTFail("Vault initialization: \(error)");return}
         vault.state.drafts["one"]=APIDraft(value:.object(["note":.s("Soukromá poznámka")]),baseVersion:1,operationID:"one",updatedAt:Date())
         do{try vault.persist()}catch{XCTFail("Encrypted atomic persistence: \(error)");return}
         let files=try FileManager.default.contentsOfDirectory(at:directory,includingPropertiesForKeys:nil)
         XCTAssertEqual(files.count,1)
         let stored=try Data(contentsOf:files[0]);XCTAssertFalse(String(decoding:stored,as:UTF8.self).contains("Soukromá poznámka"))
         let restored:APIVault
-        do{restored=try APIVault(scope:scope,directory:directory)}catch{XCTFail("Encrypted restoration: \(error)");return}
+        do{restored=try APIVault(scope:scope,directory:directory,keyMaterial:Data(repeating:29,count:32))}catch{XCTFail("Encrypted restoration: \(error)");return}
         XCTAssertEqual(restored.state.drafts["one"]?.value["note"],.s("Soukromá poznámka"))
     }
     @MainActor func testWorkerCannotEditCommercialResources(){let store=APIStore(fixture:true);var me=APIFixtureProtocol.fixtureData()["context"];me["user"]["role"] = .s("worker");me["permissions"]["manage"] = .bool(false);try? store.bind(me);for entity:APIEntity in [.tariffs,.customers,.materials,.vehicles,.jobs]{XCTAssertFalse(APIResource(entity:entity).editable(store))};XCTAssertTrue(APIResource(entity:.defects).editable(store))}
+
+    func testMalformedNumberNeverTrapsTheClient(){XCTAssertEqual(APIValue.number(1e300).int,0);XCTAssertEqual(APIValue.string("inf").int,0);XCTAssertEqual(APIValue.number(12).int,12)}
+    func testTarParserRejectsTraversalAndChecksumDamage()throws{
+        func archive(name:String)->Data{let payload=Data("{\"id\":\"fixture\"}".utf8);var header=Data(repeating:0,count:512);func field(_ text:String,_ offset:Int){for(i,byte)in text.utf8.enumerated(){header[offset+i]=byte}};field(name,0);field(String(format:"%011o",payload.count),124);header[156]=48;for i in 148..<156{header[i]=32};let checksum=header.reduce(0){$0+Int($1)};field(String(format:"%06o",checksum)+"\0 ",148);var result=header;result.append(payload);result.append(Data(repeating:0,count:512-payload.count));result.append(Data(repeating:0,count:1024));return result}
+        let url=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString+".tar");defer{try? FileManager.default.removeItem(at:url)}
+        try archive(name:"manifest.json").write(to:url);let entries=try APITar.entries(url);XCTAssertEqual(entries.map(\.name),["manifest.json"]);XCTAssertEqual(try APITar.read(entries[0],url:url),Data("{\"id\":\"fixture\"}".utf8))
+        try archive(name:"../manifest.json").write(to:url);XCTAssertThrowsError(try APITar.entries(url));var damaged=archive(name:"manifest.json");damaged[20]=13;try damaged.write(to:url);XCTAssertThrowsError(try APITar.entries(url))
+    }
 
 }

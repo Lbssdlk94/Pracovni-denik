@@ -16,7 +16,7 @@ enum APIKeychain {
         if status == errSecItemNotFound {
             let add = q.merging(values) { _, n in n }; guard SecItemAdd(add as CFDictionary, nil) == errSecSuccess else { throw APIError.local("Nepodařilo se zabezpečit přihlášení v Klíčence.") }; return
         }
-        guard status == errSecSuccess else { throw APIError.local("Klíčenka není dostupná. Odemkněte iPhone.") }
+        guard status == errSecSuccess else { throw APIError.local(status == errSecMissingEntitlement ? "Tato instalace nemá oprávnění ke Klíčence. Použijte správně podepsanou aplikaci." : "Klíčenka není dostupná. Odemkněte iPhone.") }
     }
 }
 final class APIRedirectPolicy: NSObject, URLSessionTaskDelegate {

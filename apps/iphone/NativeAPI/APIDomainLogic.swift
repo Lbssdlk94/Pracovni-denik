@@ -14,7 +14,7 @@ enum APIDomainLogic {
         repeat {
             var c=URLComponents(string:path)!
             if let next { var q=c.queryItems ?? [];q.append(URLQueryItem(name:key=="materials" ? "after" : "cursor",value:next));c.queryItems=q }
-            let page=try await store.get(c.string!);result += page[list].array
+            let page=try await store.get(c.string!);let rows=page[list].array;result += key=="materials" ? rows.filter{row in row["active"].bool && page["categories"].array.contains{$0.id==row["categoryId"].string && $0["active"].bool}} : rows
             let cursor=page["nextCursor"].string
             if cursor.isEmpty || seen.contains(cursor) { next=nil } else { seen.insert(cursor);next=cursor }
             if key == "categories" { next=nil }

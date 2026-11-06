@@ -125,8 +125,8 @@ final class APIStore: ObservableObject {
     }
     func write(_ path: String, method: String, body: APIValue, offline: Bool = false, draftKey: String? = nil, operationID: String? = nil, dependsOn: [String] = []) async throws -> APIValue {
         guard authenticated, let vault else { throw APIError.local("Nejdříve se přihlaste.") }
-        if offline {
-            guard enabled("offline"), vault.offlineAllowed() else { throw APIError.local("Platnost offline přístupu vyžaduje ověření.") }
+        if offline && enabled("offline") {
+            guard writer,enabled("offline"), vault.offlineAllowed() else { throw APIError.local("Platnost offline přístupu vyžaduje ověření.") }
             var op = APIMutation(id:operationID ?? UUID().uuidString,path:path,method:method,body:body,bytes:nil,contentType:"application/json",headers:[:],scope:scope,dependsOn:dependsOn,draftKey:draftKey)
             op.draftSnapshot = draftKey.flatMap { vault.state.drafts[$0]?.value }
             try vault.enqueue(op); updateOutbox(); if online { await sync() }
@@ -142,11 +142,11 @@ final class APIStore: ObservableObject {
         if let draftKey { self.vault?.state.drafts.removeValue(forKey:draftKey) }
         try self.vault?.persist(); revision = UUID(); return result
     }
-    func upload(_ path: String, bytes: Data, type: String, headers: [String:String] = [:], offline: Bool = false, id: String = UUID().uuidString) async throws {
+    func upload(_ path: String, bytes: Data, type: String, headers: [String:String] = [:], offline: Bool = false, id: String = UUID().uuidString, draftKey:String?=nil) async throws {
         guard authenticated else { throw APIError.local("Nejdříve se přihlaste.") }
-        if offline, let vault {
-            guard enabled("offline"),vault.offlineAllowed() else { throw APIError.local("Offline přístup vyžaduje ověření.") }
-            try vault.enqueue(APIMutation(id:id,path:path,method:"PUT",body:nil,bytes:bytes,contentType:type,headers:headers,scope:scope,dependsOn:[],draftKey:nil)); updateOutbox(); if online { await sync() }; return
+        if offline && enabled("offline"), let vault {
+            guard writer,enabled("offline"),vault.offlineAllowed() else { throw APIError.local("Offline přístup vyžaduje ověření.") }
+            var op=APIMutation(id:id,path:path,method:"PUT",body:nil,bytes:bytes,contentType:type,headers:headers,scope:scope,dependsOn:[],draftKey:draftKey);op.draftSnapshot=draftKey.flatMap{vault.state.drafts[$0]?.value};try vault.enqueue(op);updateOutbox();if online{await sync()};if let current=self.vault?.state.outbox.first(where:{$0.id==id}),current.state != "pending"{throw APIError(status:409,code:current.state,message:current.error)};return
         }
         guard online else { throw APIError.local("Nahrání souboru vyžaduje připojení.") }
         _ = try await transport.bytes(path,method:"PUT",data:bytes,type:type,headers:headers); revision = UUID()
@@ -194,11 +194,12 @@ final class APIStore: ObservableObject {
     func saveDraft(_ key: String, draft: APIDraft) { do { vault?.state.drafts[key] = draft; try vault?.persist() } catch { self.error = error.localizedDescription } }
     func removeDraft(_ key: String) { vault?.state.drafts.removeValue(forKey:key); try? vault?.persist() }
     func updateOutbox() { outbox = vault?.state.outbox ?? [] }
-    func file(_ path:String) async throws -> APIBytes {
-        if !online,let vault,vault.offlineAllowed(),let data=try vault.blob(path){return APIBytes(data:data,type:"application/octet-stream",filename:nil)}
+    func file(_ path:String,version:APIValue = .null) async throws -> APIBytes {
+        let cacheKey=version.isNull ? path : path+"#v="+version.string
+        if !online,let vault,vault.offlineAllowed(),let data=try vault.blob(cacheKey){return APIBytes(data:data,type:"application/octet-stream",filename:nil)}
         let ticket=generation
-        do {let file=try await transport.bytes(path);guard ticket==generation else{throw APIError.local("Přístup se změnil.")};try vault?.saveBlob(file.data,path:path);return file}
-        catch let e as APIError {if e.status==401{lock()};if e.isTransient,let vault,vault.offlineAllowed(),let data=try vault.blob(path){return APIBytes(data:data,type:"application/octet-stream",filename:nil)};throw e}
+        do {let file=try await transport.bytes(path);guard ticket==generation else{throw APIError.local("Přístup se změnil.")};try vault?.saveBlob(file.data,path:cacheKey);return file}
+        catch let e as APIError {if e.status==401{lock()};if e.isTransient,let vault,vault.offlineAllowed(),let data=try vault.blob(cacheKey){return APIBytes(data:data,type:"application/octet-stream",filename:nil)};throw e}
     }
     func push(_ action: String, extra: [String:Any] = [:]) async throws -> NativePushStatus { try await APIPushService.call(self, action:action, extra:extra) }
 }

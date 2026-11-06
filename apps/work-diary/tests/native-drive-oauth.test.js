@@ -31,3 +31,9 @@ test('native Google handoff rejects changed role, revoked password session and a
  const second=await h.start();assert.equal((await api(new Request('https://another.test'+second.pathname+second.search),h.env,{waitUntil:p=>p.catch(()=>{})})).status,401);
  h.env.sqlite.prepare('UPDATE access_sessions SET revoked_at=?').run(Date.now());assert.equal((await h.call(second.pathname+second.search)).status,401);
  }finally{h.restore();}});
+
+test('revoking the diary session while Google responds prevents native OAuth commit',async()=>{const h=await harness();try{
+ const link=await h.start(),bootstrap=await h.call(link.pathname+link.search),cookie=bootstrap.headers.get('set-cookie').split(';')[0];
+ globalThis.fetch=async(input,init)=>{const response=await h.google.fetch(input,init);if(String(input).includes('oauth2.googleapis.com/token'))h.env.sqlite.prepare('UPDATE access_sessions SET revoked_at=?').run(Date.now());return response;};
+ const response=await h.call('/api/drive/oauth/callback?state='+link.searchParams.get('state')+'&code='+h.google.issueCode(),null,'GET',undefined,{cookie});assert.equal(new URL(response.headers.get('location')).searchParams.get('result'),'error');assert.equal(h.env.sqlite.prepare('SELECT COUNT(*) n FROM drive_connections').get().n,0);
+ }finally{h.restore();}});

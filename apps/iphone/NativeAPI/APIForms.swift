@@ -91,13 +91,20 @@ struct APIEntityEditor: View {
     @State private var overlap:APIValue = .null
     @State private var confirmClose = false
     private var key: String { resource.id+":"+original.id }
-    private var fields: [APIField] { resource.fields.filter { ($0.feature == nil || store.enabled($0.feature!)) && (!$0.ownerOnly || store.owner) && ($0.id != "discipline" || !store.me["workspace"].isNull) } }
+    private var fields:[APIField]{
+        var result=resource.fields.filter{($0.feature==nil || store.enabled($0.feature!)) && (!$0.ownerOnly || store.owner) && ($0.id != "discipline" || !store.me["workspace"].isNull)}
+        if resource.entity == .entries{result=result.map{field in var f=field;if f.id=="kind"{f.choices=f.choices.filter{store.enabled(["fuel":"fleetFuel","service":"fleetService","expense":"fleetExpenses"][$0.id] ?? "vehicles")}};if f.id=="litersMilli"{f.required=value["kind"].string=="fuel"};return f}.filter{!["litersMilli","full","station"].contains($0.id) || value["kind"].string=="fuel"}}
+        if resource.entity == .vehicles{let gates=["inspectionDate":"fleetStk","vignetteDate":"fleetVignette","leadDays":"fleetAlerts","odometer":"fleetOdometer"];result=result.filter{field in gates[field.id].map{store.enabled($0)} ?? true}}
+        return result
+    }
+    private var extras:Set<String>{resource.entity == .jobs ? ["arrivalWindowStart","arrivalWindowEnd","legacyTimeMeaning","startTime","endTime","customerName","discipline"] : resource.entity == .vehicles ? ["model","vin","inspectionDate","vignetteDate","leadDays","notes"] : []}
+
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment:.leading,spacing:18) {
                     if loading { ProgressView("Načítám údaje…") }
-                    else { APIFieldsView(fields:fields,value:$value,options:options,edited:{touched.insert($0) }).diaryCard() }
+                    else { APIFieldsView(fields:fields.filter{!extras.contains($0.id)},value:$value,options:options,edited:edited).diaryCard();if !fields.filter({extras.contains($0.id)}).isEmpty{DisclosureGroup("Doplňující údaje"){APIFieldsView(fields:fields.filter{extras.contains($0.id)},value:$value,options:options,edited:edited)}.diaryCard()} }
                     if resource.entity == .defects,!value["sourceJobId"].string.isEmpty {APIProtocolPhotoPicker(store:store,jobID:value["sourceJobId"].string,photos:Binding(get:{value["photos"]},set:{value["photos"]=$0})).diaryCard()}
                     if !overlap.isNull {VStack(alignment:.leading){ForEach(Array(overlap["warnings"].array.enumerated()),id:\.offset){_,warning in Text(warning["message"].string).foregroundStyle(DiaryStyle.warning)};if !overlap["overlaps"].array.isEmpty{Text("Překryvy práce: \(overlap["overlaps"].array.count). Zkontrolujte přiřazení, čas a rezervu mezi návštěvami.").foregroundStyle(DiaryStyle.warning)}};Button("Přesto uložit po kontrole překryvů"){value["allowOverlaps"] = .bool(true);value["previewRevision"]=overlap["revision"];Task{await save()}}.buttonStyle(.bordered)}
                     if let problem { DiaryStatusBanner(text:problem,warning:true) }
@@ -119,6 +126,7 @@ struct APIEntityEditor: View {
             .onChange(of:value["customerAddressId"].string){_,id in if touched.contains("customerAddressId"),let address=options["addresses"]?.first(where:{$0.id==id}) {if !touched.contains("address"){value["address"]=address["address"]};if !touched.contains("city"),!address["city"].string.isEmpty{value["city"]=address["city"]}}}
             .onChange(of:value["customerId"].string) { _,_ in if !loading { Task { await loadAddresses() } } }
     }
+    func edited(_ key:String){touched.insert(key);overlap = .null;value["allowOverlaps"] = .bool(false);value["previewRevision"] = .null}
     func persist() { store.saveDraft(key,draft:APIDraft(value:value,baseVersion:original["version"].int,operationID:operationID,updatedAt:Date(),touchedFields:touched)) }
     func load() async {
         let initial = isNew ? resource.initial(store).merged(original.object) : original
@@ -149,6 +157,6 @@ struct APIEntityEditor: View {
             if resource.entity == .jobs && !value["customerId"].string.isEmpty && value["gardenId"].string.isEmpty && options["gardens",default:[]].filter({$0["customerId"] == value["customerId"]}).count > 1 { throw APIError.local("Zákazník má více zahrad. Vyberte konkrétní zahradu.") }
             try await APIDomainLogic.save(resource:resource,value:value,isNew:isNew,operationID:operationID,draftKey:key,store:store)
             dismiss()
-        } catch let error as APIError { if !error.details["preview"]["revision"].isNull{overlap=error.details["preview"]};problem=error.localizedDescription } catch{problem=error.localizedDescription}
+        } catch let error as APIError { if !error.details["preview"]["revision"].isNull{overlap=error.details["preview"]};if error.code=="planner_conflict"{value["allowOverlaps"] = .bool(false);value["previewRevision"] = .null;overlap = .null};problem=error.localizedDescription } catch{problem=error.localizedDescription}
     }
 }
