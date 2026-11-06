@@ -75,7 +75,7 @@ final class APIStore: ObservableObject {
     }
     func resume() async {
         guard authenticated else { await restore(); return }
-        do { try bind(await transport.request("/api/me")); online = true; await sync(); revision = UUID() }
+        do { try bind(await transport.request("/api/me")); online = true;error=nil;await sync(); revision = UUID() }
         catch let e as APIError { if [401,403].contains(e.status) || (e.isTransient && vault?.offlineAllowed() != true) { lock() }; if e.isTransient { online=false }; error = e.message }
         catch { self.error = error.localizedDescription }
     }
@@ -120,7 +120,7 @@ final class APIStore: ObservableObject {
         } catch let e as APIError {
             if e.status == 401 { lock(); throw e }
             if e.status == 403 { vault?.state.cache.removeValue(forKey:path);try? vault?.persist();throw e }
-            if e.isTransient, let vault, vault.offlineAllowed(), let cached = vault.state.cache[path] { online = false; return cached }
+            if e.isTransient, let vault, vault.offlineAllowed(), let cached = vault.state.cache[path] {if e.status==0{online=false}else{error="Server tuto část dočasně nenačetl. Zobrazují se poslední uložená data."};return cached}
             throw e
         }
     }
@@ -160,7 +160,7 @@ final class APIStore: ObservableObject {
         do { try bind(await transport.request("/api/me")) } catch { if let e = error as? APIError, [401,403].contains(e.status) { lock() }; self.error = error.localizedDescription; return }
         guard ticket == generation, local.scope == scope else { error = "Oprávnění se změnila. Původní neodeslané změny zůstaly zabezpečené."; return }
         for op in local.state.outbox where op.state == "pending" {
-            guard generation == ticket, op.scope == scope else { return }
+            guard generation == ticket, op.scope == scope,online else { return }
             if op.dependsOn.contains(where: { dependency in local.state.outbox.contains { $0.id == dependency } }) { continue }
             do {
                 let pendingBytes=try local.mutationBytes(op)
@@ -175,7 +175,7 @@ final class APIStore: ObservableObject {
                 }
                 try local.persist();if let key=op.binaryKey{local.removeBlob(key)}; revision = UUID()
             } catch let e as APIError {
-                if e.status == 401 { lock(); return }
+                if e.status == 401 { lock(); return };if e.status==0 && e.code=="connection"{online=false;return}
                 if !e.isTransient, let index = local.state.outbox.firstIndex(where: { $0.id == op.id }) {
                     local.state.outbox[index].state = e.status == 409 ? "conflict" : "blocked"; local.state.outbox[index].error = e.message; try? local.persist()
                 }

@@ -95,7 +95,7 @@ struct APIEntityEditor: View {
         var result=resource.fields.filter{($0.feature==nil || store.enabled($0.feature!)) && (!$0.ownerOnly || store.owner) && ($0.id != "discipline" || !store.me["workspace"].isNull)}
         if !store.enabled("customers"){result=result.filter{$0.id != "customerId" && $0.id != "customerAddressId"}}
         if !store.enabled("gardens"){result=result.filter{$0.id != "gardenId"}}
-        if !store.canIrrigate{result=result.filter{$0.id != "pumpType"}}
+        if !store.enabled("pump"){result=result.filter{$0.id != "pumpType"}}
         if resource.entity == .customers && !isNew{result=result.filter{$0.id != "discipline"}}
         result=result.map{field in var f=field;if f.id=="discipline"{f.required=true;f.choices=f.choices.filter{store.me["workspace"]["disciplines"].array.contains(.s($0.id))}};return f}
         if resource.entity == .entries{result=result.map{field in var f=field;if f.id=="kind"{f.choices=f.choices.filter{store.enabled(["fuel":"fleetFuel","service":"fleetService","expense":"fleetExpenses"][$0.id] ?? "vehicles")}};if f.id=="litersMilli"{f.required=value["kind"].string=="fuel"};return f}.filter{!["litersMilli","full","station"].contains($0.id) || value["kind"].string=="fuel"}}

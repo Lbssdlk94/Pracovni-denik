@@ -94,7 +94,7 @@ struct APIJobStatusEditor:View {
     @State private var busy=false
     var body:some View {
         NavigationStack{Form{
-            Picker("Stav",selection:$selected){ForEach(["planned","on_way","in_progress","incomplete","done"],id:\.self){Text(APIFormat.status($0)).tag($0)}}
+            Picker("Stav",selection:$selected){ForEach(["planned","in_progress","incomplete","done"],id:\.self){Text(APIFormat.status($0)).tag($0)}}
             if selected=="incomplete"{
                 Picker("Důvod nedokončení",selection:$reason){Text("Vyberte důvod").tag("");ForEach(["Chyběl materiál","Zákazník nebyl přítomen","Závadu nelze opravit při této návštěvě","Nutná další návštěva","Nepříznivé podmínky","Vlastní důvod"],id:\.self){Text($0).tag($0)}}
                 if reason=="Vlastní důvod"{TextField("Vlastní důvod",text:$custom,axis:.vertical)}
@@ -122,12 +122,19 @@ struct APIDepartureEditor:View {
     @State private var problem:String?
     @State private var sms=false
     @State private var sent=false
+    @State private var busy=false
     var body:some View {
-        NavigationStack{Form{APIFieldsView(fields:[.field("arrivalDate","Datum příjezdu",.date,true),.field("arrivalTime","Přesný čas příjezdu",.time,true)],value:$value);if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)};Button(sent ? "Odjezd uložen" : "Potvrdit odjezd"){Task{await send()}}.disabled(sent)}}
-            .navigationTitle("Jsem na cestě").toolbar{ToolbarItem(placement:.cancellationAction){Button("Zavřít"){dismiss()}}}
+        NavigationStack {
+            Form {
+                APIFieldsView(fields:[.field("arrivalDate","Datum příjezdu",.date,true),.field("arrivalTime","Přesný čas příjezdu",.time,true)],value:$value).disabled(sent || busy)
+                if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}
+                Button(sent ? "Odjezd uložen" : "Potvrdit odjezd"){Task{await send()}}.disabled(sent || busy)
+            }.navigationTitle("Jsem na cestě").navigationBarTitleDisplayMode(.inline)
+                .toolbar{ToolbarItem(placement:.cancellationAction){Button("Zavřít"){dismiss()}.disabled(busy)}}
+        }.editLease(store).interactiveDismissDisabled(busy)
             .task{value = .object(["arrivalDate":composeOnly ? job["arrivalDate"] : .s(store.today),"arrivalTime":composeOnly ? job["arrivalTime"] : .s("")]);if composeOnly{sent=true;sms=true}}
             .confirmationDialog("Informovat zákazníka",isPresented:$sms,titleVisibility:.visible){Button("Připravit SMS"){compose()};Button("Hotovo",role:.cancel){dismiss()}} message:{Text("Zprávu zkontrolujete a odešlete v aplikaci Zprávy.")}
     }
-    func send()async{do{guard value["arrivalTime"].string.range(of:"^([01][0-9]|2[0-3]):[0-5][0-9]$",options:.regularExpression) != nil else{throw APIError.local("Zadejte přesný čas HH:mm.")};_=try await store.write("/api/jobs/"+job.id+"/departure",method:"POST",body:value.merged(["version":job["version"]]));sent=true;sms=true}catch{problem=error.localizedDescription}}
+    func send()async{guard !busy else{return};busy=true;defer{busy=false};do{guard value["arrivalTime"].string.range(of:"^([01][0-9]|2[0-3]):[0-5][0-9]$",options:.regularExpression) != nil else{throw APIError.local("Zadejte přesný čas HH:mm.")};_=try await store.write("/api/jobs/"+job.id+"/departure",method:"POST",body:value.merged(["version":job["version"]]));sent=true;sms=true}catch{problem=error.localizedDescription}}
     func compose(){let phone=job["customerContact"]["phones"].array.first?["number"].string ?? "";guard !phone.isEmpty else{problem="Zákazník nemá vyplněný telefon.";return};var c=URLComponents();c.scheme="sms";c.path=phone.filter{"+0123456789".contains($0)};c.queryItems=[URLQueryItem(name:"body",value:"Dobrý den, jsme na cestě na domluvenou zakázku. Předpokládaný příjezd v "+value["arrivalTime"].string+". "+store.company)];if let url=c.url{openURL(url);dismiss()}}
 }

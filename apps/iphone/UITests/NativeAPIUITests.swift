@@ -11,4 +11,25 @@ final class NativeAPIUITests:XCTestCase {
     func testProtocolFormIsNativeAndKeepsTabNavigationUnderSheet(){let app=launch();app.tabBars.buttons["Zakázky"].tap();let job=app.buttons["native-job-fixture-progress"];XCTAssertTrue(job.waitForExistence(timeout:10));job.tap();app.buttons["Servisní protokol"].tap();let work=app.textViews["Provedené práce"];XCTAssertTrue(work.waitForExistence(timeout:10));work.tap();work.typeText("Kontrola a seřízení systému.");XCTAssertEqual(app.webViews.count,0);capture("protokol-api",app);app.buttons["Zavřít"].tap();XCTAssertTrue(app.tabBars.buttons["Zakázky"].waitForExistence(timeout:10))}
     func testAttendanceDaysAndMoreNativeModules(){let app=launch();app.tabBars.buttons["Docházka"].tap();XCTAssertTrue(app.staticTexts["Pracovní dny"].waitForExistence(timeout:10));capture("dochazka-api",app);app.tabBars.buttons["Více"].tap();let agenda=app.buttons["Firemní agenda"];XCTAssertTrue(agenda.waitForExistence(timeout:10));agenda.tap();app.buttons["Materiál"].tap();XCTAssertTrue(app.staticTexts["Rotační tryska"].waitForExistence(timeout:10));XCTAssertEqual(app.webViews.count,0);capture("material-api",app)}
 
+    func testQuickDepartureRequiresExactTimeAndCanBeCancelled(){
+        let app=launch();app.tabBars.buttons["Zakázky"].tap()
+        let depart=app.buttons["Jsem na cestě"].firstMatch
+        XCTAssertTrue(depart.waitForExistence(timeout:10));depart.tap()
+        XCTAssertTrue(app.navigationBars["Jsem na cestě"].waitForExistence(timeout:10))
+        app.buttons["Potvrdit odjezd"].tap()
+        XCTAssertTrue(app.staticTexts["Zadejte přesný čas HH:mm."].waitForExistence(timeout:10))
+        capture("odjezd-api",app);app.buttons["Zavřít"].tap()
+        XCTAssertTrue(app.buttons["native-job-fixture-progress"].waitForExistence(timeout:10))
+        XCTAssertEqual(app.webViews.count,0)
+    }
+    func testSavedProtocolCanBeReopenedWithoutWebRuntime(){
+        let app=launch();app.tabBars.buttons["Zakázky"].tap()
+        let job=app.buttons["native-job-fixture-progress"];XCTAssertTrue(job.waitForExistence(timeout:10));job.tap()
+        app.buttons["Servisní protokol"].tap()
+        let work=app.textViews["Provedené práce"];XCTAssertTrue(work.waitForExistence(timeout:10));work.tap();work.typeText("Ověřený nativní zápis.")
+        app.swipeUp();let save=app.buttons["Uložit rozpracovaný protokol"];if !save.isHittable{app.swipeUp()};XCTAssertTrue(save.waitForExistence(timeout:10));save.tap()
+        XCTAssertTrue(app.buttons["Servisní protokol"].waitForExistence(timeout:10));app.buttons["Servisní protokol"].tap()
+        let restored=app.textViews["Provedené práce"];XCTAssertTrue(restored.waitForExistence(timeout:10));XCTAssertEqual(restored.value as? String,"Ověřený nativní zápis.");XCTAssertEqual(app.webViews.count,0)
+    }
+
 }

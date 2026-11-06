@@ -96,6 +96,7 @@ struct APIEntityDetail: View {
     @State private var value: APIValue = .null
     @State private var detail: APIValue = .null
     @State private var defects: [APIValue] = []
+    @State private var defectProblem:String?
     @State private var problem: String?
     @Environment(\.dismiss) private var dismiss
     @State private var unavailable=false
@@ -109,6 +110,7 @@ struct APIEntityDetail: View {
                 if !defects.isEmpty {
                     NavigationLink { APIResourceList(store:store,resource:APIResource(entity:.defects,seed:.object(["gardenId":record["gardenId"].isNull ? .s(record.id) : record["gardenId"]]))) } label:{Label("Pozor: \(defects.count) nevyřešené závady",systemImage:"exclamationmark.triangle.fill").font(.headline).foregroundStyle(DiaryStyle.warning).diaryCard()}
                 }
+                if let defectProblem{DiaryStatusBanner(text:defectProblem,warning:true)}
                 if resource.entity == .jobs { APIJobDetailContent(store:store,job:record,action:$action) }
                 else if resource.entity == .customers { customer }
                 else if resource.entity == .gardens { garden }
@@ -201,7 +203,7 @@ struct APIEntityDetail: View {
                 let response=try await store.get(resource.listPath);guard scope==store.scope else{return};detail=response;value=response[resource.listKey].array.first(where:{$0.id==initial.id}) ?? initial
             }
             let garden=resource.entity == .gardens ? record.id : record["gardenId"].string
-            if !garden.isEmpty && store.enabled("defects") { let response=try await store.get("/api/defects?gardenId="+garden);guard scope==store.scope else{return};defects=response["defects"].array.filter{$0["status"].string != "resolved"} }
+            if !garden.isEmpty && store.enabled("defects") {do{let response=try await store.get("/api/defects?gardenId="+garden);guard scope==store.scope else{return};defects=response["defects"].array.filter{$0["status"].string != "resolved"};defectProblem=nil}catch{guard scope==store.scope else{return};defects=[];defectProblem="Závady se nepodařilo ověřit. "+error.localizedDescription}}
             problem=nil
         }catch{if let e=error as? APIError,[403,404].contains(e.status){unavailable=true;value = .null;detail = .null;defects=[]};problem=error.localizedDescription}
     }
