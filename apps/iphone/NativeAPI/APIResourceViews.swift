@@ -9,14 +9,18 @@ struct APIResourceList: View {
     @State private var problem: String?
     @State private var loading = false
     @State private var requestID=UUID()
+    @State private var categories:[APIValue]=[]
+    @State private var category=""
     @State private var onlyMine = false
     var visible: [APIValue] { rows.filter { row in
         let matches=query.isEmpty || [row.title,row["address"].string,row["sku"].string,row["customerName"].string].joined(separator:" ").localizedCaseInsensitiveContains(query)
         let garden=resource.seed["gardenId"].string,customer=resource.seed["customerId"].string
-        return matches && (garden.isEmpty || row["gardenId"].string == garden || resource.entity == .gardens && row.id == garden) && (customer.isEmpty || row["customerId"].string == customer) && (!onlyMine || row["assignedTo"].string == store.userID)
+        return matches && (category.isEmpty || row["categoryId"].string==category) && (garden.isEmpty || row["gardenId"].string == garden || resource.entity == .gardens && row.id == garden) && (customer.isEmpty || row["customerId"].string == customer) && (!onlyMine || row["assignedTo"].string == store.userID)
     } }
     var body: some View {
         List {
+            if resource.entity == .materials {Picker("Kategorie",selection:$category){Text("Všechny kategorie").tag("");ForEach(categories,id:\.id){Text($0.title).tag($0.id)}};if store.manager{NavigationLink("Správa kategorií"){APIResourceList(store:store,resource:APIResource(entity:.categories))}}}
+            if resource.entity == .subscriptions && store.manager{NavigationLink("Správa tarifů"){APIResourceList(store:store,resource:APIResource(entity:.tariffs))}}
             if resource.entity == .defects { Section { Toggle("Moje závady",isOn:$onlyMine) } }
             if loading && rows.isEmpty { ProgressView("Načítám…") }
             if let problem { Text(problem).foregroundStyle(DiaryStyle.warning) }
@@ -43,6 +47,7 @@ struct APIResourceList: View {
             let page=try await store.get(c.string!)
             guard scope==store.scope,requestID==ticket else {return}
             let values=page[resource.listKey].array
+            if resource.entity == .materials{categories=page["categories"].array}
             rows=more ? rows+values.filter { value in !rows.contains(where:{$0.id==value.id}) } : values
             cursor=page["nextCursor"].string;problem=nil
             if (!resource.seed["gardenId"].string.isEmpty || !resource.seed["customerId"].string.isEmpty) && !cursor.isEmpty{loading=false;await load(more:true)}
@@ -114,6 +119,7 @@ struct APIEntityDetail: View {
                     if resource.entity == .history { APIHistoryVisit(store:store,visit:record) }
                 }
                 }
+                if resource.entity == .tariffs && store.manager{Button("Duplikovat tarif"){var copy=record;copy["id"] = .s(UUID().uuidString);copy["version"] = .n(0);copy["definition"]["name"] = .s(record["definition"]["name"].string+" – kopie");store.route=APIRoute(resource:resource,value:copy,isNew:true)}}
                 if let problem { DiaryStatusBanner(text:problem,warning:true) }
                 DisclosureGroup("Doplňující údaje") { Text("ID: "+record.id).font(.caption).textSelection(.enabled);Text("Verze: "+record["version"].string).font(.caption) }.diaryCard()
                 if store.manager && [.jobs,.materials,.categories,.services,.vehicles,.subscriptions].contains(resource.entity) {

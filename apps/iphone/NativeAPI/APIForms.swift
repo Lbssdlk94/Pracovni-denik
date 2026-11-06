@@ -61,6 +61,8 @@ struct APIFieldEditor: View {
             case .notes:
                 Text(field.title).font(.subheadline).foregroundStyle(.secondary)
                 TextEditor(text:text).frame(minHeight:100).accessibilityLabel(field.title)
+            case .date,.time:
+                if value.string.isEmpty{Button("Nastavit: "+field.title){value = .s(field.kind == .date ? DiaryDate.iso(Date()) : APIAttendanceView.time(.number(Date().timeIntervalSince1970*1000)))}.frame(minHeight:44)}else{DatePicker(field.title,selection:Binding(get:{if field.kind == .date{return DiaryDate.parse(value.string) ?? Date()};let f=DateFormatter();f.timeZone=TimeZone(identifier:"Europe/Prague");f.dateFormat="HH:mm";return f.date(from:value.string) ?? Date()},set:{date in value = .s(field.kind == .date ? DiaryDate.iso(date) : APIAttendanceView.time(.number(date.timeIntervalSince1970*1000)))}),displayedComponents:field.kind == .date ? .date : .hourAndMinute).environment(\.timeZone,TimeZone(identifier:"Europe/Prague")!);if !field.required{Button("Bez hodnoty",role:.destructive){value = .s("")}.font(.caption)}}
             case .password: SecureField(field.title,text:text).textContentType(.newPassword).frame(minHeight:44)
             default:
                 Text(field.title + (field.required ? " *" : "")).font(.caption).foregroundStyle(.secondary)
@@ -88,7 +90,7 @@ struct APIEntityEditor: View {
     @State private var problem: String?
     @State private var overlap:APIValue = .null
     @State private var confirmClose = false
-    private var key: String { resource.id+":"+(isNew ? "new" : original.id) }
+    private var key: String { resource.id+":"+original.id }
     private var fields: [APIField] { resource.fields.filter { ($0.feature == nil || store.enabled($0.feature!)) && (!$0.ownerOnly || store.owner) && ($0.id != "discipline" || !store.me["workspace"].isNull) } }
     var body: some View {
         NavigationStack {
@@ -110,7 +112,7 @@ struct APIEntityEditor: View {
                     Button("Ponechat koncept a zavřít") { persist();dismiss() }
                     Button("Zahodit koncept",role:.destructive) { store.removeDraft(key);dismiss() }
                     Button("Pokračovat v úpravách",role:.cancel) {}
-                }.interactiveDismissDisabled()
+                }.interactiveDismissDisabled().editLease(store)
         }.task { await load() }
             .onChange(of:value) { _,_ in if !loading {persist()} }
             .onChange(of:value["gardenId"].string) { _,_ in if !loading { hydrateGarden() } }
@@ -119,7 +121,7 @@ struct APIEntityEditor: View {
     }
     func persist() { store.saveDraft(key,draft:APIDraft(value:value,baseVersion:original["version"].int,operationID:operationID,updatedAt:Date(),touchedFields:touched)) }
     func load() async {
-        let initial = isNew ? resource.initial(store) : original
+        let initial = isNew ? resource.initial(store).merged(original.object) : original
         let draft=store.draft(key,fallback:initial);value=draft.value;operationID=draft.operationID;touched=draft.touchedFields ?? []
         do {
             let refs=Set(fields.flatMap { [$0.reference].compactMap{$0} + $0.children.compactMap(\.reference) })

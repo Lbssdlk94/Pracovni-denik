@@ -8,8 +8,8 @@ struct APIOutboxView:View {
     @State private var selected:APIMutation?
     @State private var discard=false
     var body:some View{List{Section{Text(store.online ? "Připojeno k serveru" : "Offline");Text("Změny jsou šifrované a oddělené podle účtu, firmy a oprávnění. Konflikt se nikdy nepřepíše automaticky.").font(.footnote);Button("Znovu ověřit spojení a synchronizovat"){Task{await store.resume()}}.disabled(store.syncing)}
-        Section("Neodeslané změny"){if store.outbox.isEmpty{Text("Vše odesláno.")};ForEach(store.outbox){op in DisclosureGroup(op.state=="pending" ? "Čeká na odeslání" : op.state=="conflict" ? "Konflikt – nutná kontrola" : "Server změnu odmítl"){Text(op.path).font(.caption);if !op.error.isEmpty{Text(op.error).foregroundStyle(DiaryStyle.warning)};if let body=op.body{APIDataPairs(value:body,labels:["title":"Název","date":"Datum","work":"Práce","notes":"Poznámka","version":"Původní verze"])};Button("Exportovat tento zápis"){export(op)};Button("Zrušit odesílání této změny",role:.destructive){selected=op;discard=true}}}}
-        Section("Rozepsané koncepty"){ForEach(Array((store.vault?.state.drafts ?? [:]).keys.sorted()),id:\.self){key in DisclosureGroup(key){Text("Koncept se nabídne při opětovném otevření stejného formuláře.").font(.footnote);Button("Exportovat koncept"){if let draft=store.vault?.state.drafts[key],let bytes=try? draft.value.data(){file=APIFile(url:APIImage.temporary(bytes,name:"Koncept.json"))}}}}}
+        Section("Neodeslané změny"){if store.outbox.isEmpty{Text("Vše odesláno.")};ForEach(store.outbox){op in DisclosureGroup(op.state=="pending" ? "Čeká na odeslání" : op.state=="conflict" ? "Konflikt – nutná kontrola" : "Server změnu odmítl"){Text(op.path).font(.caption);if !op.error.isEmpty{Text(op.error).foregroundStyle(DiaryStyle.warning)};if let body=op.body{APIDataPairs(value:body,labels:["title":"Název","date":"Datum","work":"Práce","notes":"Poznámka","version":"Původní verze"])};if op.state=="conflict" && op.bytes==nil && op.binaryKey==nil{NavigationLink("Porovnat a vyřešit konflikt"){APIConflictReview(store:store,operation:op)}};Button("Exportovat tento zápis"){export(op)};Button("Zrušit odesílání této změny",role:.destructive){selected=op;discard=true}}}}
+        Section("Rozepsané koncepty"){ForEach(Array((store.vault?.state.drafts ?? [:]).keys.sorted()),id:\.self){key in DisclosureGroup(key){Text("Koncept je uložený pouze v tomto iPhonu.").font(.footnote);if let draft=store.vault?.state.drafts[key]{NavigationLink("Otevřít koncept"){APIDraftDestination(store:store,key:key,draft:draft)}};Button("Exportovat koncept"){if let draft=store.vault?.state.drafts[key],let bytes=try? draft.value.data(){file=APIFile(url:APIImage.temporary(bytes,name:"Koncept.json"))}}}}}
         Section{Text("Před přechodem ze staré webové verze nejdříve odešlete její změny. Původní úložiště zůstává zachované; nová aplikace je sama nepřečte ani nesmaže.").font(.footnote)}
     }.navigationTitle("Koncepty a synchronizace").confirmationDialog("Zrušit odesílání? Uložený koncept zůstane zachovaný.",isPresented:$discard,titleVisibility:.visible){Button("Zrušit odesílání",role:.destructive){guard let selected,let vault=store.vault else{return};guard !store.outbox.contains(where:{$0.dependsOn.contains(selected.id)})else{store.error="Na tuto změnu navazuje jiný zápis. Nejprve zkontrolujte závislé změny.";return};vault.state.outbox.removeAll{$0.id==selected.id};if let key=selected.binaryKey{vault.removeBlob(key)};try? vault.persist();store.updateOutbox()};Button("Ponechat",role:.cancel){}}.sheet(item:$file){FileShare(url:$0.url)}}
     func export(_ op:APIMutation){var exported=op;exported.bytes=try? store.vault?.mutationBytes(op);if let bytes=try? JSONEncoder().encode(exported){file=APIFile(url:APIImage.temporary(bytes,name:"Neodeslana-zmena.json"))}}
@@ -69,4 +69,18 @@ struct APIProtocolEmailView:View {
     func load()async{do{let r=try await store.get(path);requests=r["requests"].array}catch{problem=error.localizedDescription}}
     func prepare()async{do{var form=APIMultipart();form.field("metadata",String(data:try APIValue.object(["recipient":.s(recipient),"jobVersion":jobVersion,"reportVersion":reportVersion]).data(),encoding:.utf8)!);form.file("pdf",filename:"Vykaz.pdf",type:"application/pdf",bytes:pdf);try await store.upload(path+"/"+requestID,bytes:form.finished,type:form.type);requestID=UUID().uuidString;await load()}catch{problem=error.localizedDescription}}
     func decide(_ request:APIValue,action:String)async{do{_ = try await store.write(path+"/"+request.id+"/"+action,method:"POST",body:.object(["recipient":request["recipient"],"sha256":request["sha256"]]));await load()}catch{problem=error.localizedDescription}}
+}
+
+struct APIDraftDestination:View {
+    @ObservedObject var store:APIStore
+    let key:String
+    let draft:APIDraft
+    var parts:[String]{key.components(separatedBy:":")}
+    @ViewBuilder var body:some View{
+        if parts.first=="protocol",parts.count==2{APIProtocolEditor(store:store,jobID:parts[1])}
+        else if parts.first=="shaft"{APIShaftEditor(store:store,initial:draft.value,isNew:draft.value["version"].int==0)}
+        else if parts.first=="blowout",parts.count==2{APIBlowoutView(store:store,garden:.object(["id":.s(parts[1])]))}
+        else if let name=parts.first,let entity=APIEntity(rawValue:name),parts.count>=3{APIEntityEditor(store:store,resource:APIResource(entity:entity,parent:parts[1]),original:draft.value,isNew:draft.value["version"].int==0)}
+        else{Text("Koncept lze exportovat; tento typ nelze otevřít samostatně.")}
+    }
 }

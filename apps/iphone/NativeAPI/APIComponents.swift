@@ -51,3 +51,10 @@ struct NativeJobCard: View {
             .accessibilityElement(children: .combine)
     }
 }
+
+struct APIEditLease:ViewModifier {
+    @ObservedObject var store:APIStore
+    @State private var acquired=false
+    func body(content:Content)->some View{content.onAppear{if !acquired{acquired=true;store.beginEdit()}}.onDisappear{if acquired{acquired=false;store.endEdit()}}}
+}
+extension View{func editLease(_ store:APIStore)->some View{modifier(APIEditLease(store:store))}}

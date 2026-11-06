@@ -11,7 +11,7 @@ struct APIMultipart {
     let boundary="Diary-"+UUID().uuidString
     var data=Data()
     mutating func field(_ name:String,_ value:String) { data.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(name)\"\r\n\r\n\(value)\r\n".utf8)) }
-    mutating func file(_ name:String,filename:String,type:String,bytes:Data) { data.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(name)\"; filename=\"\(filename.replacingOccurrences(of:"\"",with:""))\"\r\nContent-Type: \(type)\r\n\r\n".utf8));data.append(bytes);data.append(Data("\r\n".utf8)) }
+    mutating func file(_ name:String,filename:String,type:String,bytes:Data) { data.append(Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"\(name)\"; filename=\"\(filename.replacingOccurrences(of:"\"",with:"").replacingOccurrences(of:"\r",with:"").replacingOccurrences(of:"\n",with:""))\"\r\nContent-Type: \(type)\r\n\r\n".utf8));data.append(bytes);data.append(Data("\r\n".utf8)) }
     var finished:Data { var d=data;d.append(Data("--\(boundary)--\r\n".utf8));return d }
     var type:String { "multipart/form-data; boundary="+boundary }
 }

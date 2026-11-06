@@ -67,7 +67,7 @@ struct APIResource: Identifiable {
         }
     }
     var recordKey: String { [.jobs:"job",.customers:"customer",.gardens:"garden",.defects:"defect",.materials:"item",.categories:"category",.vehicles:"vehicle",.entries:"entry",.drivers:"driver",.tariffs:"tariff",.subscriptions:"subscription",.services:"service",.shafts:"record"][entity] ?? "" }
-    func editable(_ store: APIStore) -> Bool {
+    @MainActor func editable(_ store: APIStore) -> Bool {
         switch entity {
         case .jobs,.customers,.materials,.categories,.vehicles,.drivers,.tariffs,.subscriptions,.team: return store.manager
         case .history,.notifications: return false
@@ -94,7 +94,7 @@ struct APIResource: Identifiable {
         default: return []
         }
     }
-    func initial(_ store: APIStore) -> APIValue {
+    @MainActor func initial(_ store: APIStore) -> APIValue {
         var v = APIValue.object(["id":.s(UUID().uuidString),"version":.n(0),"active":.bool(true),"date":.s(store.today),"discoveredOn":.s(store.today),"status":.s(entity == .defects ? "new" : "planned"),"priority":.s("normal"),"jobType":.s("service"),"kind":.s("fuel"),"currency":.s("CZK"),"unit":.s("ks"),"legacyTimeMeaning":.s("unknown"),"leadDays":.n(30),"odometer":.n(0),"full":.bool(false)])
         for field in fields where v[field.id].isNull {v[field.id]=field.initial}
         if entity == .tariffs {v["definition"]["currency"] = .s("CZK");v["definition"]["billingPeriod"] = .s("yearly")}

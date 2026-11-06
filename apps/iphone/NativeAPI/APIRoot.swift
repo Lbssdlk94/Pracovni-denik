@@ -23,13 +23,13 @@ struct APIRoot:View {
         }.tint(DiaryStyle.accent)
             .safeAreaInset(edge:.top,spacing:0){if store.authenticated && (!store.online || !store.outbox.isEmpty){Button{outbox=true}label:{HStack{Image(systemName:store.online ? "arrow.triangle.2.circlepath" : "wifi.slash");Text(store.online ? "\(store.outbox.count) neodeslaných změn" : "Offline · změny zůstávají v iPhonu").font(.caption);Spacer();Image(systemName:"chevron.right")}.padding(12).background(DiaryStyle.soft)}}}
             .safeAreaInset(edge:.bottom){if store.authenticated,let error=store.error {Text(error).font(.caption).padding(8).background(.regularMaterial).onTapGesture{store.error=nil}}}
-            .sheet(item:$store.route,onDismiss:{store.editing=false}){route in
+            .sheet(item:$store.route){route in
                 Group{
                     if route.resource.entity == .subscriptions{APISubscriptionActivation(store:store,initial:route.value)}
                     else if route.resource.entity == .shafts{APIShaftEditor(store:store,initial:route.value,isNew:route.isNew)}
                     else if route.resource.entity == .team{APILocalAccountEditor(store:store)}
                     else{APIEntityEditor(store:store,resource:route.resource,original:route.value,isNew:route.isNew)}
-                }.onAppear{store.editing=true}
+                }
             }
             .sheet(isPresented:$outbox){NavigationStack{APIOutboxView(store:store)}}
             .sheet(isPresented:$push.showSettings){NativePushSettings(push:push)}

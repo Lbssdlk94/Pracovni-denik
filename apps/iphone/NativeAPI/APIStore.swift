@@ -10,7 +10,10 @@ final class APIStore: ObservableObject {
     @Published var needsPasswordChange = false
     @Published var busy = false
     @Published var syncing = false
-    @Published var editing = false
+    @Published private var editCount=0
+    var editing:Bool{editCount>0}
+    func beginEdit(){editCount+=1}
+    func endEdit(){editCount=max(0,editCount-1)}
     @Published var tab = 0
     @Published var revision = UUID()
     @Published var route: APIRoute?

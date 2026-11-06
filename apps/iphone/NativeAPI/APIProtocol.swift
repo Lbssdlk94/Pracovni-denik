@@ -17,6 +17,8 @@ struct APIProtocolEditor:View {
     @State private var problem:String?
     @State private var saving=false
     @State private var loaded=false
+    @State private var pdfData:Data?
+    @State private var email=false
     @State private var photoUploads:[String]=[]
     var key:String{"protocol:"+jobID}
     var report:Binding<APIValue>{Binding(get:{value["report"]},set:{value["report"]=$0})}
@@ -46,18 +48,19 @@ struct APIProtocolEditor:View {
                     if store.writer && store.enabled("defects") && !snapshot["job"]["gardenId"].string.isEmpty{
                         Button("Převést text protokolu na sledovanou závadu"){Task{await trackDefect()}}.frame(minHeight:44)
                     }
-                    Button("Zobrazit PDF"){showPDF()}.buttonStyle(.bordered).frame(minHeight:44)
-                    Button("Uložit rozpracovaný protokol"){Task{await save(finalize:false,complete:false)}}.buttonStyle(.bordered).frame(minHeight:44)
-                    Button(completing ? "Potvrdit dokončení návštěvy" : "Potvrdit hotový protokol"){Task{await save(finalize:true,complete:completing)}}.buttonStyle(.borderedProminent).frame(minHeight:44)
-                    if store.owner && store.enabled("emailNotifications"){NavigationLink("Odeslání protokolu zákazníkovi"){APIProtocolEmailView(store:store,jobID:jobID,pdf:(try? APIProtocolPDF.make(snapshot:snapshot,report:value["report"])) ?? Data(),jobVersion:snapshot["job"]["version"],reportVersion:snapshot["report"]["version"])}}
+                    Button("Zobrazit PDF"){Task{await showPDF()}}.buttonStyle(.bordered).frame(minHeight:44)
+                    if store.writer {Button("Uložit rozpracovaný protokol"){Task{await save(finalize:false,complete:false)}}.buttonStyle(.bordered).frame(minHeight:44)
+                    Button(completing ? "Potvrdit dokončení návštěvy" : "Potvrdit hotový protokol"){Task{await save(finalize:true,complete:completing)}}.buttonStyle(.borderedProminent).frame(minHeight:44)}
+                    if store.owner && store.enabled("emailNotifications"){Button("Odeslání protokolu zákazníkovi"){Task{await preparePDF();if pdfData != nil{email=true}}}}
                 }
                 if let problem{DiaryStatusBanner(text:problem,warning:true)}
             }.padding(18)}.background(DiaryStyle.background).navigationTitle("Servisní protokol").navigationBarTitleDisplayMode(.inline)
                 .toolbar{ToolbarItem(placement:.cancellationAction){Button("Zavřít"){persist();dismiss()}.disabled(saving)}}
         }.task{await load()}.onChange(of:value){_,_ in if loaded{persist()}}
             .sheet(item:$preview){file in APIQuickLook(url:file.url).onDisappear{try? FileManager.default.removeItem(at:file.url.deletingLastPathComponent())}}
+            .sheet(isPresented:$email){NavigationStack{APIProtocolEmailView(store:store,jobID:jobID,pdf:pdfData ?? Data(),jobVersion:snapshot["job"]["version"],reportVersion:snapshot["report"]["version"])}}
             .sheet(item:$defectRoute){route in APIEntityEditor(store:store,resource:route.resource,original:route.value,isNew:route.isNew)}
-            .disabled(saving).interactiveDismissDisabled()
+            .disabled(saving).interactiveDismissDisabled().editLease(store)
     }
     func load()async{do{
         snapshot=try await store.get("/api/jobs/"+jobID+"/service")
@@ -74,7 +77,8 @@ struct APIProtocolEditor:View {
     }
     func save(finalize:Bool,complete:Bool)async{saving=true;defer{saving=false};do{persist();_=try await store.write("/api/jobs/"+jobID+"/service",method:"PUT",body:payload(finalize:finalize,complete:complete),offline:true,draftKey:key,operationID:operationID,dependsOn:photoUploads);dismiss()}catch{problem=error.localizedDescription}}
     func addMaterial(){guard let item=materials.first(where:{$0.id==selectedMaterial}),let q=Double(quantity.replacingOccurrences(of:",",with:".")),q>0,q<=1000000,abs(q*1000-(q*1000).rounded())<0.00001 else{problem="Vyberte materiál a kladné množství nejvýše se třemi desetinnými místy.";return};let line=item.merged(["itemId":.s(item.id),"itemVersion":item["version"],"quantity":.number(q)]);var a=value["report"]["materialItems"].array;a.append(line);value["report"]["materialItems"] = .array(a);selectedMaterial="";quantity="1"}
-    func showPDF(){do{let data=try APIProtocolPDF.make(snapshot:snapshot,report:value["report"]);preview=APIFile(url:APIImage.temporary(data,name:"Servisni-protokol.pdf"))}catch{problem=error.localizedDescription}}
+    func preparePDF()async{do{var images:[UIImage]=[];for reference in value["report"]["photoIds"].array{let id=reference.string;let bytes:Data;if let op=store.outbox.first(where:{$0.id==id}),let pending=try store.vault?.mutationBytes(op){bytes=pending}else{bytes=try await store.file("/api/jobs/"+jobID+"/service/photos/"+id).data};guard let image=APIImage.thumbnail(bytes,maxPixels:1600)else{throw APIError.local("Fotografii nelze vložit do PDF.")};images.append(image)};pdfData=try APIProtocolPDF.make(snapshot:snapshot,report:value["report"],photos:images)}catch{pdfData=nil;problem="PDF není úplné: "+error.localizedDescription}}
+    func showPDF()async{await preparePDF();if let data=pdfData{preview=APIFile(url:APIImage.temporary(data,name:"Servisni-protokol.pdf"))}}
     func trackDefect()async{do{
         guard !value["report"]["defects"].string.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty else{throw APIError.local("Nejdříve doplňte text zjištěné závady.")}
         guard store.outbox.isEmpty,store.online else{throw APIError.local("Převod uloženého protokolu potvrďte po synchronizaci. Samostatnou závadu lze zaznamenat i offline.")}
@@ -95,7 +99,7 @@ struct APIWorkChargesEditor:View {
 }
 enum APIProtocolPDF {
     static func lineTotal(_ line:APIValue)->Int { var amount=Decimal(line["priceMinor"].int)*(Decimal(string:line["quantity"].string,locale:Locale(identifier:"en_US_POSIX")) ?? 0);var result=Decimal();NSDecimalRound(&result,&amount,0,.plain);return NSDecimalNumber(decimal:result).intValue }
-    static func make(snapshot:APIValue,report:APIValue)throws->Data {
+    static func make(snapshot:APIValue,report:APIValue,photos:[UIImage]=[])throws->Data {
         let renderer=UIGraphicsPDFRenderer(bounds:CGRect(x:0,y:0,width:595,height:842))
         return renderer.pdfData{ctx in
             var y:CGFloat=42
@@ -114,6 +118,7 @@ enum APIProtocolPDF {
             let charges=report["workCharges"]
             if !charges.isNull{let hours=Int(ceil(charges["hours"].double)),travel=Int(ceil(charges["kilometers"].double/30));text("Práce: \(hours) započatých hodin · cesta: \(travel) bloků po 30 km",true);if !charges["totalMinor"].isNull{text("Práce a cesta celkem: "+APIFormat.money(charges["totalMinor"]))}}
             if let data=Data(base64Encoded:report["customerSignature"].string.components(separatedBy:",").last ?? ""),let image=UIImage(data:data){if y+100>790{page()};text("Podpis zákazníka",true);image.draw(in:CGRect(x:42,y:y,width:240,height:90));y+=100}
+            for (index,image) in photos.enumerated(){page();text("Fotodokumentace · \(index+1)",true);let scale=min(511/image.size.width,650/image.size.height);image.draw(in:CGRect(x:42,y:y,width:image.size.width*scale,height:image.size.height*scale));y+=image.size.height*scale+16}
             text(report["documentState"].string=="ready" ? "Protokol hotový" : "Rozpracovaný protokol")
         }
     }

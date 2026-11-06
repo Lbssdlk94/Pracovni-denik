@@ -3,7 +3,7 @@ import CoreLocation
 import MapKit
 
 @MainActor
-final class APILocation:NSObject,ObservableObject,CLLocationManagerDelegate {
+final class APILocation:NSObject,ObservableObject,@preconcurrency CLLocationManagerDelegate {
     @Published var position:CLLocation?
     @Published var status="unavailable"
     private let manager=CLLocationManager()
