@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import CoreText
 
 struct APIProtocolEditor:View {
     @ObservedObject var store:APIStore
@@ -78,7 +79,7 @@ struct APIProtocolEditor:View {
         return .object(["version":value["version"],"operationId":.s(operationID),"report":report,"complete":.bool(complete),"finalizeReport":.bool(finalize)])
     }
     func save(finalize:Bool,complete:Bool)async{saving=true;defer{saving=false};do{persist(force:true);_=try await store.write("/api/jobs/"+jobID+"/service",method:"PUT",body:payload(finalize:finalize,complete:complete),offline:true,draftKey:key,operationID:operationID,dependsOn:photoUploads);dismiss()}catch{problem=error.localizedDescription}}
-    func addMaterial(){guard let item=materials.first(where:{$0.id==selectedMaterial}),let q=Double(quantity.replacingOccurrences(of:",",with:".")),q>0,q<=1000000,abs(q*1000-(q*1000).rounded())<0.00001 else{problem="Vyberte materiál a kladné množství nejvýše se třemi desetinnými místy.";return};let line=item.merged(["itemId":.s(item.id),"itemVersion":item["version"],"quantity":.number(q)]);var a=value["report"]["materialItems"].array;a.append(line);value["report"]["materialItems"] = .array(a);selectedMaterial="";quantity="1"}
+    func addMaterial(){do{guard let item=materials.first(where:{$0.id==selectedMaterial})else{throw APIError.local("Vyberte materiál.")};value["report"]["materialItems"]=try APIMaterialSelection.add(item,to:value["report"]["materialItems"],quantity:quantity);selectedMaterial="";quantity="1"}catch{problem=error.localizedDescription}}
     func preparePDF()async{do{var images:[UIImage]=[];for reference in value["report"]["photoIds"].array{let id=reference.string;let bytes:Data;if let op=store.outbox.first(where:{$0.id==id}),let pending=try store.vault?.mutationBytes(op){bytes=pending}else{bytes=try await photo(id)};guard let image=APIImage.thumbnail(bytes,maxPixels:1600)else{throw APIError.local("Fotografii nelze vložit do PDF.")};images.append(image)};var export=value["report"];if value != baseline{export["documentState"] = .s("draft")};pdfData=try APIProtocolPDF.make(snapshot:snapshot,report:export,photos:images)}catch{pdfData=nil;problem="PDF není úplné: "+error.localizedDescription}}
     func photo(_ id:String)async throws->Data{do{return try await store.file("/api/jobs/"+jobID+"/service/photos/"+id).data}catch let error as APIError{guard error.status==404,store.enabled("googleDrive"),store.enabled("drivePhotos")else{throw error};return try await store.file("/api/jobs/"+jobID+"/photos/"+id+"/content").data}}
     func showPDF()async{await preparePDF();if let data=pdfData{preview=APIFile(url:APIImage.temporary(data,name:"Servisni-protokol.pdf"))}}
@@ -105,10 +106,32 @@ enum APIProtocolPDF {
     static func lineTotal(_ line:APIValue)->Int { var amount=Decimal(line["priceMinor"].int)*(Decimal(string:line["quantity"].string,locale:Locale(identifier:"en_US_POSIX")) ?? 0);var result=Decimal();NSDecimalRound(&result,&amount,0,.plain);return NSDecimalNumber(decimal:result).intValue }
     @MainActor static func make(snapshot:APIValue,report:APIValue,photos:[UIImage]=[])throws->Data {
         let renderer=UIGraphicsPDFRenderer(bounds:CGRect(x:0,y:0,width:595,height:842))
+        let hours=ceil(report["workCharges"]["hours"].double),travel=ceil(report["workCharges"]["kilometers"].double/30)
+        guard hours.isFinite,travel.isFinite,hours>=0,travel>=0,hours<Double(Int.max),travel<Double(Int.max)else{throw APIError.local("Zkontrolujte množství práce a kilometrů před exportem PDF.")}
         return renderer.pdfData{ctx in
             var y:CGFloat=42
             func page(){ctx.beginPage();y=42}
-            func text(_ value:String,_ bold:Bool=false){guard !value.isEmpty else{return};let font=bold ? UIFont.boldSystemFont(ofSize:13) : UIFont.systemFont(ofSize:11);let attrs:[NSAttributedString.Key:Any]=[.font:font,.foregroundColor:UIColor.black];let rect=(value as NSString).boundingRect(with:CGSize(width:511,height:10000),options:[.usesLineFragmentOrigin,.usesFontLeading],attributes:attrs,context:nil);if y+rect.height>790{page()};(value as NSString).draw(in:CGRect(x:42,y:y,width:511,height:rect.height+4),withAttributes:attrs);y+=rect.height+12}
+            func text(_ value:String,_ bold:Bool=false){
+                guard !value.isEmpty else{return}
+                let font=bold ? UIFont.boldSystemFont(ofSize:13) : UIFont.systemFont(ofSize:11)
+                let attributed=NSAttributedString(string:value,attributes:[.font:font,.foregroundColor:UIColor.black])
+                let setter=CTFramesetterCreateWithAttributedString(attributed)
+                var offset=0
+                while offset<attributed.length {
+                    if y>760{page()}
+                    let available=790-y
+                    let path=CGPath(rect:CGRect(x:0,y:0,width:511,height:available),transform:nil)
+                    let frame=CTFramesetterCreateFrame(setter,CFRange(location:offset,length:0),path,nil)
+                    let count=CTFrameGetVisibleStringRange(frame).length
+                    guard count>0 else{page();continue}
+                    let part=attributed.attributedSubstring(from:NSRange(location:offset,length:count))
+                    let height=ceil(part.boundingRect(with:CGSize(width:511,height:available),options:[.usesLineFragmentOrigin,.usesFontLeading],context:nil).height)
+                    part.draw(with:CGRect(x:42,y:y,width:511,height:available),options:[.usesLineFragmentOrigin,.usesFontLeading],context:nil)
+                    y+=height+12;offset+=count
+                    if offset<attributed.length{page()}
+                }
+            }
+
             page();text("SERVISNÍ PROTOKOL",true)
             text(snapshot["job"]["title"].string,true);text("Datum provedení: "+report["date"].string)
             let billing=report["billingDetails"].isNull ? snapshot["billingPreview"] : report["billingDetails"]
@@ -120,7 +143,7 @@ enum APIProtocolPDF {
             for line in report["materialItems"].array{let total=lineTotal(line),currency=line["currency"].string;totals[currency,default:0]+=total;text([line["name"].string,line["sku"].string,line["quantity"].string+" "+line["unit"].string,APIFormat.money(line["priceMinor"],currency:currency),APIFormat.money(.n(total),currency:currency)].filter{!$0.isEmpty}.joined(separator:" · "))}
             for currency in totals.keys.sorted(){text("Materiál celkem: "+APIFormat.money(.n(totals[currency]!),currency:currency),true)}
             let charges=report["workCharges"]
-            if !charges.isNull{let hours=Int(ceil(charges["hours"].double)),travel=Int(ceil(charges["kilometers"].double/30));text("Práce: \(hours) započatých hodin · cesta: \(travel) bloků po 30 km",true);if let total=chargeTotal(charges){text("Práce a cesta celkem: "+APIFormat.money(.n(total)))}else{text("Sazby práce a cesty nejdříve potvrďte uložením protokolu.")}}
+            if !charges.isNull{let hours=Int(hours),travel=Int(travel);text("Práce: \(hours) započatých hodin · cesta: \(travel) bloků po 30 km",true);if let total=chargeTotal(charges){text("Práce a cesta celkem: "+APIFormat.money(.n(total)))}else{text("Sazby práce a cesty nejdříve potvrďte uložením protokolu.")}}
             if let data=Data(base64Encoded:report["customerSignature"].string.components(separatedBy:",").last ?? ""),let image=UIImage(data:data){if y+100>790{page()};text("Podpis zákazníka",true);image.draw(in:CGRect(x:42,y:y,width:240,height:90));y+=100}
             for (index,image) in photos.enumerated(){page();text("Fotodokumentace · \(index+1)",true);let scale=min(511/image.size.width,650/image.size.height);image.draw(in:CGRect(x:42,y:y,width:image.size.width*scale,height:image.size.height*scale));y+=image.size.height*scale+16}
             text(report["documentState"].string=="ready" ? "Protokol hotový" : "Rozpracovaný protokol")

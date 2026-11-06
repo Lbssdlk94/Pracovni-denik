@@ -8,12 +8,12 @@ enum APIDomainLogic {
         return row.title
     }
     @MainActor static func referenceRows(_ key: String, store: APIStore) async throws -> [APIValue] {
-        let map: [String:(String,String)] = ["customers":("/api/customers","customers"),"gardens":("/api/gardens","gardens"),"people":("/api/jobs/people","people"),"defectPeople":("/api/defects/people","people"),"jobs":("/api/jobs?state=all","jobs"),"defects":("/api/defects","defects"),"materials":("/api/materials","items"),"categories":("/api/materials","categories"),"vehicles":("/api/vehicles","vehicles"),"tariffs":("/api/tariffs/options","tariffs")]
+        let map: [String:(String,String)] = ["customers":("/api/customers","customers"),"gardens":("/api/gardens","gardens"),"people":("/api/jobs/people","people"),"defectPeople":("/api/defects/people","people"),"jobs":("/api/jobs?state=all","jobs"),"defects":("/api/defects","defects"),"materials":("/api/materials","items"),"allMaterials":("/api/materials","items"),"categories":("/api/materials","categories"),"vehicles":("/api/vehicles","vehicles"),"tariffs":("/api/tariffs/options","tariffs")]
         guard let (path,list)=map[key] else { return [] }
         var result:[APIValue]=[],next:String?=nil,seen=Set<String>()
         repeat {
             var c=URLComponents(string:path)!
-            if let next { var q=c.queryItems ?? [];q.append(URLQueryItem(name:key=="materials" ? "after" : "cursor",value:next));c.queryItems=q }
+            if let next { var q=c.queryItems ?? [];q.append(URLQueryItem(name:["materials","allMaterials"].contains(key) ? "after" : "cursor",value:next));c.queryItems=q }
             let page=try await store.get(c.string!);let rows=page[list].array;result += key=="materials" ? rows.filter{row in row["active"].bool && page["categories"].array.contains{$0.id==row["categoryId"].string && $0["active"].bool}} : rows
             let cursor=page["nextCursor"].string
             if cursor.isEmpty || seen.contains(cursor) { next=nil } else { seen.insert(cursor);next=cursor }

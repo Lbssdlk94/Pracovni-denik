@@ -68,10 +68,24 @@ struct APIVehiclesHome:View {
     }.padding(18)}.background(DiaryStyle.background).navigationTitle("Vozidla").task(id:store.revision){do{data=try await store.get("/api/vehicles");if selected.isEmpty{selected=data["driver"]["vehicleId"].string}}catch{problem=error.localizedDescription}}}
     func select()async{do{_=try await store.write("/api/vehicles/selection",method:"PUT",body:.object(["operationId":.s(UUID().uuidString),"version":data["driver"]["version"],"vehicleId":selected.isEmpty ? .null : .s(selected)]));problem="Auto je přiřazené."}catch{problem=error.localizedDescription}}
 }
+struct APIDefectBadge:View {
+    let defect:APIValue
+    var body:some View{VStack(alignment:.leading,spacing:5){Label(defect["status"].string=="resolved" ? "Vyřešená závada" : "Otevřená závada",systemImage:"exclamationmark.triangle").font(.caption.bold());Text(defect.title).font(.headline);Text([defect["discoveredOn"].string,["low":"Nízká","normal":"Běžná","high":"Vysoká"][defect["priority"].string] ?? "",APIFormat.status(defect["status"].string)].filter{!$0.isEmpty}.joined(separator:" · ")).font(.caption)}.foregroundStyle(defect["status"].string=="resolved" ? DiaryStyle.accent : DiaryStyle.warning).padding(.vertical,8)}
+}
 struct APIHistoryVisit:View {
     @ObservedObject var store:APIStore
     let visit:APIValue
-    var body:some View{VStack(alignment:.leading,spacing:14){Text(visit["date"].string).font(.headline);Text(APIFormat.status(visit["status"].string));Text(visit["technician"].string);ForEach(["work","material","defects","notes","recommendations"],id:\.self){key in if !visit[key].string.isEmpty{Text(visit[key].string).textSelection(.enabled)}};if !visit["jobId"].string.isEmpty{NavigationLink("Původní zakázka a protokol"){APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:.object(["id":visit["jobId"],"title":visit["title"]]))}}}.diaryCard()}
+    @State private var defects:[APIValue]=[]
+    @State private var file:APIFile?
+    @State private var problem:String?
+    var body:some View{VStack(alignment:.leading,spacing:14){
+        Text(visit["date"].string).font(.headline);Text(APIFormat.status(visit["status"].string));Text(visit["technician"].string)
+        ForEach(["work","material","defects","notes","recommendations"],id:\.self){key in if !visit[key].string.isEmpty{Text(visit[key].string).textSelection(.enabled)}}
+        ForEach(defects,id:\.id){d in NavigationLink{APIEntityDetail(store:store,resource:APIResource(entity:.defects),initial:d)}label:{APIDefectBadge(defect:d)}}
+        if !visit["photos"].array.isEmpty{DisclosureGroup("Fotografie návštěvy"){ForEach(visit["photos"].array,id:\.id){photo in Button(photo["name"].string.isEmpty ? "Otevřít fotografii" : photo["name"].string){Task{do{let result=try await store.file(photo["url"].string);file=APIFile(url:APIImage.temporary(result.data,name:photo["name"].string))}catch{problem=error.localizedDescription}}}.frame(minHeight:44)}}}
+        if !visit["jobId"].string.isEmpty{NavigationLink("Původní zakázka a protokol"){APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:.object(["id":visit["jobId"],"title":visit["title"]]))}}
+        if let problem{Text(problem).font(.footnote).foregroundStyle(DiaryStyle.warning)}
+    }.diaryCard().task(id:store.revision){if store.enabled("defects"),!visit["jobId"].string.isEmpty{do{let result=try await store.get("/api/defects?jobId="+visit["jobId"].string);defects=result["defects"].array.filter{$0["sourceJobId"]==visit["jobId"] || $0["repairJobs"].array.contains{$0.id==visit["jobId"].string}}}catch{problem="Závady návštěvy nelze ověřit. "+error.localizedDescription}}}.sheet(item:$file){item in APIQuickLook(url:item.url).onDisappear{try? FileManager.default.removeItem(at:item.url.deletingLastPathComponent())}}}
 }
 struct APINoticeContent:View {
     @ObservedObject var store:APIStore

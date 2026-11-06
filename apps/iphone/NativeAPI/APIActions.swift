@@ -66,6 +66,13 @@ struct APIJobDetailContent:View {
                     }
                 }.diaryCard()
             }
+            if job["jobType"].string=="installation" && (assigned || store.manager) && store.writer {
+                DisclosureGroup("Připravenost materiálu") {
+                    Text(["unchecked":"Nezkontrolováno","checked":"Materiál zkontrolován","ready":"Materiál připraven","missing":"Chybějící materiál"][job["materialStatus"].string] ?? "Nezkontrolováno")
+                    if !job["materialNote"].string.isEmpty{Text(job["materialNote"].string)}
+                    Button("Aktualizovat připravenost"){action=APIDomainAction(title:"Připravenost materiálu",path:"/api/jobs/"+job.id+"/service",method:"PUT",fields:[.choice("materialStatus","Stav materiálu","unchecked:Nezkontrolováno|checked:Materiál zkontrolován|ready:Materiál připraven|missing:Chybějící materiál"),.field("materialNote","Poznámka nebo chybějící materiál",.notes)],value:.object(["version":job["version"],"operationId":.s(UUID().uuidString),"materialStatus":job["materialStatus"],"materialNote":job["materialNote"]]))}.frame(minHeight:44)
+                }.diaryCard()
+            }
             if store.enabled("jobs"){
                 DiaryTile(title:"Servisní protokol",subtitle:APIFormat.protocolState(job["protocolStatus"].string),symbol:"doc.text"){report=true}
             }

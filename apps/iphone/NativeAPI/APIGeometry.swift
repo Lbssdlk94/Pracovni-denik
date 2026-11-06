@@ -101,6 +101,7 @@ struct APIPlanView:View {
     @ObservedObject var store:APIStore
     let garden:APIValue
     @State private var file:APIFile?
+    @State private var image:UIImage?
     @State private var value:APIValue = .null
     @State private var baseline:APIValue = .null
     @State private var shaft=""
@@ -112,12 +113,14 @@ struct APIPlanView:View {
     var body:some View{ScrollView{VStack(alignment:.leading,spacing:16){
         if !value["plan"].isNull{
             Button("Zobrazit plán"){Task{await preview()}}.frame(minHeight:44)
+            if let image{APIPlanCanvas(image:image,shafts:shafts,markers:Binding(get:{value["plan"]["markers"]},set:{value["plan"]["markers"]=$0}),editable:store.writer)}
+            if !value["plan"]["type"].string.hasPrefix("image/"){Text("PDF plán lze prohlížet. Umístění šachet lze upravovat v obrázkovém plánu.").font(.footnote)}
             ForEach(Array(value["plan"]["markers"].array.enumerated()),id:\.offset){index,marker in
                 VStack(alignment:.leading){Text(shafts.first{$0.id==marker["shaftId"].string}?.title ?? "Šachta").font(.headline)
-                    if store.writer{Slider(value:coordinate(index,"x"),in:0...1){Text("Vodorovná poloha")};Slider(value:coordinate(index,"y"),in:0...1){Text("Svislá poloha")};Button("Odebrat značku",role:.destructive){var markers=value["plan"]["markers"].array;markers.remove(at:index);value["plan"]["markers"] = .array(markers)}}
+                    if store.writer && value["plan"]["type"].string.hasPrefix("image/"){Slider(value:coordinate(index,"x"),in:0...1){Text("Vodorovná poloha")};Slider(value:coordinate(index,"y"),in:0...1){Text("Svislá poloha")};Button("Odebrat značku",role:.destructive){var markers=value["plan"]["markers"].array;markers.remove(at:index);value["plan"]["markers"] = .array(markers)}}
                 }.diaryCard()
             }
-            if store.writer{
+            if store.writer && value["plan"]["type"].string.hasPrefix("image/"){
                 Picker("Šachta",selection:$shaft){Text("Vyberte šachtu").tag("");ForEach(shafts,id:\.id){Text($0.title).tag($0.id)}}
                 Button("Přidat značku"){guard !shaft.isEmpty else{return};var markers=value["plan"]["markers"].array;guard !markers.contains(where:{$0["shaftId"].string==shaft})else{return};markers.append(.object(["shaftId":.s(shaft),"x":.number(0.5),"y":.number(0.5)]));value["plan"]["markers"] = .array(markers)}
                 Button("Uložit umístění"){Task{await save()}}.buttonStyle(.borderedProminent)
@@ -126,7 +129,7 @@ struct APIPlanView:View {
         APIFilesView(store:store,path:"/api/gardens/"+garden.id+"/plan",mode:.plan,record:value).disabled(dirty)
         if dirty{Text("Před výměnou plánu uložte umístění značek. Rozepsané změny zůstávají v tomto iPhonu.").font(.footnote);Button("Zahodit koncept a načíst aktuální plán",role:.destructive){discard=true}}
         if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}
-    }.padding(18)}.navigationTitle("Plán zahrady").sheet(item:$file){APIQuickLook(url:$0.url)}.task{await load(restore:true)}.onChange(of:store.revision){_,_ in if !dirty{Task{await load(restore:false)}}}.onChange(of:value){_,v in if dirty && store.writer{var draft=store.draft(key,fallback:baseline);draft.value=v;draft.updatedAt=Date();store.saveDraft(key,draft:draft)}}.confirmationDialog("Zahodit pouze místní rozpracované umístění značek?",isPresented:$discard,titleVisibility:.visible){Button("Zahodit místní koncept",role:.destructive){store.removeDraft(key);Task{await load(restore:false)}};Button("Ponechat",role:.cancel){}}}
+    }.padding(18)}.navigationTitle("Plán zahrady").sheet(item:$file){APIQuickLook(url:$0.url)}.task{await load(restore:true)}.task(id:store.scope+value["plan"]["version"].string){let expected=store.scope+value["plan"]["version"].string;image=nil;if value["plan"]["type"].string.hasPrefix("image/"){do{let result=try await store.file("/api/gardens/"+garden.id+"/plan",version:value["plan"]["version"]);if expected==store.scope+value["plan"]["version"].string{image=APIImage.thumbnail(result.data,maxPixels:2000)}}catch{problem=error.localizedDescription}}}.onChange(of:store.revision){_,_ in if !dirty{Task{await load(restore:false)}}}.onChange(of:value){_,v in if dirty && store.writer{var draft=store.draft(key,fallback:baseline);draft.value=v;draft.updatedAt=Date();store.saveDraft(key,draft:draft)}}.confirmationDialog("Zahodit pouze místní rozpracované umístění značek?",isPresented:$discard,titleVisibility:.visible){Button("Zahodit místní koncept",role:.destructive){store.removeDraft(key);Task{await load(restore:false)}};Button("Ponechat",role:.cancel){}}}
     func coordinate(_ index:Int,_ key:String)->Binding<Double>{Binding(get:{let markers=value["plan"]["markers"].array;return markers.indices.contains(index) ? markers[index][key].double : 0.5},set:{v in var markers=value["plan"]["markers"].array;guard markers.indices.contains(index)else{return};markers[index][key] = .number(v);value["plan"]["markers"] = .array(markers)})}
     func load(restore:Bool)async{do{let page=try await store.get("/api/gardens");guard let current=page["gardens"].array.first(where:{$0.id==garden.id})else{throw APIError.local("Zahrada není dostupná.")};baseline=current;value=restore ? store.draft(key,fallback:current).value : current;if store.enabled("shafts"){shafts=(try await store.get("/api/shafts"))["records"].array.filter{$0["gardenId"].string==garden.id}};problem=nil}catch{problem=error.localizedDescription}}
     func save()async{do{let result=try await store.write("/api/gardens/"+garden.id+"/plan-markers",method:"PUT",body:.object(["version":value["version"],"planVersion":value["plan"]["version"],"markers":value["plan"]["markers"]]));store.removeDraft(key);if !result["garden"].isNull{baseline=result["garden"];value=baseline}else{await load(restore:false)};problem="Uloženo."}catch{problem=error.localizedDescription}}

@@ -30,3 +30,24 @@ struct APIShaftContent:View {
     @State private var file:APIFile?
     var body:some View{VStack(alignment:.leading,spacing:16){if let bytes,let image=APIImage.thumbnail(bytes){APIShaftCanvas(image:image,markers:.constant(record["markers"]));if store.enabled("pictureExport"){Button("Sdílet fotografii se značkami"){if let data=APIShaftCanvas.exported(image:image,markers:record["markers"]){file=APIFile(url:APIImage.temporary(data,name:"Sachta-se-znackami.jpg"))}}}};APIReadFields(value:record,fields:APIResource(entity:.shafts).fields.filter{$0.id != "markers"});if !record["position"].isNull{let p=record["position"];Link("Navigovat k šachtě",destination:URL(string:"https://maps.apple.com/?daddr=\(p["latitude"].double),\(p["longitude"].double)")!)};if let message=store.error{Text(message).font(.footnote)}}.diaryCard().task{do{bytes=try await store.file("/api/shafts/"+record.id+"/photo",version:record["imageVersion"]).data}catch{store.error=error.localizedDescription}}.sheet(item:$file){FileShare(url:$0.url)}}
 }
+
+struct APIPlanCanvas:View {
+    let image:UIImage
+    let shafts:[APIValue]
+    @Binding var markers:APIValue
+    var editable:Bool
+    var body:some View{GeometryReader{geometry in
+        let scale=min(geometry.size.width/image.size.width,geometry.size.height/image.size.height)
+        let width=image.size.width*scale,height=image.size.height*scale
+        let origin=CGPoint(x:(geometry.size.width-width)/2,y:(geometry.size.height-height)/2)
+        ZStack(alignment:.topLeading){
+            Image(uiImage:image).resizable().frame(width:width,height:height).position(x:geometry.size.width/2,y:geometry.size.height/2)
+            ForEach(Array(markers.array.enumerated()),id:\.offset){index,marker in
+                Label(shafts.first{$0.id==marker["shaftId"].string}?.title ?? "Šachta",systemImage:"mappin.circle.fill")
+                    .font(.caption.bold()).foregroundStyle(DiaryStyle.accent).padding(8).background(.regularMaterial,in:Capsule()).frame(minWidth:44,minHeight:44)
+                    .position(x:origin.x+marker["x"].double*width,y:origin.y+marker["y"].double*height)
+                    .gesture(DragGesture(coordinateSpace:.named("plan-canvas")).onChanged{gesture in guard editable,width>0,height>0,markers.array.indices.contains(index)else{return};var rows=markers.array;rows[index]["x"] = .number(min(1,max(0,(gesture.location.x-origin.x)/width)));rows[index]["y"] = .number(min(1,max(0,(gesture.location.y-origin.y)/height)));markers = .array(rows)})
+            }
+        }.coordinateSpace(name:"plan-canvas")
+    }.frame(height:340).accessibilityLabel("Obrázkový plán s polohami šachet")}
+}

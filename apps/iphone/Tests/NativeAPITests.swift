@@ -1,4 +1,5 @@
 import XCTest
+import PDFKit
 @testable import PracovniDenik
 
 final class NativeAPITests:XCTestCase {
@@ -44,5 +45,22 @@ final class NativeAPITests:XCTestCase {
     @MainActor func testGardenWorkerCannotOpenIrrigationSections(){let store=APIStore(fixture:true);var me=APIFixtureProtocol.fixtureData()["context"];me["user"]["role"] = .s("worker");me["workspace"]["disciplines"] = .array([.s("garden")]);try? store.bind(me);for feature in ["shafts","blowout","plans","zoneManagement"]{XCTAssertFalse(store.enabled(feature))};XCTAssertTrue(store.enabled("gardens"))}
 
     @MainActor func testOneCachedServerFailureDoesNotPutTheWholeClientOffline()async throws{APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.restore();_ = try await store.get("/api/zones");APIFixtureProtocol.forcedStatus["/api/zones"]=503;_ = try await store.get("/api/zones");XCTAssertTrue(store.online);let before=APIFixtureProtocol.requests.count;let customers=try await store.get("/api/customers");XCTAssertFalse(customers["customers"].array.isEmpty);XCTAssertGreaterThan(APIFixtureProtocol.requests.count,before)}
+
+    func testSelectingMaterialTwiceAddsQuantityWithoutChangingFrozenPrice()throws{
+        let first=try APIMaterialSelection.add(APIFixtureProtocol.material,to:.array([]),quantity:"1,5")
+        var changed=APIFixtureProtocol.material;changed["priceMinor"] = .n(99900);changed["version"] = .n(2)
+        let second=try APIMaterialSelection.add(changed,to:first,quantity:"2")
+        XCTAssertEqual(second.array.count,1);XCTAssertEqual(second.array[0]["quantity"],.number(3.5));XCTAssertEqual(second.array[0]["priceMinor"],.n(24500));XCTAssertEqual(second.array[0]["itemVersion"],.n(1))
+        XCTAssertThrowsError(try APIMaterialSelection.add(changed,to:second,quantity:"inf"))
+    }
+    @MainActor func testLongProtocolPDFContainsEveryPageAndRejectsInvalidCharges()throws{
+        let long=String(repeating:"Kontrola ventilů a postřikovačů. ",count:240)+"KONEC-ZAZNAMU"
+        let report:APIValue = .object(["date":.s("2026-11-06"),"work":.s(long),"documentState":.s("draft")])
+        let bytes=try APIProtocolPDF.make(snapshot:.object([:]),report:report)
+        let document=try XCTUnwrap(PDFDocument(data:bytes));XCTAssertGreaterThan(document.pageCount,1)
+        let all=(0..<document.pageCount).compactMap{document.page(at:$0)?.string}.joined()
+        XCTAssertTrue(all.contains("KONEC-ZAZNAMU"));XCTAssertTrue(all.contains("Rozpracovaný protokol"))
+        XCTAssertThrowsError(try APIProtocolPDF.make(snapshot:.null,report:report.merged(["workCharges":.object(["hours":.number(1e300)])])))
+    }
 
 }
