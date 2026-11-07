@@ -1,3 +1,4 @@
+import {validateRolePreviewRequest,denyRolePreviewMutation} from './role-preview.js';
 import {passwordOnly,handleLocalPublicAuth,handleLocalSelf,handleLocalAccounts} from './local-auth.js';
 import {handleWorkspaceTransfer} from './workspace-transfer.js';
 import {workspaceTransferStamp,workspaceTransferFrozen,workspaceFencedDatabase,workspaceTransferEnsureControl} from './workspace-transfer-control.js';
@@ -177,6 +178,7 @@ export async function api(request,env,ctx){
  const result=new Response(response.body,response);result.headers.append('server-timing','app;dur='+duration);result.headers.set('x-request-id',requestId);return result;
 }
 async function workspaceAPI(request,env,ctx){
+ try{denyRolePreviewMutation(request,fail);}catch(error){if(error instanceof HttpError)return json({error:error.message,...error.extra},error.status);throw error;}
  if(new URL(request.url).pathname==='/api/connection-health'&&request.method==='GET'){
   const started=performance.now();
   try{await env.DB.prepare('SELECT 1 AS ready').first();const databaseMs=Math.round((performance.now()-started)*10)/10;return new Response(JSON.stringify({ok:true,databaseMs}),{headers:{'content-type':'application/json','cache-control':'no-store','server-timing':'db;dur='+databaseMs}});}
@@ -195,6 +197,7 @@ async function workspaceAPI(request,env,ctx){
 async function workspaceRawApi(request,env,ctx){
   try{
     const url=new URL(request.url),path=url.pathname,method=request.method;
+    denyRolePreviewMutation(request,fail);
     if(!['GET','HEAD'].includes(method))mutationAllowed(request);
     if(await workspaceTransferFrozen(env))return json({error:'Probíhá bezpečné propojení adresářů. Rozepsané změny ponechte v zařízení a zkuste to po chvíli.',code:'workspace_transfer_frozen'},503);
     if(path==='/api/workspace/recovery-key'&&method==='GET'){await assertInstallation(env);return json({recovery:await workspaceRecoveryPublicInfo(env)});}
@@ -218,6 +221,7 @@ async function workspaceRawApi(request,env,ctx){
     if(['/api/workspace/identity-invite','/api/workspace/link-identity'].includes(path))fail(403,'Propojení přes osobní přístupový odkaz bylo zrušeno.',{code:'access_link_disabled'});
     const m=await nativeDriveMember(request,env,{one,fail})||await memberFor(request,env);Object.assign(env,await workspaceRequestContext(env,request,m));
     if(m._mustChange&&!['/api/auth/account','/api/auth/password'].includes(path))fail(403,'Před prvním použitím si změňte dočasné heslo.',{code:'password_change_required'});
+    validateRolePreviewRequest(request,m,fail);
     await workspaceResourceAccess(request,env,m,fail);env._workspaceScope=m._workspace||null;
     if(['/api/auth/account','/api/auth/password','/api/auth/policy'].includes(path))return await handleLocalSelf(request,env,m,{body,json,fail});
     const platformPolicy=await tenantPlatformGate(request,env,{fail});
@@ -244,7 +248,7 @@ async function workspaceRawApi(request,env,ctx){
     if(/^\/api\/jobs\/[-\w]+\/protocol-emails(?:\/|$)/.test(path)){const {features}=await featureSettings(env);if(!features.jobs)fail(403,'Zakázky jsou vypnuté.');return await handleProtocolEmails(request,env,ctx,m,{body,fail,json,validId,cleanText,boundedBytes});}
     if(/^\/api\/jobs\/[-\w]+\/service(?:\/|$)/.test(path)){const {features}=await featureSettings(env);if(!features.jobs)fail(403,'Zakázky jsou v nastavení vypnuté.',{code:'jobs_disabled'});const response=await handleServiceWork(request,env,ctx,m,{body,fail,json,validId,cleanText,boundedBytes,features});if(method!=='GET')deliver();return response;}
     if(path.startsWith('/api/subscriptions')||path.startsWith('/api/tariffs')){const {features}=await featureSettings(env);if(!features.subscriptions||!features.jobs||!features.customers)fail(403,'Předplatné, zákazníci nebo zakázky jsou v nastavení vypnuté.',{code:'subscriptions_disabled'});const response=await handleSubscriptions(request,env,m,{body,fail,json,validId,cleanText,boundedBytes});if(method!=='GET')deliver();return response;}
-    if(path==='/api/notifications'||path.startsWith('/api/notifications/')){const {features}=await featureSettings(env);if(!features.notifications&&!(method==='GET'&&['/api/notifications/subscription','/api/notifications/preferences','/api/notifications/native/config','/api/notifications/native'].includes(path))&&!(method==='DELETE'&&['/api/notifications/subscription','/api/notifications/native'].includes(path)))fail(403,'Upozornění jsou v nastavení týmu vypnutá.');const response=await handleNotifications(request,env,m,{body,fail,json,one,all,execute,features});if(method==='GET'&&path==='/api/notifications')deliver();return response;}
+    if(path==='/api/notifications'||path.startsWith('/api/notifications/')){const {features}=await featureSettings(env);if(!features.notifications&&!(method==='GET'&&['/api/notifications/subscription','/api/notifications/preferences','/api/notifications/native/config','/api/notifications/native'].includes(path))&&!(method==='DELETE'&&['/api/notifications/subscription','/api/notifications/native'].includes(path)))fail(403,'Upozornění jsou v nastavení týmu vypnutá.');const response=await handleNotifications(request,env,m,{body,fail,json,one,all,execute,features});if(method==='GET'&&path==='/api/notifications'&&!request.headers.get('x-work-diary-preview-role'))deliver();return response;}
     if(path==='/api/customers'||path.startsWith('/api/customers/')){const {features}=await featureSettings(env);if(!features.customers)fail(403,'Seznam zákazníků je v nastavení týmu vypnutý.');return await handleCustomers(request,env,m,{all,one,execute,body,fail,json,validId,cleanText,expectedVersion,features});}
     if(path.startsWith('/api/drive/')){const {features}=await featureSettings(env);if(!features.googleDrive)fail(403,'Google Disk je v nastavení vypnutý.',{code:'feature_disabled',feature:'googleDrive'});return await handleDrive(request,env,ctx,m,{one,all,execute,body,json,fail,cleanText,boundedBytes});}
     if(/^\/api\/jobs\/[-\w]{1,100}\/photos(?:\/|$)/.test(path)){const {features}=await featureSettings(env);if(!features.jobs||!features.drivePhotos||!features.googleDrive)fail(403,'Fotodokumentace zakázek je v nastavení vypnutá.');return await handleJobPhotos(request,env,ctx,m,{one,all,execute,body,boundedBytes,json,fail,cleanText,validId});}

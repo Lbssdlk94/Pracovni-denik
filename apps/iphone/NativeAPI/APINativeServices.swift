@@ -4,6 +4,7 @@ import CryptoKit
 @MainActor
 enum APIPushService {
     static func call(_ store:APIStore,action:String,extra:[String:Any])async throws->NativePushStatus {
+        if !["config","received"].contains(action){try store.requireLiveRole()}
         let transport=store.transport,key="push-device:"+transport.origin.host!+"|"+store.userID
         let device=APIKeychain.read(key).flatMap{String(data:$0,encoding:.utf8)}
         let value=try JSONDecoder().decode(APIValue.self,from:JSONSerialization.data(withJSONObject:extra))
@@ -34,6 +35,7 @@ enum APIWatchService {
         await store.resume();guard store.authenticated else{throw WatchContractError.unreachable}
         let binding=APIVault.hash(store.scope),scope=store.scope
         if request.kind=="refresh"{return WatchReply(requestId:request.requestId,snapshot:try await snapshot(store,binding:binding))}
+        if request.action != .openPhone{try store.requireLiveRole()}
         guard request.binding==binding,let id=request.jobId,let action=request.action,store.enabled("jobs"),store.enabled("jobDay") else{throw WatchContractError.stale}
         guard action == .openPhone || store.writer else{throw WatchContractError.invalid}
         guard !store.editing else{throw DiaryBridgeError(message:"Na iPhonu je rozepsaný formulář. Nejdříve jej uložte nebo zavřete.",code:"native_form_open")}
@@ -64,7 +66,7 @@ enum APIWatchService {
             let page=try await store.get("/api/jobs?state=all&order=schedule&month="+String(store.today.prefix(7))+"&day="+store.today+"&assignee="+store.userID)
             let values=page["jobs"].array.filter{assigned($0,store:store)};more=values.count>30 || !page["nextCursor"].isNull
             for j in values.prefix(30){let own=j["handoffs"].array.first{$0["userId"].string==store.userID};let active = !["done","incomplete"].contains(j["status"].string)
-                jobs.append(WatchJob(id:j.id,version:j["version"].int,title:j["title"].string,customerName:j["customerName"].string,address:j["address"].string,gardenName:j["gardenName"].string,dueDate:j["dueDate"].string,status:j["status"].string,kind:j["jobType"].string,discipline:j["discipline"].string,plannedStart:j["plannedStart"].string,arrivalStart:j["arrivalWindowStart"].string,arrivalEnd:j["arrivalWindowEnd"].string,originalStart:j["startTime"].string,estimatedMinutes:j["estimatedMinutes"].isNull ? nil : j["estimatedMinutes"].int,arrivalTime:j["arrivalTime"].string,handoffStatus:own?["status"].string ?? "pending",protocolStatus:j["protocolStatus"].string,incompleteReason:j["incompleteReason"].string,canStart:active && store.writer && j["status"].string != "in_progress",canComplete:active && store.writer,requiresProtocol:!j["servicePeriodId"].isNull,canDepart:active && store.writer && store.enabled("jobTravel"),canAccept:active && store.writer && store.enabled("jobHandoffs") && own?["status"].string != "accepted"))
+                jobs.append(WatchJob(id:j.id,version:j["version"].int,title:j["title"].string,customerName:j["customerName"].string,address:j["address"].string,gardenName:j["gardenName"].string,dueDate:j["dueDate"].string,status:j["status"].string,kind:j["jobType"].string,discipline:j["discipline"].string,plannedStart:j["plannedStart"].string,arrivalStart:j["arrivalWindowStart"].string,arrivalEnd:j["arrivalWindowEnd"].string,originalStart:j["startTime"].string,estimatedMinutes:j["estimatedMinutes"].isNull ? nil : j["estimatedMinutes"].int,arrivalTime:j["arrivalTime"].string,handoffStatus:own?["status"].string ?? "pending",protocolStatus:j["protocolStatus"].string,incompleteReason:j["incompleteReason"].string,canStart:active && store.writer && !store.isRolePreview && j["status"].string != "in_progress",canComplete:active && store.writer && !store.isRolePreview,requiresProtocol:!j["servicePeriodId"].isNull,canDepart:active && store.writer && !store.isRolePreview && store.enabled("jobTravel"),canAccept:active && store.writer && !store.isRolePreview && store.enabled("jobHandoffs") && own?["status"].string != "accepted"))
             }
         }
         if store.enabled("notifications"){let inbox=try await store.get("/api/notifications");unread=inbox["unread"].int;notices=inbox["notifications"].array.prefix(10).map{WatchNotice(id:$0.id,title:$0["title"].string,body:$0["body"].string,createdAt:$0["createdAt"].double,read:!$0["readAt"].isNull)}}

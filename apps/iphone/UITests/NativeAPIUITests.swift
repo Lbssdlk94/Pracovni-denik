@@ -32,4 +32,11 @@ final class NativeAPIUITests:XCTestCase {
         let restored=app.textViews["Provedené práce"];XCTAssertTrue(restored.waitForExistence(timeout:10));XCTAssertEqual(restored.value as? String,"Ověřený nativní zápis.");XCTAssertEqual(app.webViews.count,0)
     }
 
+    func testReaderAppearancePreviewHasAnAlwaysAvailableReturnToActualRole(){
+        let app=launch();let picker=app.buttons["role-preview-picker"].firstMatch;XCTAssertTrue(picker.waitForExistence(timeout:10));picker.tap();app.buttons["Čtenář"].tap()
+        XCTAssertTrue(app.staticTexts["Náhled: Čtenář"].waitForExistence(timeout:10));XCTAssertTrue(app.buttons["Zpět k mojí roli"].exists)
+        app.tabBars.buttons["Více"].tap();XCTAssertFalse(app.buttons["Tým"].exists);capture("nahled-ctenar-api",app)
+        app.buttons["Zpět k mojí roli"].firstMatch.tap();XCTAssertTrue(app.staticTexts["native-overview-title"].waitForExistence(timeout:10));XCTAssertFalse(app.staticTexts["Náhled: Čtenář"].exists)
+    }
+
 }

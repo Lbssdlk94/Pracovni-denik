@@ -27,6 +27,7 @@ final class APITransport {
     let origin: URL
     let fixture: Bool
     var discipline = "all"
+    var previewRole:String?
     private let session: URLSession
     private let redirects = APIRedirectPolicy()
     private var cookie: String?
@@ -71,6 +72,7 @@ final class APITransport {
         r.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         r.setValue("shared-directory-v1", forHTTPHeaderField: "x-workspace-client-version")
         r.setValue(discipline, forHTTPHeaderField: "x-work-discipline")
+        if let previewRole{r.setValue(previewRole,forHTTPHeaderField:"x-work-diary-preview-role")}
         r.setValue("PracovniDenik-iOS/0.8", forHTTPHeaderField: "User-Agent")
         if method != "GET" { r.setValue("1", forHTTPHeaderField: "x-zavlahy-request"); r.setValue(origin.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")), forHTTPHeaderField: "Origin") }
         if data != nil { r.setValue(type, forHTTPHeaderField: "Content-Type") }

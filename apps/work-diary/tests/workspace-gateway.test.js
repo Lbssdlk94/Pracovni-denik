@@ -23,3 +23,10 @@ test('staging entry keeps local API and only relays a signed diagnostic, never u
   const business=await workspaceGateway(new Request(entry+'/api/jobs'),f.proxy,f.ctx);assert.equal(business.status,503);
  }finally{globalThis.fetch=original;}
 });
+
+
+test('Role preview marker survives the signed Garden relay without replacing the actual actor',async()=>{
+ const f=fixture(),original=globalThis.fetch;
+ globalThis.fetch=(url,options)=>workspaceGateway(new Request(url,options),f.env,f.ctx,req=>{assert.equal(req.headers.get('x-work-diary-preview-role'),'reader');assert.equal(req.headers.get('oai-authenticated-user-id'),'owner-id');return Response.json({ok:true});});
+ try{const response=await workspaceGateway(new Request(entry+'/api/jobs',{headers:{'oai-authenticated-user-id':'owner-id','x-work-diary-preview-role':'reader'}}),f.proxy,f.ctx);assert.equal(response.status,200);}finally{globalThis.fetch=original;}
+});

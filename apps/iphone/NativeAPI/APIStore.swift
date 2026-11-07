@@ -17,6 +17,7 @@ final class APIStore: ObservableObject {
     @Published var tab = 0
     @Published var revision = UUID()
     @Published var route: APIRoute?
+    @Published private(set) var previewRole:String?
     @Published var outbox: [APIMutation] = []
     let fixture: Bool
     private(set) var transport: APITransport
@@ -25,10 +26,29 @@ final class APIStore: ObservableObject {
     private let monitor = NWPathMonitor()
     private var activeScope: String?
     private var started = false
+    private var liveVault:APIVault?
     var userID: String { me["user"]["id"].string }
-    var role: String { me["user"]["role"].string }
-    var manager: Bool { me["permissions"]["manage"].bool }
-    var writer: Bool { me["permissions"]["write"].bool }
+    var actualRole:String{me["user"]["role"].string}
+    var role:String{previewRole ?? actualRole}
+    var previewTargets:[String]{APIRolePreview.targets(actualRole)}
+    var canPreviewRoles:Bool{!previewTargets.isEmpty}
+    var isRolePreview:Bool{previewRole != nil}
+    var presentationID:String{scope+"|preview:"+(previewRole ?? "actual")}
+    func setRolePreview(_ role:String?)throws{
+        guard role == nil || previewTargets.contains(role!) else{throw APIError.local("Náhled role může otevřít pouze vlastník nebo administrátor.")}
+        guard !busy,!editing,!syncing else{throw APIError.local("Nejprve uložte nebo zavřete formulář a dokončete synchronizaci.")}
+        guard authenticated,let source=liveVault ?? vault else{throw APIError.local("Nejdříve se přihlaste.")}
+        if let role{
+            let temporary=try APIVault(scope:source.scope+"|role-preview:"+role,memoryOnly:true)
+            temporary.state.session=source.state.session;temporary.state.verifiedAt=source.state.verifiedAt;temporary.state.cache=source.state.cache
+            liveVault=source;vault=temporary
+        }else{vault=source;liveVault=nil}
+        generation+=1;previewRole=role;transport.previewRole=role;route=nil;tab=0;revision=UUID();updateOutbox()
+        NativePushController.shared.invalidatePresentation();WatchPhoneCoordinator.shared.invalidate()
+    }
+    func requireLiveRole()throws{if isRolePreview{throw APIError.local("V náhledu role nelze ukládat změny. Vraťte se ke své roli.")}}
+    var manager: Bool { me["permissions"]["manage"].bool && ["owner","administrator","admin"].contains(role) }
+    var writer: Bool { me["permissions"]["write"].bool && role != "reader" }
     var owner: Bool { role == "owner" }
     var company: String { me["installation"]["name"].string.isEmpty ? (transport.origin.host?.hasPrefix("dr-garden") == true ? "Dr. Garden" : "Dr. Závlaha") : me["installation"]["name"].string }
     var today: String { let f = DateFormatter(); f.calendar = Calendar(identifier:.gregorian); f.timeZone = TimeZone(identifier:"Europe/Prague"); f.dateFormat = "yyyy-MM-dd"; return f.string(from: Date()) }
@@ -55,6 +75,7 @@ final class APIStore: ObservableObject {
         let authorization = APIVault.hash(String(data: try fingerprint.data(), encoding: .utf8)!)
         let next = transport.origin.host! + "|" + id + "|" + authorization
         if activeScope != next {
+            liveVault=nil;previewRole=nil;transport.previewRole=nil
             generation += 1; route = nil; tab = 0
             // Previous encrypted files are retained, never exposed under new grants.
             vault = try APIVault(scope: next, memoryOnly: fixture); activeScope = next
@@ -102,40 +123,46 @@ final class APIStore: ObservableObject {
         } catch { self.error = error.localizedDescription }
     }
     func changePassword(username: String, current: String, password: String) async throws {
+        try requireLiveRole()
         let account = try await transport.request("/api/auth/account")
         _ = try await transport.request("/api/auth/password",method:"PUT",body:.object(["username":.s(username),"currentPassword":.s(current),"password":.s(password),"version":account["version"]]))
         needsPasswordChange = false; try bind(await transport.request("/api/me"))
     }
     func switchInstallation(_ origin: URL) async throws {
+        try requireLiveRole()
         guard vault?.state.outbox.isEmpty != false else { throw APIError.local("Nejdříve vyřešte neodeslané změny této firmy.") }
         lock(); transport = APITransport(origin:origin,fixture:fixture);if !fixture{UserDefaults.standard.set(origin.absoluteString,forKey:"native-api-installation")};await restore()
     }
     func switchDiscipline(_ discipline: String) async throws {
+        try requireLiveRole()
         guard ["all","irrigation","garden"].contains(discipline), vault?.state.outbox.isEmpty != false else { throw APIError.local("Před změnou oboru odešlete neodeslanou práci.") }
         transport.discipline = discipline
         do { try bind(await transport.request("/api/me")); revision = UUID() } catch { lock(); throw error }
     }
-    func lock() { generation += 1; authenticated = false; me = .null; vault = nil; activeScope = nil; outbox = []; route = nil; NativePushController.shared.invalidatePresentation(); WatchPhoneCoordinator.shared.invalidate() }
+    func lock() { liveVault=nil;previewRole=nil;transport.previewRole=nil;generation += 1; authenticated = false; me = .null; vault = nil; activeScope = nil; outbox = []; route = nil; NativePushController.shared.invalidatePresentation(); WatchPhoneCoordinator.shared.invalidate() }
     func logout() async throws {
+        try requireLiveRole()
         guard vault?.state.outbox.isEmpty != false else { throw APIError.local("Nejdříve synchronizujte neodeslanou práci.") }
         _ = try await push("detach"); _ = try await transport.request("/api/access-logout",method:"POST",body:.object([:]))
         try transport.forgetCredential(); lock()
     }
     func get(_ path: String, refresh: Bool = false) async throws -> APIValue {
         let ticket = generation
-        if !online, let vault, vault.offlineAllowed(), let cached = vault.state.cache[path] { return cached }
+        let cacheKey=path
+        if !online, let vault, vault.offlineAllowed(), let cached = vault.state.cache[cacheKey] { return cached }
         do {
             let result = try await transport.request(path)
             guard ticket == generation else { throw APIError.local("Přístup se změnil. Obnovte obrazovku.") }
-            vault?.state.cache[path] = result; try vault?.persist(); return result
+            vault?.state.cache[cacheKey] = result; try vault?.persist(); return result
         } catch let e as APIError {
             if e.status == 401 { lock(); throw e }
-            if e.status == 403 { vault?.state.cache.removeValue(forKey:path);try? vault?.persist();throw e }
-            if e.isTransient, let vault, vault.offlineAllowed(), let cached = vault.state.cache[path] {if e.status==0{online=false}else{error="Server tuto část dočasně nenačetl. Zobrazují se poslední uložená data."};return cached}
+            if e.status == 403 { vault?.state.cache.removeValue(forKey:cacheKey);try? vault?.persist();throw e }
+            if e.isTransient, let vault, vault.offlineAllowed(), let cached = vault.state.cache[cacheKey] {if e.status==0{online=false}else{error="Server tuto část dočasně nenačetl. Zobrazují se poslední uložená data."};return cached}
             throw e
         }
     }
     func write(_ path: String, method: String, body: APIValue, offline: Bool = false, draftKey: String? = nil, operationID: String? = nil, dependsOn: [String] = []) async throws -> APIValue {
+        try requireLiveRole()
         guard authenticated, let vault else { throw APIError.local("Nejdříve se přihlaste.") }
         let ticket = generation
         if offline && enabled("offline") {
@@ -157,6 +184,7 @@ final class APIStore: ObservableObject {
         try self.vault?.persist(); revision = UUID(); return result
     }
     func upload(_ path: String, bytes: Data, type: String, headers: [String:String] = [:], offline: Bool = false, id: String = UUID().uuidString, draftKey:String?=nil) async throws {
+        try requireLiveRole()
         guard authenticated else { throw APIError.local("Nejdříve se přihlaste.") }
         let ticket = generation
         if offline && enabled("offline"), let vault {
@@ -170,7 +198,7 @@ final class APIStore: ObservableObject {
         revision = UUID()
     }
     func sync() async {
-        guard !syncing, online, let local = vault, !local.state.outbox.isEmpty else { return }
+        guard !isRolePreview,!syncing, online, let local = vault, !local.state.outbox.isEmpty else { return }
         let initialIDs=Set(local.state.outbox.map(\.id))
         syncing = true; defer {syncing=false;updateOutbox();if online,local.scope==scope,local.state.outbox.contains(where:{$0.state=="pending" && !initialIDs.contains($0.id)}){Task{await self.sync()}}}
         let ticket = generation
@@ -208,16 +236,16 @@ final class APIStore: ObservableObject {
         func patch(_ value:APIValue)->APIValue{switch value{case .object(let fields):if value.id==entity.id{return value.merged(entity.object)};return .object(fields.mapValues{patch($0)});case .array(let values):return .array(values.map{patch($0)});default:return value}}
         for key in vault.state.cache.keys where key.hasPrefix("/api/"+String(parts[1])){vault.state.cache[key]=patch(vault.state.cache[key]!)}
     }
-    func draft(_ key: String, fallback: APIValue) -> APIDraft { vault?.state.drafts[key] ?? APIDraft(value:fallback,baseVersion:fallback["version"].int,operationID:UUID().uuidString,updatedAt:Date()) }
-    func saveDraft(_ key: String, draft: APIDraft) { do { vault?.state.drafts[key] = draft; try vault?.persist() } catch { self.error = error.localizedDescription } }
-    func removeDraft(_ key: String) { vault?.state.drafts.removeValue(forKey:key); try? vault?.persist() }
+    func draft(_ key: String, fallback: APIValue) -> APIDraft { (isRolePreview ? nil : vault?.state.drafts[key]) ?? APIDraft(value:fallback,baseVersion:fallback["version"].int,operationID:UUID().uuidString,updatedAt:Date()) }
+    func saveDraft(_ key: String, draft: APIDraft) { guard !isRolePreview else{return};do { vault?.state.drafts[key] = draft; try vault?.persist() } catch { self.error = error.localizedDescription } }
+    func removeDraft(_ key: String) { guard !isRolePreview else{return};vault?.state.drafts.removeValue(forKey:key); try? vault?.persist() }
     func updateOutbox() { outbox = vault?.state.outbox ?? [] }
     func file(_ path:String,version:APIValue = .null) async throws -> APIBytes {
         let cacheKey=version.isNull ? path : path+"#v="+version.string
-        if !online,let vault,vault.offlineAllowed(),let data=try vault.blob(cacheKey){return APIBytes(data:data,type:"application/octet-stream",filename:nil)}
+        if !online,let vault,vault.offlineAllowed(),let data=try vault.blob(cacheKey) ?? liveVault?.blob(cacheKey){return APIBytes(data:data,type:"application/octet-stream",filename:nil)}
         let ticket=generation
         do {let file=try await transport.bytes(path);guard ticket==generation else{throw APIError.local("Přístup se změnil.")};try vault?.saveBlob(file.data,path:cacheKey);return file}
-        catch let e as APIError {if e.status==401{lock()};if e.isTransient,let vault,vault.offlineAllowed(),let data=try vault.blob(cacheKey){return APIBytes(data:data,type:"application/octet-stream",filename:nil)};throw e}
+        catch let e as APIError {if e.status==401{lock()};if e.isTransient,let vault,vault.offlineAllowed(),let data=try vault.blob(cacheKey) ?? liveVault?.blob(cacheKey){return APIBytes(data:data,type:"application/octet-stream",filename:nil)};throw e}
     }
     func push(_ action: String, extra: [String:Any] = [:]) async throws -> NativePushStatus { try await APIPushService.call(self, action:action, extra:extra) }
 }

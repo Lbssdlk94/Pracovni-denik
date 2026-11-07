@@ -130,4 +130,41 @@ final class NativeAPITests:XCTestCase {
         XCTAssertEqual(APIFixtureProtocol.requests.filter{$0.url?.path=="/api/me"}.count,1)
     }
 
+    @MainActor func testRolePreviewChangesPresentationWithoutChangingActualRoleOrPollingIdentity()async throws{
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start()
+        let realScope=store.scope,real=try XCTUnwrap(store.vault)
+        try store.setRolePreview("reader")
+        XCTAssertEqual(store.role,"reader");XCTAssertEqual(store.actualRole,"owner");XCTAssertFalse(store.manager);XCTAssertFalse(store.writer);XCTAssertTrue(store.canPreviewRoles)
+        _ = try await store.get("/api/customers")
+        XCTAssertEqual(APIFixtureProtocol.requests.last?.value(forHTTPHeaderField:"x-work-diary-preview-role"),"reader")
+        try store.setRolePreview(nil)
+        XCTAssertEqual(store.role,"owner");XCTAssertTrue(store.manager);XCTAssertTrue(store.vault === real);XCTAssertEqual(store.scope,realScope)
+        XCTAssertEqual(APIFixtureProtocol.requests.filter{$0.url?.path=="/api/me"}.count,1)
+    }
+    @MainActor func testPreviewUsesDisposableStorageAndCannotWriteOrSyncTheActualQueue()async throws{
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start();let real=try XCTUnwrap(store.vault)
+        let draft=APIDraft(value:.object(["work":.s("Skutečná rozepsaná práce")]),baseVersion:1,operationID:"real-draft",updatedAt:Date())
+        store.saveDraft("protocol:fixture-progress",draft:draft)
+        let operation=APIMutation(id:"real-queued",path:"/api/jobs/fixture-progress/service",method:"PUT",body:.object(["version":.n(1),"operationId":.s("real-queued"),"report":.object(["work":.s("Skutečná práce")])]),bytes:nil,contentType:"application/json",headers:[:],scope:store.scope,dependsOn:[],draftKey:nil)
+        try real.enqueue(operation);store.updateOutbox();let count=APIFixtureProtocol.requests.count
+        try store.setRolePreview("worker");XCTAssertTrue(store.writer);XCTAssertTrue(store.outbox.isEmpty)
+        do{_ = try await store.write(operation.path,method:"PUT",body:operation.body!,offline:true);XCTFail("Preview must not submit or enqueue")}catch{}
+        do{try await store.upload("/api/jobs/fixture-progress/service/photos/test",bytes:Data([1]),type:"image/jpeg",offline:true);XCTFail("Preview must not enqueue media")}catch{}
+        await store.sync();XCTAssertEqual(APIFixtureProtocol.requests.count,count)
+        store.saveDraft("protocol:fixture-progress",draft:APIDraft(value:.null,baseVersion:1,operationID:"preview",updatedAt:Date()))
+        store.vault!.state.drafts["preview-only"]=draft
+        try store.setRolePreview(nil)
+        XCTAssertEqual(real.state.drafts["protocol:fixture-progress"],draft);XCTAssertNil(real.state.drafts["preview-only"]);XCTAssertEqual(store.outbox.map(\.id),["real-queued"])
+    }
+    @MainActor func testOnlyActualOwnerAndAdministratorMaySelectLowerPreviewRoles()throws{
+        let store=APIStore(fixture:true);var me=APIFixtureProtocol.fixtureData()["context"]
+        for role in ["worker","reader","admin"]{me["user"]["role"] = .s(role);try store.bind(me);XCTAssertFalse(store.canPreviewRoles);XCTAssertThrowsError(try store.setRolePreview("reader"))}
+        me["user"]["role"] = .s("administrator");try store.bind(me);XCTAssertEqual(store.previewTargets,["admin","worker","reader"])
+        XCTAssertThrowsError(try store.setRolePreview("owner"));XCTAssertThrowsError(try store.setRolePreview("administrator"));try store.setRolePreview("reader");XCTAssertEqual(store.actualRole,"administrator")
+    }
+    @MainActor func testPreviewSwitchCannotDiscardAnOpenForm()throws{
+        let store=APIStore(fixture:true);try store.bind(APIFixtureProtocol.fixtureData()["context"]);store.beginEdit()
+        XCTAssertThrowsError(try store.setRolePreview("reader"));XCTAssertEqual(store.role,"owner");store.endEdit();try store.setRolePreview("reader");XCTAssertTrue(store.isRolePreview)
+    }
+
 }

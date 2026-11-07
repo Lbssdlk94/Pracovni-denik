@@ -46,6 +46,39 @@ try{
  console.log('SESSION DISCOVERY METRICS',JSON.stringify(metrics));
  if(process.env.DIARY_SESSION_BASELINE!=='1'){assert.equal(initialDiscovery.me,1);assert.equal(metrics.extraMe,0,'Routine refresh/settings/native context must not reload identity');assert.equal(metrics.extraManifest,0,'Routine work must not revalidate the full offline inventory');}
  if(process.env.DIARY_SESSION_BASELINE==='1'){await context.close();}else{
+
+ page.on('dialog',dialog=>dialog.accept());
+ await page.evaluate(async()=> (await import('/cloud.js?v=role-preview-v1')).putFormDraft('role-preview-fixture',1,{work:'Skutečný rozepsaný protokol'}));
+ const previewIdentityCounts=discoveryCounts();
+ for(const width of [390,1440]){
+  await page.setViewportSize({width,height:900});await page.locator('[data-role-preview]').selectOption('reader');
+  await page.locator('.role-preview.is-active').waitFor();
+  const view=await page.evaluate(()=>window.__workDiaryNative.execute('context'));assert.equal(view.user.role,'reader');assert.equal(view.permissions.write,false);assert.equal(view.permissions.manage,false);
+  assert.equal(await page.evaluate(async()=> (await import('/cloud.js?v=role-preview-v1')).getFormDraft('role-preview-fixture')),null,'Preview must not expose or edit the live draft');
+  assert.equal(await page.locator('[data-page="team"]').count(),0);
+  assert.equal((await db.prepare('SELECT role FROM members WHERE user_id=?').bind(people.owner.id).first()).role,'owner');
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
+  await page.evaluate(()=>{const spacer=document.createElement('div');spacer.style.height='1400px';document.querySelector('.main').append(spacer);scrollTo(0,600);});
+  const exit=page.locator('.role-preview-quick-exit [data-role-preview-exit]');const box=await exit.boundingBox();assert.ok(box&&box.y>=0&&box.y+box.height<=900,'Return to actual role must stay in the viewport');
+  await exit.click();await page.waitForFunction(()=>!document.querySelector('.role-preview.is-active'));
+  assert.equal((await page.evaluate(()=>window.__workDiaryNative.execute('context'))).user.role,'owner');
+  assert.equal((await page.evaluate(async()=> (await import('/cloud.js?v=role-preview-v1')).getFormDraft('role-preview-fixture'))).value.work,'Skutečný rozepsaný protokol');
+ }
+ await page.setViewportSize({width:390,height:844});
+ await page.locator('[data-role-preview]').selectOption('admin');await page.locator('.role-preview.is-active').waitFor();
+ await page.evaluate(()=>window.__workDiaryNative.execute('open',{jobId:'irrigation-job',action:'status'}));await page.locator('#job-status-form').waitFor();
+ await page.locator('#job-status').selectOption('in_progress');await page.locator('#job-status-form [type="submit"]').click();
+ await page.waitForFunction(()=>document.querySelector('#job-status-form')?.textContent.includes('V náhledu role'));
+ assert.equal((await db.prepare('SELECT status FROM jobs WHERE id=?').bind('irrigation-job').first()).status,'planned','Preview form must not change a real test job');
+ await page.locator('#modal [data-close]').click();
+ const beforeOffline=await page.evaluate(async()=> (await import('/cloud.js?v=role-preview-v1')).pendingSummary());
+ await context.setOffline(true);
+ const offlineDenied=await page.evaluate(async()=>{const db=await import('/cloud.js?v=role-preview-v1');try{await db.saveServiceWork('irrigation-job',{version:1,report:{work:'PREVIEW MUST NOT PERSIST'}});return false;}catch(error){return error.code==='role_preview_readonly';}});assert.equal(offlineDenied,true);
+ const afterOffline=await page.evaluate(async()=> (await import('/cloud.js?v=role-preview-v1')).pendingSummary());assert.deepEqual(afterOffline,beforeOffline);
+ await context.setOffline(false);await page.locator('.role-preview-quick-exit [data-role-preview-exit]').click();await page.waitForLoadState('networkidle');
+ assert.deepEqual(discoveryCounts(),previewIdentityCounts,'Role appearance changes must reuse the startup identity');
+ await page.evaluate(async()=> (await import('/cloud.js?v=role-preview-v1')).removeFormDraft('role-preview-fixture'));
+ console.log('PASS role appearance preview: owner -> reader/admin -> owner, visible return at 390/1440, no overflow, unchanged membership, server-backed form blocked, offline queue unchanged, no identity polling');
  const snapshot=await page.evaluate(()=>window.__workDiaryNative.execute('context'));
  assert.equal(snapshot.user.role,'owner');assert.equal(snapshot.recovery,undefined);assert.equal(snapshot.installation,undefined);assert.ok((await page.evaluate(()=>window.__nativeSignals)).includes('ready'));
  const list=await page.evaluate(()=>window.__workDiaryNative.execute('jobs',{state:'all',day:'2026-10-30'}));assert.ok(list.jobs.some(j=>j.id==='irrigation-job'));
@@ -53,7 +86,7 @@ try{
  const arbitrary=await page.evaluate(async()=>{try{await window.__workDiaryNative.execute('open',{page:'javascript:alert(1)'});return false;}catch{return true;}});assert.equal(arbitrary,true);
  await page.evaluate(()=>window.__workDiaryNative.execute('open',{jobId:'irrigation-job',action:'status'}));await page.locator('#job-status-form').waitFor();await page.locator('#job-status').selectOption('incomplete');await page.locator('#job-incomplete-reason').fill('Nativní předání formuláře – zachovat text');
  const blocked=await page.evaluate(async()=>{try{await window.__workDiaryNative.execute('context');return null;}catch(e){return e.code;}});assert.equal(blocked,'native_form_open');assert.equal(await page.locator('#job-incomplete-reason').inputValue(),'Nativní předání formuláře – zachovat text');
- page.on('dialog',d=>d.accept());await page.locator('#modal [data-close]').click();await page.evaluate(()=>window.__workDiaryNative.execute('context'));
+ await page.locator('#modal [data-close]').click();await page.evaluate(()=>window.__workDiaryNative.execute('context'));
  assert.equal((await db.prepare('SELECT status FROM jobs WHERE id=?').bind('irrigation-job').first()).status,'planned','opening/cancelling native handoff mutated a job');
  const beforeSave=discoveryCounts();
  await page.evaluate(()=>window.__workDiaryNative.execute('open',{jobId:'irrigation-job',action:'status'}));await page.locator('#job-status-form').waitFor();
@@ -70,6 +103,7 @@ try{
  const policy=await page.evaluate(()=>window.__workDiaryNative.execute('context'));assert.equal(policy.features.jobDay,false);
  assert.equal(await page.evaluate(async()=>{try{await window.__workDiaryNative.execute('jobs',{day:'2026-10-30'});return false;}catch{return true;}}),true);
  await context.close();await db.prepare("UPDATE settings SET value=json_set(value,'$.jobs',json('true')),version=version+1 WHERE key='features'").run();actor=people.worker;({context,page}=await nativePage());
+ assert.equal(await page.locator('[data-role-preview]').count(),0,'Actual worker must not receive the preview selector');
  const workerSnapshot=await page.evaluate(()=>window.__workDiaryNative.execute('context'));assert.equal(workerSnapshot.user.role,'worker');assert.equal(workerSnapshot.permissions.manage,false);
  const own=await page.evaluate(()=>window.__workDiaryNative.execute('jobs',{state:'all'}));assert.deepEqual(own.jobs.map(j=>j.id),['irrigation-job']);
  const denied=await page.evaluate(async()=>{try{await window.__workDiaryNative.execute('job',{id:'garden-job'});return 200;}catch(e){return e.status;}});assert.equal(denied,404);

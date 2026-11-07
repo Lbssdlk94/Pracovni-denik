@@ -19,11 +19,11 @@ struct APIRoot:View {
                     if store.enabled("attendance"){NavigationStack{APIAttendanceView(store:store)}.tabItem{Label("Docházka",systemImage:"clock")}.tag(2)}
                     if store.enabled("customers"){NavigationStack{APIResourceList(store:store,resource:APIResource(entity:.customers))}.tabItem{Label("Zákazníci",systemImage:"person.crop.rectangle")}.tag(3)}
                     NavigationStack{APIMore(store:store)}.tabItem{Label("Více",systemImage:"ellipsis")}.tag(4)
-                }.id(store.scope)
+                }.id(store.presentationID)
             }else{APILogin(store:store)}
             if scenePhase != .active{DiaryStyle.background.ignoresSafeArea().overlay{Text("Pracovní deník").font(.title2.bold())}}
         }.tint(DiaryStyle.accent)
-            .safeAreaInset(edge:.top,spacing:0){if store.authenticated && (!store.online || !store.outbox.isEmpty){Button{outbox=true}label:{HStack{Image(systemName:store.online ? "arrow.triangle.2.circlepath" : "wifi.slash");Text(store.online ? "\(store.outbox.count) neodeslaných změn" : "Offline · změny zůstávají v iPhonu").font(.caption);Spacer();Image(systemName:"chevron.right")}.padding(12).background(DiaryStyle.soft)}}}
+            .safeAreaInset(edge:.top,spacing:0){VStack(spacing:0){if store.authenticated && store.isRolePreview{APIRolePreviewBanner(store:store)};if store.authenticated && !store.isRolePreview && (!store.online || !store.outbox.isEmpty){Button{outbox=true}label:{HStack{Image(systemName:store.online ? "arrow.triangle.2.circlepath" : "wifi.slash");Text(store.online ? "\(store.outbox.count) neodeslaných změn" : "Offline · změny zůstávají v iPhonu").font(.caption);Spacer();Image(systemName:"chevron.right")}.padding(12).background(DiaryStyle.soft)}}}}
             .safeAreaInset(edge:.bottom){if store.authenticated,let error=store.error {Text(error).font(.caption).padding(8).background(.regularMaterial).onTapGesture{store.error=nil}}}
             .sheet(item:$store.route){route in
                 Group{
@@ -91,7 +91,10 @@ struct APIOverview:View {
 }
 struct APIHeader:ToolbarContent {
     @ObservedObject var store:APIStore
-    var body:some ToolbarContent{ToolbarItem(placement:.topBarTrailing){if store.enabled("notifications"){NavigationLink{APIResourceList(store:store,resource:APIResource(entity:.notifications))}label:{Image(systemName:"bell")}.accessibilityLabel("Upozornění")}}}
+    var body:some ToolbarContent{
+        ToolbarItem(placement:.topBarTrailing){if store.canPreviewRoles{APIRolePreviewPicker(store:store)}}
+        ToolbarItem(placement:.topBarTrailing){if store.enabled("notifications"){NavigationLink{APIResourceList(store:store,resource:APIResource(entity:.notifications))}label:{Image(systemName:"bell")}.accessibilityLabel("Upozornění")}}
+    }
 }
 struct APIJobsScreen:View {
     @ObservedObject var store:APIStore
