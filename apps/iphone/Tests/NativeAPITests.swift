@@ -63,4 +63,71 @@ final class NativeAPITests:XCTestCase {
         XCTAssertThrowsError(try APIProtocolPDF.make(snapshot:.null,report:report.merged(["workCharges":.object(["hours":.number(1e300)])])))
     }
 
+    @MainActor func testPermissionsAreDiscoveredOnlyOncePerAppLaunch()async throws{
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true)
+        await store.start();XCTAssertTrue(store.authenticated)
+        let permissions=store.me,scope=store.scope,verifiedAt=store.vault!.state.verifiedAt
+        APIFixtureProtocol.forcedStatus["/api/me"]=503
+        await store.start();await store.restore();await store.resume();await store.resume()
+        _ = try await store.get("/api/customers")
+        _ = try await store.write("/api/jobs/fixture-progress/status",method:"PATCH",body:.object(["version":.n(1),"status":.s("in_progress")]))
+        XCTAssertEqual(APIFixtureProtocol.requests.filter{$0.url?.path=="/api/me"}.count,1)
+        XCTAssertEqual(store.me,permissions);XCTAssertEqual(store.scope,scope);XCTAssertEqual(store.vault!.state.verifiedAt,verifiedAt)
+        XCTAssertTrue(store.authenticated)
+    }
+    @MainActor func testQueuedSyncAndWatchRefreshDoNotRediscoverPermissions()async throws{
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start()
+        APIFixtureProtocol.forcedStatus["/api/me"]=503;store.online=false
+        _ = try await store.write("/api/jobs/fixture-progress/service",method:"PUT",body:.object(["version":.n(1),"operationId":.s("startup-only-report"),"report":.object(["work":.s("Kontrola")])]),offline:true,operationID:"startup-only-report")
+        XCTAssertEqual(store.outbox.count,1);await store.resume();XCTAssertTrue(store.outbox.isEmpty)
+        let input=try XCTUnwrap(JSONSerialization.jsonObject(with:JSONEncoder().encode(WatchRequest.refresh())) as? [String:Any])
+        let reply=try await APIWatchService.execute(store,input:input)
+        XCTAssertNotNil(reply.snapshot)
+        XCTAssertEqual(APIFixtureProtocol.requests.filter{$0.url?.path=="/api/me"}.count,1)
+    }
+    @MainActor func testNewAppInstanceLoadsChangedPermissions()async throws{
+        APIFixtureProtocol.reset();let first=APIStore(fixture:true);await first.start();XCTAssertTrue(first.manager)
+        var changed=first.me;changed["user"]["role"] = .s("worker");changed["permissions"]["manage"] = .bool(false)
+        APIFixtureProtocol.records["/api/me"]=changed
+        await first.resume();XCTAssertTrue(first.manager)
+        let next=APIStore(fixture:true);await next.start()
+        XCTAssertEqual(next.role,"worker");XCTAssertFalse(next.manager);XCTAssertNotEqual(first.scope,next.scope)
+        XCTAssertEqual(APIFixtureProtocol.requests.filter{$0.url?.path=="/api/me"}.count,2)
+    }
+    @MainActor func testServerPermissionDenialStillBlocksQueuedMutation()async throws{
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start()
+        APIFixtureProtocol.forcedStatus["/api/jobs/fixture-progress/service"]=403
+        do{_ = try await store.write("/api/jobs/fixture-progress/service",method:"PUT",body:.object(["version":.n(1),"operationId":.s("denied-report"),"report":.object(["work":.s("Soukromý koncept")])]),offline:true,operationID:"denied-report");XCTFail("Server denial must not look like a successful save")}catch{}
+        XCTAssertTrue(store.authenticated);XCTAssertEqual(store.outbox.first?.state,"blocked")
+        XCTAssertEqual(store.outbox.first?.body?["report"]["work"],.s("Soukromý koncept"))
+        XCTAssertEqual(APIFixtureProtocol.requests.filter{$0.url?.path=="/api/me"}.count,1)
+    }
+    @MainActor func testExpiredServerSessionPreservesUnsentQueueAndDoesNotAutomaticallyRelogin()async throws{
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start();let local=try XCTUnwrap(store.vault)
+        let draft=APIDraft(value:.object(["work":.s("Neodeslaná práce")]),baseVersion:1,operationID:"expired-report",updatedAt:Date())
+        store.saveDraft("protocol:fixture-progress",draft:draft)
+        APIFixtureProtocol.forcedStatus["/api/jobs/fixture-progress/service"]=401
+        do{_ = try await store.write("/api/jobs/fixture-progress/service",method:"PUT",body:.object(["version":.n(1),"operationId":.s("expired-report"),"report":draft.value]),offline:true,draftKey:"protocol:fixture-progress",operationID:"expired-report");XCTFail("An expired session cannot acknowledge queued work")}catch{}
+        XCTAssertFalse(store.authenticated);XCTAssertEqual(local.state.outbox.count,1);XCTAssertEqual(local.state.drafts["protocol:fixture-progress"],draft)
+        await store.resume();await store.start()
+        XCTAssertEqual(APIFixtureProtocol.requests.filter{$0.url?.path=="/api/me"}.count,1)
+    }
+    @MainActor func testDirectWriteHonorsExpiredSessionWithoutPermissionsPreflight()async throws{
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start()
+        APIFixtureProtocol.forcedStatus["/api/jobs/fixture-progress/status"]=401
+        do{_ = try await store.write("/api/jobs/fixture-progress/status",method:"PATCH",body:.object(["version":.n(1),"status":.s("done")]));XCTFail("Server authentication must remain authoritative")}catch{}
+        XCTAssertFalse(store.authenticated)
+        XCTAssertEqual(APIFixtureProtocol.requests.filter{$0.url?.path=="/api/me"}.count,1)
+    }
+    @MainActor func testLongRunningOnlineSessionCanSyncWithoutExtendingOfflinePermissionLease()async throws{
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start()
+        let expired=Date().addingTimeInterval(-86500);store.vault!.state.verifiedAt=expired
+        _ = try await store.write("/api/jobs/fixture-progress/service",method:"PUT",body:.object(["version":.n(1),"operationId":.s("online-expired-offline-lease"),"report":.object(["work":.s("Online uložená práce")])]),offline:true,operationID:"online-expired-offline-lease")
+        XCTAssertTrue(store.outbox.isEmpty);XCTAssertEqual(store.vault!.state.verifiedAt,expired)
+        store.online=false
+        do{_ = try await store.write("/api/jobs/fixture-next/service",method:"PUT",body:.object(["version":.n(1),"report":.object(["work":.s("Neověřená offline práce")])]),offline:true,operationID:"denied-expired-offline");XCTFail("The offline lease must not be extended by data refreshes")}catch{}
+        XCTAssertTrue(store.outbox.isEmpty)
+        XCTAssertEqual(APIFixtureProtocol.requests.filter{$0.url?.path=="/api/me"}.count,1)
+    }
+
 }

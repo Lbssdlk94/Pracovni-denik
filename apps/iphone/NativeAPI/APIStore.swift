@@ -24,6 +24,7 @@ final class APIStore: ObservableObject {
     private(set) var generation = 0
     private let monitor = NWPathMonitor()
     private var activeScope: String?
+    private var started = false
     var userID: String { me["user"]["id"].string }
     var role: String { me["user"]["role"].string }
     var manager: Bool { me["permissions"]["manage"].bool }
@@ -63,9 +64,16 @@ final class APIStore: ObservableObject {
         if !fixture { UserDefaults.standard.set(next, forKey:"native-api-last-scope:" + transport.origin.host!) }
         updateOutbox()
     }
+    // Role/module discovery belongs to process startup or an explicit account,
+    // installation or discipline change, never to routine data refreshes.
+    func start() async {
+        guard !started else { return }
+        started = true
+        await restore()
+    }
     func restore() async {
-        guard !busy else { return }; busy = true; defer { busy = false }
-        do { try bind(await transport.request("/api/me")); error = nil; await sync() }
+        guard !busy, !authenticated else { return }; busy = true; defer { busy = false }
+        do { try bind(await transport.request("/api/me")); online = true; error = nil; await sync() }
         catch let e as APIError {
             if e.code == "password_change_required" { needsPasswordChange = true }
             else if e.isTransient, let last = UserDefaults.standard.string(forKey:"native-api-last-scope:" + transport.origin.host!), let local = try? APIVault(scope:last), local.offlineAllowed() {
@@ -74,10 +82,13 @@ final class APIStore: ObservableObject {
         } catch { self.error = error.localizedDescription }
     }
     func resume() async {
-        guard authenticated else { await restore(); return }
-        do { try bind(await transport.request("/api/me")); online = true;error=nil;await sync(); revision = UUID() }
-        catch let e as APIError { if [401,403].contains(e.status) || (e.isTransient && vault?.offlineAllowed() != true) { lock() }; if e.isTransient { online=false }; error = e.message }
-        catch { self.error = error.localizedDescription }
+        guard authenticated else { return }
+        // Retry queued work and refresh visible data. Every actual resource
+        // request is still authorized by the server; no /api/me preflight.
+        online = true
+        error = nil
+        await sync()
+        if authenticated { revision = UUID() }
     }
     func login(username: String, password: String) async {
         guard !busy else { return }; busy = true; defer { busy = false }
@@ -126,39 +137,43 @@ final class APIStore: ObservableObject {
     }
     func write(_ path: String, method: String, body: APIValue, offline: Bool = false, draftKey: String? = nil, operationID: String? = nil, dependsOn: [String] = []) async throws -> APIValue {
         guard authenticated, let vault else { throw APIError.local("Nejdříve se přihlaste.") }
+        let ticket = generation
         if offline && enabled("offline") {
-            guard writer,enabled("offline"), vault.offlineAllowed() else { throw APIError.local("Platnost offline přístupu vyžaduje ověření.") }
+            guard writer, online || vault.offlineAllowed() else { throw APIError.local("Platnost offline přístupu vyžaduje nové spuštění s připojením.") }
             var op = APIMutation(id:operationID ?? UUID().uuidString,path:path,method:method,body:body,bytes:nil,contentType:"application/json",headers:[:],scope:scope,dependsOn:dependsOn,draftKey:draftKey)
             op.draftSnapshot = draftKey.flatMap { vault.state.drafts[$0]?.value }
             try vault.enqueue(op); updateOutbox(); if online { await sync() }
+            guard authenticated, ticket == generation else { throw APIError.local("Přístup už není platný nebo se změnil účet. Neodeslaná práce zůstává zabezpečená.") }
             if let current = self.vault?.state.outbox.first(where: { $0.id == op.id }), current.state != "pending" { throw APIError(status:409,code:current.state,message:current.error) }
             revision = UUID(); return .object(["queued":.bool(self.vault?.state.outbox.contains(where: { $0.id == op.id }) == true)])
         }
         guard online else { throw APIError.local("Tuto změnu potvrďte s připojením. Koncept zůstává uložený.") }
-        let ticket = generation; try bind(await transport.request("/api/me"))
-        guard ticket == generation else { throw APIError.local("Oprávnění se změnila. Zkontrolujte rozepsané údaje.") }
-        let result = try await transport.request(path,method:method,body:body)
-        applyAcknowledgement(path:path,result:result)
+        let result: APIValue
+        do { result = try await transport.request(path,method:method,body:body) }
+        catch let e as APIError { if e.status == 401, ticket == generation { lock() }; throw e }
         guard ticket == generation else { throw APIError.local("Účet se změnil.") }
+        applyAcknowledgement(path:path,result:result)
         if let draftKey { self.vault?.state.drafts.removeValue(forKey:draftKey) }
         try self.vault?.persist(); revision = UUID(); return result
     }
     func upload(_ path: String, bytes: Data, type: String, headers: [String:String] = [:], offline: Bool = false, id: String = UUID().uuidString, draftKey:String?=nil) async throws {
         guard authenticated else { throw APIError.local("Nejdříve se přihlaste.") }
+        let ticket = generation
         if offline && enabled("offline"), let vault {
-            guard writer,enabled("offline"),vault.offlineAllowed() else { throw APIError.local("Offline přístup vyžaduje ověření.") }
-            var op=APIMutation(id:id,path:path,method:"PUT",body:nil,bytes:bytes,contentType:type,headers:headers,scope:scope,dependsOn:[],draftKey:draftKey);op.draftSnapshot=draftKey.flatMap{vault.state.drafts[$0]?.value};try vault.enqueue(op);updateOutbox();if online{await sync()};if let current=self.vault?.state.outbox.first(where:{$0.id==id}),current.state != "pending"{throw APIError(status:409,code:current.state,message:current.error)};return
+            guard writer, online || vault.offlineAllowed() else { throw APIError.local("Offline přístup vyžaduje nové spuštění s připojením.") }
+            var op=APIMutation(id:id,path:path,method:"PUT",body:nil,bytes:bytes,contentType:type,headers:headers,scope:scope,dependsOn:[],draftKey:draftKey);op.draftSnapshot=draftKey.flatMap{vault.state.drafts[$0]?.value};try vault.enqueue(op);updateOutbox();if online{await sync()};guard authenticated,ticket==generation else{throw APIError.local("Přístup už není platný nebo se změnil účet. Neodeslaná příloha zůstává zabezpečená.")};if let current=self.vault?.state.outbox.first(where:{$0.id==id}),current.state != "pending"{throw APIError(status:409,code:current.state,message:current.error)};return
         }
         guard online else { throw APIError.local("Nahrání souboru vyžaduje připojení.") }
-        _ = try await transport.bytes(path,method:"PUT",data:bytes,type:type,headers:headers); revision = UUID()
+        do { _ = try await transport.bytes(path,method:"PUT",data:bytes,type:type,headers:headers) }
+        catch let e as APIError { if e.status == 401,ticket == generation { lock() }; throw e }
+        guard ticket == generation else { throw APIError.local("Účet se změnil.") }
+        revision = UUID()
     }
     func sync() async {
         guard !syncing, online, let local = vault, !local.state.outbox.isEmpty else { return }
         let initialIDs=Set(local.state.outbox.map(\.id))
         syncing = true; defer {syncing=false;updateOutbox();if online,local.scope==scope,local.state.outbox.contains(where:{$0.state=="pending" && !initialIDs.contains($0.id)}){Task{await self.sync()}}}
         let ticket = generation
-        do { try bind(await transport.request("/api/me")) } catch { if let e = error as? APIError, [401,403].contains(e.status) { lock() }; self.error = error.localizedDescription; return }
-        guard ticket == generation, local.scope == scope else { error = "Oprávnění se změnila. Původní neodeslané změny zůstaly zabezpečené."; return }
         for op in local.state.outbox where op.state == "pending" {
             guard generation == ticket, op.scope == scope,online else { return }
             if op.dependsOn.contains(where: { dependency in local.state.outbox.contains { $0.id == dependency } }) { continue }
@@ -175,6 +190,7 @@ final class APIStore: ObservableObject {
                 }
                 try local.persist();if let key=op.binaryKey{local.removeBlob(key)}; revision = UUID()
             } catch let e as APIError {
+                guard generation == ticket else { return }
                 if e.status == 401 { lock(); return };if e.status==0 && e.code=="connection"{online=false;return}
                 if !e.isTransient, let index = local.state.outbox.firstIndex(where: { $0.id == op.id }) {
                     local.state.outbox[index].state = e.status == 409 ? "conflict" : "blocked"; local.state.outbox[index].error = e.message; try? local.persist()

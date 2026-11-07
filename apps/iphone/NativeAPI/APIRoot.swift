@@ -45,7 +45,8 @@ struct APIRoot:View {
             .onChange(of:scenePhase){_,phase in if phase == .active{Task{await store.resume();await push.refresh()}}else{try? store.vault?.persist()}}
             .onChange(of:store.scope){_,_ in outbox=false;inbox=false;followUp=nil;push.invalidatePresentation();watch.invalidate()}
             .task{
-                await store.restore();push.attach(store);watch.attach(store);await push.refresh()
+                await store.start();push.attach(store);watch.attach(store);await push.refresh()
+                // Keep work data current; resume does not rediscover permissions.
                 while !Task.isCancelled{do{try await Task.sleep(for:.seconds(45));try Task.checkCancellation()}catch{break};if scenePhase == .active{await store.resume()}}
             }
     }

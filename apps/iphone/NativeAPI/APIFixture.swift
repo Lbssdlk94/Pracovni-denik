@@ -18,7 +18,7 @@ final class APIFixtureProtocol:URLProtocol {
         if let status=forcedStatus[path]{return json(.object(["error":.s("Isolated fixture \(status)")]),status)}
         func body()->APIValue{var data=request.httpBody;if data==nil,let stream=request.httpBodyStream{stream.open();defer{stream.close()};var bytes=Data();var buffer=[UInt8](repeating:0,count:4096);while stream.hasBytesAvailable{let n=stream.read(&buffer,maxLength:buffer.count);if n<=0{break};bytes.append(buffer,count:n)};data=bytes};return (try? JSONDecoder().decode(APIValue.self,from:data ?? Data())) ?? .null}
         let fixture=fixtureData(),me=fixture["context"].merged(["installation":.object(["id":.s("native-fixture"),"name":.s("Dr. Závlaha"),"version":.n(1)]),"license":.null])
-        if path=="/api/me"{return json(me)}
+        if path=="/api/me"{return json(records[path] ?? me)}
         if path=="/api/auth/login"{let b=body();if b["preview"].bool{return json(.object(["userId":.s("fixture-owner"),"credentialVersion":.n(1)]))};return(200,try! APIValue.object(["mustChange":.bool(false)]).data(),["Content-Type":"application/json","Set-Cookie":"__Host-zavlahy-access=fixture; Path=/; Secure; HttpOnly; SameSite=Lax"])}
         if path=="/api/auth/account"{return json(.object(["username":.s("fixture"),"version":.n(1)]))}
         if path=="/api/notifications/native/config"{return json(.object(["configured":.bool(false),"registered":.bool(false),"enabled":.bool(false),"userId":.s("fixture-owner")]))}
