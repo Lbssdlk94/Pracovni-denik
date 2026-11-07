@@ -1,6 +1,6 @@
 # Načtení oprávnění pouze při spuštění
 
-Požadavek: přihlášený pracovník nemá během běžného používání opakovaně načítat role a dostupné moduly. Jde o nativního klienta iPhone 0.8; web ani serverová pravidla se nemění.
+Požadavek: přihlášený pracovník nemá během běžného používání opakovaně načítat role a dostupné moduly. Tato část popisuje nativního klienta iPhone 0.8. Následná uživatelem upřesněná optimalizace obou webů je v [samostatném přehledu](WEB-SESSION-PERFORMANCE-2026-11-07.md); serverová pravidla se nemění.
 
 ## Chování
 
