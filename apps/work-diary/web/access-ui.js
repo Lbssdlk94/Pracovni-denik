@@ -1,4 +1,4 @@
-import {createPasswordUI} from './local-auth-ui.js?v=local-auth-v1';
+import {createPasswordUI} from './local-auth-ui.js?v=session-startup-v1';
 import {DEFAULT_APP_NAME} from './app-brand.js?v=app-brand-v2';
 export function createAccessUI({app,esc,db,onReady,onBeforeSwitch=async()=>{}}){
  const brand=()=>`<img src="./logo-dr-zavlaha.jpg" alt="${esc(DEFAULT_APP_NAME)}"><h1>${esc(DEFAULT_APP_NAME)}</h1>`;

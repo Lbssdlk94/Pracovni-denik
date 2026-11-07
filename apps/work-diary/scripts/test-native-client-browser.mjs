@@ -1,13 +1,14 @@
 // Full application + real local Worker/D1/R2. All identities/data are synthetic.
 import assert from 'node:assert/strict';import {createServer} from 'node:http';import {readFileSync,mkdirSync} from 'node:fs';import {createRequire} from 'node:module';import {Miniflare} from 'miniflare';
 const require=createRequire(import.meta.url);let chromium;try{({chromium}=require('playwright'));}catch{({chromium}=createRequire('/opt/codex/runtimes/codex-primary-runtime/dependencies/node/node_modules/package.json')('playwright'));}
-const bakedInstallation=JSON.parse(readFileSync('dist/server/index.js','utf8').match(/const EXPECTED_INSTALLATION_ID=(null|"[^"]+");/)?.[1]||'null');
+const workerSource=process.env.DIARY_TEST_WORKER||'dist/server/index.js';
+const bakedInstallation=JSON.parse(readFileSync(workerSource,'utf8').match(/const EXPECTED_INSTALLATION_ID=(null|"[^"]+");/)?.[1]||'null');
 const installation=bakedInstallation||'inst-ui-isolated-123456789',people={owner:{id:'owner-ui',email:'owner@ui.test'},worker:{id:'worker-ui',email:'worker@ui.test'},gardenWorker:{id:'garden-worker-ui',email:'garden@ui.test'}};
-let actor=people.owner,mf,browser,server;const origin='http://127.0.0.1';
+const apiRequests=[];let actor=people.owner,mf,browser,server;const origin='http://127.0.0.1';
 const headers=(person=people.owner)=>({'oai-authenticated-user-id':person.id,'oai-authenticated-user-email':person.email,'x-zavlahy-request':'1','x-workspace-client-version':'shared-directory-v1','content-type':'application/json'});
 async function call(path,method='GET',value,person=people.owner){const response=await mf.dispatchFetch('http://ui.test'+path,{method,headers:headers(person),...(value===undefined?{}:{body:JSON.stringify(value)})});assert.equal(response.status,200,await response.clone().text());return response.json();}
 try{
- mf=new Miniflare({modules:true,scriptPath:'dist/server/index.js',compatibilityDate:'2026-08-06',d1Databases:{DB:'workspace-ui-isolated'},r2Buckets:['BUCKET'],bindings:{TEAM_OWNER_EMAIL:people.owner.email,INSTALLATION_ID:installation,DRIVE_TOKEN_ENCRYPTION_KEY:Buffer.alloc(32,17).toString('base64url')}});
+ mf=new Miniflare({modules:true,scriptPath:workerSource,compatibilityDate:'2026-08-06',d1Databases:{DB:'workspace-ui-isolated'},r2Buckets:['BUCKET'],bindings:{TEAM_OWNER_EMAIL:people.owner.email,INSTALLATION_ID:installation,DRIVE_TOKEN_ENCRYPTION_KEY:Buffer.alloc(32,17).toString('base64url')}});
  const db=await mf.getD1Database('DB');for(const entry of JSON.parse(readFileSync('drizzle/meta/_journal.json')).entries)for(const sql of readFileSync('drizzle/'+entry.tag+'.sql','utf8').split('--> statement-breakpoint'))if(sql.trim())await db.prepare(sql).run();
  await db.prepare("UPDATE installation_state SET instance_id=? WHERE singleton='primary'").bind(installation).run();await call('/api/me');
  for(const role of ['worker','gardenWorker']){await call('/api/invitations','POST',{email:people[role].email,role:'worker'});await call('/api/me','GET',undefined,people[role]);}
@@ -23,12 +24,28 @@ try{
  await db.prepare("UPDATE jobs SET discipline=CASE WHEN id='garden-job' THEN 'garden' ELSE 'irrigation' END").run();
  for(const key of ['features','workspace:garden-org:features'])await db.prepare('INSERT INTO settings(key,value,version) VALUES(?,?,1)').bind(key,JSON.stringify({notifications:false,location:false,zoneManagement:false,shafts:false,plans:false})).run();
  await db.prepare("UPDATE workspaces SET state='active'").run();await call('/api/me');await call('/api/workspace/recovery/setup','POST',{});
- server=createServer(async(req,res)=>{try{const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=Buffer.concat(chunks),h=new Headers(req.headers);h.set('oai-authenticated-user-id',actor.id);h.set('oai-authenticated-user-email',actor.email);const url='http://127.0.0.1:'+server.address().port+req.url;const response=await mf.dispatchFetch(url,{method:req.method,headers:h,...(['GET','HEAD'].includes(req.method)?{}:{body})});res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));}catch(error){res.statusCode=500;res.end(error.message);}});
+ server=createServer(async(req,res)=>{try{const chunks=[];for await(const chunk of req)chunks.push(chunk);const body=Buffer.concat(chunks),h=new Headers(req.headers);h.set('oai-authenticated-user-id',actor.id);h.set('oai-authenticated-user-email',actor.email);const url='http://127.0.0.1:'+server.address().port+req.url;if(new URL(url).pathname.startsWith('/api/'))apiRequests.push({path:new URL(url).pathname,method:req.method});const response=await mf.dispatchFetch(url,{method:req.method,headers:h,...(['GET','HEAD'].includes(req.method)?{}:{body})});res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));}catch(error){res.statusCode=500;res.end(error.message);}});
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const base=origin+':'+server.address().port;
  browser=await chromium.launch({executablePath:'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
  const nativeSignals=[];
  async function nativePage(){const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'block'});await context.addInitScript(()=>{window.__nativeSignals=[];window.webkit={messageHandlers:{workDiaryState:{postMessage:value=>{window.__nativeSignals.push(value.type);window.__recordNativeSignal(value.type);}}}};});const page=await context.newPage();await page.exposeFunction('__recordNativeSignal',type=>nativeSignals.push(type));await page.goto(base);await page.locator('.shell').waitFor();await page.waitForFunction(()=>!!window.__workDiaryNative);return {context,page};}
  let {context,page}=await nativePage();
+ await page.waitForLoadState('networkidle');
+ const discoveryCounts=()=>({me:apiRequests.filter(r=>r.path==='/api/me').length,manifest:apiRequests.filter(r=>r.path==='/api/workspace/manifest').length});
+ const initialDiscovery=discoveryCounts(),measureStart=performance.now();
+ for(let i=0;i<3;i++)await page.evaluate(()=>window.__workDiaryNative.execute('context'));
+ await page.evaluate(()=>{const button=document.querySelector('[data-page="settings"]');if(!button)throw Error('Missing settings navigation');button.click();});
+ await page.locator('.settings-workspace').waitFor();
+ await page.evaluate(()=>window.__workDiaryNative.execute('open',{page:'home'}));
+ await page.locator('[data-action="sync"]').waitFor();
+ await page.evaluate(()=>{document.querySelector('.top-status').title='Čekám na testované obnovení';document.querySelector('[data-action="sync"]').click();});
+ await page.waitForFunction(()=>{const text=document.querySelector('.top-status')?.title||'';return text==='Spojení obnoveno'||text.startsWith('Čeká ');});
+ await page.waitForLoadState('networkidle');
+ const afterDiscovery=discoveryCounts();
+ const metrics={initialDiscovery,extraMe:afterDiscovery.me-initialDiscovery.me,extraManifest:afterDiscovery.manifest-initialDiscovery.manifest,scenarioMs:Math.round(performance.now()-measureStart)};
+ console.log('SESSION DISCOVERY METRICS',JSON.stringify(metrics));
+ if(process.env.DIARY_SESSION_BASELINE!=='1'){assert.equal(initialDiscovery.me,1);assert.equal(metrics.extraMe,0,'Routine refresh/settings/native context must not reload identity');assert.equal(metrics.extraManifest,0,'Routine work must not revalidate the full offline inventory');}
+ if(process.env.DIARY_SESSION_BASELINE==='1'){await context.close();}else{
  const snapshot=await page.evaluate(()=>window.__workDiaryNative.execute('context'));
  assert.equal(snapshot.user.role,'owner');assert.equal(snapshot.recovery,undefined);assert.equal(snapshot.installation,undefined);assert.ok((await page.evaluate(()=>window.__nativeSignals)).includes('ready'));
  const list=await page.evaluate(()=>window.__workDiaryNative.execute('jobs',{state:'all',day:'2026-10-30'}));assert.ok(list.jobs.some(j=>j.id==='irrigation-job'));
@@ -38,18 +55,26 @@ try{
  const blocked=await page.evaluate(async()=>{try{await window.__workDiaryNative.execute('context');return null;}catch(e){return e.code;}});assert.equal(blocked,'native_form_open');assert.equal(await page.locator('#job-incomplete-reason').inputValue(),'Nativní předání formuláře – zachovat text');
  page.on('dialog',d=>d.accept());await page.locator('#modal [data-close]').click();await page.evaluate(()=>window.__workDiaryNative.execute('context'));
  assert.equal((await db.prepare('SELECT status FROM jobs WHERE id=?').bind('irrigation-job').first()).status,'planned','opening/cancelling native handoff mutated a job');
- await db.prepare("UPDATE settings SET value=json_set(value,'$.jobDay',json('false'),'$.jobList',json('true')),version=version+1 WHERE key='features'").run();
- const beforeSignals=nativeSignals.length;await page.evaluate(()=>{window.__workDiaryNative.execute('context').catch(()=>{});});
- for(let attempt=0;attempt<100&&!nativeSignals.slice(beforeSignals).includes('invalidated');attempt++)await new Promise(resolve=>setTimeout(resolve,100));
- assert.ok(nativeSignals.slice(beforeSignals).includes('invalidated'),'reducing modules must invalidate native views even during document replacement');
+ const beforeSave=discoveryCounts();
+ await page.evaluate(()=>window.__workDiaryNative.execute('open',{jobId:'irrigation-job',action:'status'}));await page.locator('#job-status-form').waitFor();
+ await page.locator('#job-status').selectOption('in_progress');await page.locator('#job-status-form [type="submit"]').click();
+ await page.waitForFunction(()=>!document.querySelector('#modal').open);
+ assert.equal((await db.prepare('SELECT status FROM jobs WHERE id=?').bind('irrigation-job').first()).status,'in_progress');
+ assert.deepEqual(discoveryCounts(),beforeSave,'A real saved status change must not recheck identity or the complete offline inventory');
+ await db.prepare("UPDATE settings SET value=json_set(value,'$.jobDay',json('false'),'$.jobList',json('true'),'$.jobs',json('false')),version=version+1 WHERE key='features'").run();
+ const cachedContext=await page.evaluate(()=>window.__workDiaryNative.execute('context'));
+ assert.equal(cachedContext.features.jobDay,true,'Role/module discovery remains the startup snapshot');
+ const serverDenied=await page.evaluate(async()=>{try{await window.__workDiaryNative.execute('jobs',{day:'2026-10-30'});return 200;}catch(e){return e.status;}});
+ assert.equal(serverDenied,403,'The server must enforce the current module restriction even before restarting the client');
  await context.close();({context,page}=await nativePage());
  const policy=await page.evaluate(()=>window.__workDiaryNative.execute('context'));assert.equal(policy.features.jobDay,false);
  assert.equal(await page.evaluate(async()=>{try{await window.__workDiaryNative.execute('jobs',{day:'2026-10-30'});return false;}catch{return true;}}),true);
- await context.close();actor=people.worker;({context,page}=await nativePage());
+ await context.close();await db.prepare("UPDATE settings SET value=json_set(value,'$.jobs',json('true')),version=version+1 WHERE key='features'").run();actor=people.worker;({context,page}=await nativePage());
  const workerSnapshot=await page.evaluate(()=>window.__workDiaryNative.execute('context'));assert.equal(workerSnapshot.user.role,'worker');assert.equal(workerSnapshot.permissions.manage,false);
  const own=await page.evaluate(()=>window.__workDiaryNative.execute('jobs',{state:'all'}));assert.deepEqual(own.jobs.map(j=>j.id),['irrigation-job']);
  const denied=await page.evaluate(async()=>{try{await window.__workDiaryNative.execute('job',{id:'garden-job'});return 200;}catch(e){return e.status;}});assert.equal(denied,404);
  await page.evaluate(()=>window.__workDiaryNative.execute('open',{page:'materials'}));await page.locator('#materials').waitFor();assert.equal(await page.locator('#material-new').isVisible(),false,'worker must not manage catalog items');
  await context.setOffline(true);await page.waitForFunction(()=>window.__nativeSignals.includes('invalidated'));assert.equal(await page.evaluate(async()=>{try{await window.__workDiaryNative.execute('context');return false;}catch{return true;}}),true);
  await context.close();console.log('PASS native bridge + real isolated Worker/D1/R2: scoped lists/details, no private recovery metadata, feature-disabled day rejected, arbitrary navigation rejected, form text preserved, cancel creates no write, assigned worker cannot read other department, can read materials without catalog management, offline invalidates native snapshots.');
+}
 }finally{await browser?.close();if(server){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}await mf?.dispose();}
