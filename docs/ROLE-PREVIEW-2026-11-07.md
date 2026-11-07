@@ -32,3 +32,10 @@ Izolovaný SQLite/D1/R2 a skutečný Chromium:
 - webová sada `npm test`, kontrola whitespace a 17 Python testů sestavování/podepisování iPhone.
 
 SwiftUI má přidané čtyři unit testy a UI test přepnutí/vrácení. Linux nemá Xcode; syntaktická kontrola parserem není kompilace. Existující parserové chyby u tří velkých původních Swift souborů jsou stejné i v základní revizi. Aktuální sestavení a testy simulátoru je nutné potvrdit přes GitHub Actions; předchozí běh blokovalo účtování GitHubu. Nejde o vydanou novou IPA.
+
+## Nasazení a stav nativního sestavení
+
+- Dr. Závlaha: verze 123, zdroj `4b6221e3c761000d75f6c667091f7ee15d42eb3c`, nasazení uspělo.
+- Dr. Garden: verze 43, zdroj `cfb3b32bed2db2a157916a24895c03a623b49dda`, nasazení uspělo.
+- GitHub zdroj: `c91223bb7440c916a0173bbe3675b569d2e5bbf5`.
+- Nový [nativní běh 42409025198](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/42409025198) skončil před prvním krokem. Anotace kontrolního běhu 128512899207: „The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings.“ Nová IPA ani výsledek Xcode testů proto nejsou k dispozici. Návrh zůstává v draft PR #4.
