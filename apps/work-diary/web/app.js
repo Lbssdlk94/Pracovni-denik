@@ -331,7 +331,7 @@ app.addEventListener('input',e=>{if(e.target.id==='search'){searchQuery=e.target
 for(const id of ['camera-input','photo-input'])document.getElementById(id).addEventListener('change',async e=>{await openPhoto(e.target.files[0]);e.target.value='';});
 document.querySelector('#backup-input').addEventListener('change',async e=>{try{await importBackup(e.target.files[0]);}catch(error){report(error);}finally{e.target.value='';}});
 window.addEventListener('beforeunload',e=>{if(dirty||planUI.hasAnyChanges()){e.preventDefault();e.returnValue='';}});
-const connectionRecovery=createConnectionRecovery({run:()=>synchronize(),available:()=>!!sessionInfo&&navigator.onLine&&document.visibilityState==='visible'});
+const connectionRecovery=createConnectionRecovery({run:()=>synchronize(),successIntervalMs:300000,available:()=>!!sessionInfo&&navigator.onLine&&document.visibilityState==='visible'});
 window.addEventListener('online',()=>connectionRecovery.retryNow());
 window.addEventListener('communication-retry-needed',()=>connectionRecovery.failed());
 window.addEventListener('offline',()=>{updateConnection('Offline · změny čekají na připojení');if(page==='jobs')jobsUI.refresh();if(!enabled('offline')&&!dirty&&!modal.open)render();});
