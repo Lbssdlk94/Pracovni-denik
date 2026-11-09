@@ -13,7 +13,7 @@ Proto je připravená větev `integrate/github-performance-2026-11-09` nad `71f5
 - Pravidelné obnovení úspěšné komunikace nyní čeká pět minut. Současný mechanismus zotavení po výpadku, rychlá reakce na návrat internetu a ruční obnovení zůstávají. Původní `setInterval` ze staré větve se nepřidává souběžně s existujícím obnovováním.
 - Ladicí panel z PR #5 už v naší pracovní verzi nebyl; nic se znovu nevkládá. Také rozbité parsování `app.js` už bylo opravené.
 
-Jde o výkonové změny, nikoli implementaci nového modrého vizuálního návrhu. Bez migrace databáze, bez změn provozních záznamů a bez nasazení do hostingu v tomto úkolu.
+Jde o výkonové změny, nikoli implementaci nového modrého vizuálního návrhu. Při původní integraci bez nasazení; po následném výslovném pokynu uživatele nasazeno 9. listopadu, viz níže. Bez migrace databáze a bez změn provozních záznamů.
 
 ## Kontroly a měření
 
@@ -26,3 +26,12 @@ Jde o výkonové změny, nikoli implementaci nového modrého vizuálního návr
 - `test-communication-browser.mjs`: skutečný Service Worker, offline spuštění, obnovení spojení po 502/503/504, zachování originální fotografie a ID operace v neodeslané frontě i přes reload; následné uložení právě jednou.
 
 Nativní Swift/Xcode se neměnil a v tomto úkolu se nesestavoval. Fyzický iPhone/Safari nebyl testován. Nejde o důkaz rychlosti konkrétního mobilního připojení ani odstranění všech možných výpadků.
+
+## Nasazení 9. listopadu 2026
+
+Na výslovné zadání uživatele byly změny aplikovány jako úzké patche do aktuálních zdrojů obou Sites. Zachované branding, přístupy, soubory, vazby a nastavení instalací.
+
+- Dr. Závlaha: verze **124**, zdroj `f455c05bf5f2a61fb6e2608f823dfbd08512ba39`, nasazení `appgdep_6af221b7498c8191930dd5cf10eec20b`, succeeded, https://zavlahovy-denik.purplecedar.chatgpt.site
+- Dr. Garden: verze **44**, zdroj `728e6f78c1310d64572c02834612c3fe8bd94378`, nasazení `appgdep_6af221de601c8191ad052de5ee79926e`, succeeded, https://dr-garden.purplecedar.chatgpt.site
+
+Pro každý konkrétní produkční artefakt před nasazením prošly nové testy memoizace a offline instalace, sestavení/validace autentizovaného Workeru, Chromium test náhledu rolí a pracovních funkcí a skutečný SW/offline test obnovy komunikace s protokolem a původní fotografií. Všechny zápisy do testovacích SQLite/D1/R2, nikoli do provozních zakázek. Kontrola přesného verzování importů, zotavení, komunikace serveru a podepsané gateway rovněž prošla.
