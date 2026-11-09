@@ -24,6 +24,15 @@ test('client verifies all requested IDs over multiple bounded pages and a final 
  const result=await verifyWorkspaceInventory(async(...args)=>{calls++;return send(...args);},inventory);
  assert.equal(calls,4);assert.equal(result.allowed.serviceWork.length,2305);assert.equal(result.requestedCounts.serviceWork,2305);
 });
+test('Empty local inventory needs one authorization response; even one cached ID retains the final revision fence',async()=>{
+ const current=session();let calls=0;const send=manifestSend(current);
+ const emptyResult=await verifyWorkspaceInventory(async(...args)=>{calls++;return send(...args);},empty());
+ assert.equal(calls,1);assert.equal(emptyResult.completeForRequestedIds,true);assert.deepEqual(emptyResult.allowed,empty());
+ const inventory=empty();inventory.gardens=['garden'];calls=0;
+ await verifyWorkspaceInventory(async(...args)=>{calls++;return send(...args);},inventory);assert.equal(calls,2);
+ calls=0;
+ await assert.rejects(verifyWorkspaceInventory(async(...args)=>{const result=await send(...args);return ++calls===2?{...result,stamp:'changed'}:result;},inventory),/Oprávnění/);
+});
 test('a partial manifest never calls the local replace/purge adapter',async()=>{
  let replaced=false;const current=session(),caches=empty();caches.gardens=[{id:'garden'}];
  const client=createWorkspaceClient({readCaches:async()=>caches,readSeen:async()=>({}),send:async()=>({completeForRequestedIds:false}),replace:async()=>{replaced=true;}});

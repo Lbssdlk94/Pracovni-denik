@@ -13,7 +13,9 @@ export async function verifyWorkspaceInventory(send,inventory){
     for(const store of STORES)manifest.allowed[store].push(...response.allowed[store]);
     Object.assign(manifest,{stamp:response.stamp,workspace:response.workspace,writable:response.writable,features:response.features});
   }
-  if((await send('/api/workspace/manifest',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...Object.fromEntries(STORES.map(store=>[store,[]])),expectedStamp:manifest.stamp})})).stamp!==manifest.stamp)throw Error('Oprávnění se během ověřování změnila.');
+  // Empty inventory exposes no cached records; its first response already checks
+  // current access. Retain the closing fence whenever any local ID is present.
+  if(STORES.some(store=>inventory[store].length)&&(await send('/api/workspace/manifest',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...Object.fromEntries(STORES.map(store=>[store,[]])),expectedStamp:manifest.stamp})})).stamp!==manifest.stamp)throw Error('Oprávnění se během ověřování změnila.');
   return manifest;
 }
 

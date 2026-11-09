@@ -68,9 +68,8 @@ async function memberFor(request,env){
   if(!env.DB||!env.BUCKET||!env.TEAM_OWNER_EMAIL)fail(503,'Týmové úložiště se připravuje. Zkuste to za chvíli.');
   await assertInstallation(env);await ensureInitialAdministrator(env);
   const cookie=(request.headers.get('cookie')||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(ACCESS_COOKIE+'='));
-  const onlyPassword=await passwordOnly(env);
   if(cookie!==undefined){const token=cookie.slice(ACCESS_COOKIE.length+1),hash=await accessHash(token),guest=/^[a-f0-9]{64}$/.test(token)?await sessionMember(env,hash):null;if(!guest||guest.session_auth_method!=='password')fail(401,'Přihlaste se svým přihlašovacím jménem a heslem.',{code:'session_expired'});return {...guest,_authMethod:'password',_mustChange:guest.session_auth_method==='password'&&!!guest.password_must_change,_sessionHash:hash};}
-  if(onlyPassword)fail(401,'Přihlaste se svým přihlašovacím jménem a heslem.',{code:'password_login_required'});
+  if(await passwordOnly(env))fail(401,'Přihlaste se svým přihlašovacím jménem a heslem.',{code:'password_login_required'});
   const user=userFrom(request),workspaceIdentity=await workspaceIdentityMember(env,user);
   if(workspaceIdentity.member)return workspaceIdentity.member;
   if(!workspaceIdentity.active&&user.email===env.TEAM_OWNER_EMAIL.toLowerCase()&&env.PLATFORM_REQUIRE_INVITATION!=='1')await execute(env.DB,"INSERT OR IGNORE INTO members(user_id,email,name,role,created_at) VALUES(?,?,?,'owner',?)",user.id,user.email,user.name,Date.now());

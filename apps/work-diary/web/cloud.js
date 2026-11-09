@@ -1,5 +1,5 @@
 import {rolePreviewSession,rolePreviewTargets} from './role-preview-model.js?v=role-preview-v1';
-import {createWorkspaceClient} from './workspace-client.js?v=github-sync-fix-v3';
+import {createWorkspaceClient} from './workspace-client.js?v=startup-fast-v1';
 import {workspaceSameAccount} from './workspace-sync-model.js?v=github-sync-fix-v3';
 import {captureActiveFormDrafts} from './form-drafts.js?v=draft-recovery-v1';
 import {pendingGardenHistory} from './garden-history-model.js?v=workspace-roles-v1';
