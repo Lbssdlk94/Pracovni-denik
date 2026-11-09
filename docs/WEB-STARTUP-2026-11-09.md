@@ -38,3 +38,11 @@ První zkušební běh opravy měl 675/87 ms. Ověření konkrétních produkčn
 - Fyzický iPhone/Safari nebyl použit. Nativní SwiftUI zdroje se neměnily.
 
 Soubory: `web/app.js`, `web/workspace-client.js`, `worker/api.js`, verze importů v `cloud.js`, `index.html`, `sw.js`; regresní testy `local-auth.test.js`, `workspace-client.test.js` a browser skripty. Starší test nativního mostu nyní před kontrolou uloženého kontaktu čeká na asynchronní načtení řádku; skutečný zápis zákazníka a zahrady zůstává ověřen přímo v testovací databázi.
+
+## Nasazení
+
+9. listopadu nasazeno do obou Sites při zachování veřejných adres, oprávnění a konfigurace:
+
+- Dr. Závlaha: verze **125**, zdroj `dd21fb272a39974f37c2179c4f9eded9e7926392`, nasazení `appgdep_6af225a02f588191a132c8173a7b51c2` succeeded, https://zavlahovy-denik.purplecedar.chatgpt.site
+- Dr. Garden: verze **45**, zdroj `575699d2f5c0b7e0788f4179b2ee93c0ee5a5936`, nasazení `appgdep_6af225c502e08191a9a1abdd486c669a` succeeded, https://dr-garden.purplecedar.chatgpt.site
+- Implementace na GitHubu `de6cae6`, PR #7. Bez zápisu do provozních zákazníků, zakázek, fotografií nebo uživatelských účtů kvůli testování.
