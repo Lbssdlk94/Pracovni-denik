@@ -40,34 +40,6 @@ import * as legacyDb from './storage.js?v=workspace-roles-v1';
 import {preparePhoto,annotatedPhoto,download,blobToDataURL} from './export.js?v=workspace-roles-v1';
 
 const app=document.querySelector('#app'),modal=document.querySelector('#modal');
-// --- EARLY DEBUG PANEL ---
-(function initDebug(){
-  function ensurePanel(){
-    let d = document.getElementById('debug-panel');
-    if(!d){
-      d = document.createElement('div');
-      d.id = 'debug-panel';
-      d.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:50vh;overflow:auto;background:#000;color:#0f0;font:13px/1.4 monospace;z-index:2147483647;padding:10px;white-space:pre-wrap;border-top:3px solid #0f0;pointer-events:auto;';
-      (document.body||document.documentElement).appendChild(d);
-    }
-    return d;
-  }
-  const log = m => {
-    const d = ensurePanel();
-    d.textContent += new Date().toLocaleTimeString() + ' ' + m + '\n';
-    d.scrollTop = d.scrollHeight;
-  };
-  window.__dbgLog = log;
-  window.addEventListener('error', e => log('ERROR: ' + e.message + ' @' + (e.filename||'') + ':' + e.lineno));
-  window.addEventListener('unhandledrejection', e => log('UNHANDLED: ' + (e.reason && (e.reason.message || e.reason) || 'unknown')));
-  const origError = console.error;
-  console.error = function(...a){ log('console.error: ' + a.map(x => typeof x==='object' ? JSON.stringify(x) : String(x)).join(' ')); origError.apply(console, a); };
-  const origWarn = console.warn;
-  console.warn = function(...a){ log('console.warn: ' + a.map(x => typeof x==='object' ? JSON.stringify(x) : String(x)).join(' ')); origWarn.apply(console, a); };
-  log('DEBUG PANEL ACTIVE (early)');
-  // re-check panel every 2s in case of innerHTML wipe
-  setInterval(ensurePanel, 2000);
-})();
 
 let modalCleanup=null,synchronizationFlight=null,synchronizationShow=false;
 modal.addEventListener('close',()=>{modalCleanup?.();modalCleanup=null;});
