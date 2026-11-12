@@ -37,3 +37,11 @@ Uložený den je dostupný i offline, pokud to firma dovoluje a relace splňuje 
 - Ověřováno v Chromium, mobilní šířky 360/390/430 a desktop 1440 dle jednotlivých scénářů. Skutečný iPhone/Safari nebyl k dispozici. Nativní SwiftUI implementace se neměnila.
 
 Soubory: nový `web/job-list-cache.js`, integrace v `cloud.js`, `jobs-ui.js`, `overview-ui.js`, doplnění `workspace-client.js`, autorizované verze v `worker/workspace-manifest.js`, konzistence snapshotu v `worker/jobs.js`, verze shellu/SW, zachování živého čtení staršího nativního mostu a regresní testy.
+
+## Nasazení 12. listopadu 2026
+
+- Dr. Závlaha: verze **126**, zdroj `3a625d145bc3a89ddda75a54b399f75096ac6ba2`, nasazení `appgdep_6af5f67e27ec81918ca168a81be79a39` succeeded, https://zavlahovy-denik.purplecedar.chatgpt.site
+- Dr. Garden: verze **46**, zdroj `68f9b9cffe85567b12cc519870198e6d569dfdce`, nasazení `appgdep_6af5f6b73d848191b26e75f76cc6e1d2` succeeded, https://dr-garden.purplecedar.chatgpt.site
+- GitHub: `49f7a63` a `19842e3`, PR #8. Doplňkový test prokazuje přenos revizního parametru snapshotu přes podepsanou vstupní bránu Dr. Garden. Zachované odlišnosti instalací včetně původní odpovědi při opakovaném mazání.
+
+Před zveřejněním prošel každý konkrétní kompilovaný artefakt validací autentizovaného spuštění, real-browser testem místních měsíců, opětovným ověřením ID/verzí při reloadu, offline kartou dne, náhledem rolí a oddělením oborů. Offline fronta s původní fotografií, protokoly a další regresní workflow byly ověřeny na izolovaných datech. Veřejné přístupy, licenční propojení, provozní tabulky, zálohy a úložiště se neměnily.
