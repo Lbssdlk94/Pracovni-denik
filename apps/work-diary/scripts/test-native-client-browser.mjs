@@ -52,14 +52,20 @@ try{
  if(process.env.DIARY_SESSION_BASELINE!=='1'){assert.equal(initialDiscovery.me,1);assert.equal(initialDiscovery.manifest,1);assert.equal(metrics.extraMe,0,'Routine refresh/settings/native context must not reload identity');assert.equal(metrics.extraManifest,0,'Routine work must not revalidate the full offline inventory');}
  if(process.env.DIARY_SESSION_BASELINE==='1'){await context.close();}else{
 
- await page.evaluate(async()=> (await import('/cloud.js?v=startup-fast-v1')).putFormDraft('role-preview-fixture',1,{work:'Skutečný rozepsaný protokol'}));
- const warmBefore=discoveryCounts();await page.reload();await page.locator('.shell').waitFor();await page.waitForLoadState('networkidle');const warmAfter=discoveryCounts();assert.equal(warmAfter.me-warmBefore.me,1);assert.equal(warmAfter.manifest-warmBefore.manifest,2,'Warm startup must still fence cached IDs');console.log('PASS warm startup still verifies identity and all cached IDs');
+ await page.evaluate(async()=> (await import('/cloud.js?v=job-month-cache-v1')).putFormDraft('role-preview-fixture',1,{work:'Skutečný rozepsaný protokol'}));
+ await page.evaluate(async()=>{await (await import('/cloud.js?v=job-month-cache-v1')).warmJobMonths();});const warmBefore=discoveryCounts();await page.reload();await page.locator('.shell').waitFor();await page.waitForLoadState('networkidle');const warmAfter=discoveryCounts();assert.equal(warmAfter.me-warmBefore.me,1);assert.equal(warmAfter.manifest-warmBefore.manifest,2,'Warm startup must still fence cached IDs');assert.ok(await page.evaluate(async()=>!!await (await import('/cloud.js?v=job-month-cache-v1')).peekCachedJobs('/api/jobs?order=schedule&state=all&month=2026-10&day=2026-10-30')),'Authorized month cache must survive restart');console.log('PASS warm startup still verifies identity and all cached IDs');
+ await page.evaluate(async()=>{const db=await import('/cloud.js?v=job-month-cache-v1');await db.warmJobMonths();});
+ const listCalls=()=>apiRequests.filter(r=>r.path==='/api/jobs').length,beforeCachedReads=listCalls();
+ const cachedMonth=await page.evaluate(async()=>{const db=await import('/cloud.js?v=job-month-cache-v1');const current=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit'}).format(new Date());const today=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Prague'}).format(new Date()).slice(0,10);const a=await db.request('/api/jobs?order=schedule&state=all&month='+today.slice(0,7)+'&day='+today);const b=await db.request('/api/jobs?order=schedule&state=all&month=2026-10&day=2026-10-30');return {current:!!a._jobCache,previous:!!b._jobCache,ids:b.jobs.map(j=>j.id)};});
+ assert.equal(cachedMonth.current,true);assert.equal(cachedMonth.previous,true);assert.ok(cachedMonth.ids.includes('irrigation-job'));assert.equal(listCalls(),beforeCachedReads,'Two-month stored reads must not make another jobs request');
+ await context.setOffline(true);await page.evaluate(()=>document.querySelector('.nav [data-page="jobs"]').click());await page.locator('#jobs-daily-day').fill('2026-10-30');await page.locator('#jobs-daily-day').dispatchEvent('change');await page.locator('.job-card[data-job="irrigation-job"]').waitFor();await page.locator('.job-cache-status').filter({hasText:'Offline'}).waitFor();assert.equal((await db.prepare('SELECT status FROM jobs WHERE id=?').bind('irrigation-job').first()).status,'planned');
+ await context.setOffline(false);await page.waitForLoadState('networkidle');console.log('PASS real IndexedDB two-month cache: current and previous month, no repeated list request, survives restart, offline day card, unchanged real job');
  const previewIdentityCounts=discoveryCounts();
  for(const width of [390,1440]){
   await page.setViewportSize({width,height:900});await page.locator('[data-role-preview]').selectOption('reader');
   await page.locator('.role-preview.is-active').waitFor();
   const view=await page.evaluate(()=>window.__workDiaryNative.execute('context'));assert.equal(view.user.role,'reader');assert.equal(view.permissions.write,false);assert.equal(view.permissions.manage,false);
-  assert.equal(await page.evaluate(async()=> (await import('/cloud.js?v=startup-fast-v1')).getFormDraft('role-preview-fixture')),null,'Preview must not expose or edit the live draft');
+  assert.equal(await page.evaluate(async()=> (await import('/cloud.js?v=job-month-cache-v1')).getFormDraft('role-preview-fixture')),null,'Preview must not expose or edit the live draft');
   assert.equal(await page.locator('[data-page="team"]').count(),0);
   assert.equal((await db.prepare('SELECT role FROM members WHERE user_id=?').bind(people.owner.id).first()).role,'owner');
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));
@@ -67,7 +73,7 @@ try{
   const exit=page.locator('.role-preview-quick-exit [data-role-preview-exit]');const box=await exit.boundingBox();assert.ok(box&&box.y>=0&&box.y+box.height<=900,'Return to actual role must stay in the viewport');
   await exit.click();await page.waitForFunction(()=>!document.querySelector('.role-preview.is-active'));
   assert.equal((await page.evaluate(()=>window.__workDiaryNative.execute('context'))).user.role,'owner');
-  assert.equal((await page.evaluate(async()=> (await import('/cloud.js?v=startup-fast-v1')).getFormDraft('role-preview-fixture'))).value.work,'Skutečný rozepsaný protokol');
+  assert.equal((await page.evaluate(async()=> (await import('/cloud.js?v=job-month-cache-v1')).getFormDraft('role-preview-fixture'))).value.work,'Skutečný rozepsaný protokol');
  }
  await page.setViewportSize({width:390,height:844});
  await page.locator('[data-role-preview]').selectOption('admin');await page.locator('.role-preview.is-active').waitFor();
@@ -76,13 +82,13 @@ try{
  await page.waitForFunction(()=>document.querySelector('#job-status-form')?.textContent.includes('V náhledu role'));
  assert.equal((await db.prepare('SELECT status FROM jobs WHERE id=?').bind('irrigation-job').first()).status,'planned','Preview form must not change a real test job');
  await page.locator('#modal [data-close]').click();
- const beforeOffline=await page.evaluate(async()=> (await import('/cloud.js?v=startup-fast-v1')).pendingSummary());
+ const beforeOffline=await page.evaluate(async()=> (await import('/cloud.js?v=job-month-cache-v1')).pendingSummary());
  await context.setOffline(true);
- const offlineDenied=await page.evaluate(async()=>{const db=await import('/cloud.js?v=startup-fast-v1');try{await db.saveServiceWork('irrigation-job',{version:1,report:{work:'PREVIEW MUST NOT PERSIST'}});return false;}catch(error){return error.code==='role_preview_readonly';}});assert.equal(offlineDenied,true);
- const afterOffline=await page.evaluate(async()=> (await import('/cloud.js?v=startup-fast-v1')).pendingSummary());assert.deepEqual(afterOffline,beforeOffline);
+ const offlineDenied=await page.evaluate(async()=>{const db=await import('/cloud.js?v=job-month-cache-v1');try{await db.saveServiceWork('irrigation-job',{version:1,report:{work:'PREVIEW MUST NOT PERSIST'}});return false;}catch(error){return error.code==='role_preview_readonly';}});assert.equal(offlineDenied,true);
+ const afterOffline=await page.evaluate(async()=> (await import('/cloud.js?v=job-month-cache-v1')).pendingSummary());assert.deepEqual(afterOffline,beforeOffline);
  await context.setOffline(false);await page.locator('.role-preview-quick-exit [data-role-preview-exit]').click();await page.waitForLoadState('networkidle');
  assert.deepEqual(discoveryCounts(),previewIdentityCounts,'Role appearance changes must reuse the startup identity');
- await page.evaluate(async()=> (await import('/cloud.js?v=startup-fast-v1')).removeFormDraft('role-preview-fixture'));
+ await page.evaluate(async()=> (await import('/cloud.js?v=job-month-cache-v1')).removeFormDraft('role-preview-fixture'));
  console.log('PASS role appearance preview: owner -> reader/admin -> owner, visible return at 390/1440, no overflow, unchanged membership, server-backed form blocked, offline queue unchanged, no identity polling');
  const snapshot=await page.evaluate(()=>window.__workDiaryNative.execute('context'));
  assert.equal(snapshot.user.role,'owner');assert.equal(snapshot.recovery,undefined);assert.equal(snapshot.installation,undefined);assert.ok((await page.evaluate(()=>window.__nativeSignals)).includes('ready'));
