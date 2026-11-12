@@ -2,7 +2,7 @@ import {pragueToday,moveJobMonth} from './job-schedule.js?v=workspace-roles-v1';
 import {compareWorkJobs} from './job-workflow-model.js?v=workspace-roles-v1';
 
 export const JOB_CACHE_KEY='job-list-cache-v1';
-export const jobCacheMonths=(now=new Date())=>{const month=pragueToday(now).slice(0,7);return [month,moveJobMonth(month,-1)];};
+export const jobCacheMonths=(now=new Date())=>{const month=pragueToday(now).slice(0,7);return [month,moveJobMonth(month,-1),moveJobMonth(month,1)];};
 export const jobCacheScope=session=>session?.user?JSON.stringify([session.user.id,session.user.role,session.permissions,session.features,session.installation?.id,session.workspace?.workspaceId,session.workspace?.authorizationVersion,session.workspace?.disciplines,session.workspace?.selectedDiscipline,session.rolePreview?.selectedRole]):null;
 const empty=()=>({entries:[],months:[]});
 const ascii=s=>String(s||'').replace(/[A-Z]/g,c=>c.toLowerCase());
@@ -41,7 +41,7 @@ export function createJobListCache({read,change,send,getSession,online=()=>true,
  const scope=()=>jobCacheScope(getSession());
  const safeRead=async()=>{try{return await read();}catch{return empty();}};
  const permitted=()=>{const s=getSession();return !!s?.user&&s.features?.jobs!==false&&s.features?.offline!==false&&(online()||s.verifiedAt&&now()-s.verifiedAt<=86400000)&&(!s.license||s.license.active&&s.license.expiresAt>now());};
- const prune=value=>{const months=jobCacheMonths(new Date(now())),state=value||empty();return {entries:(Array.isArray(state.entries)?state.entries:[]).filter(e=>e&&Array.isArray(e.months)&&e.months.every(m=>months.includes(m))&&typeof e.scope==='string'&&typeof e.key==='string'&&Array.isArray(e.value?.jobs)&&Number.isFinite(e.at)).sort((a,b)=>b.at-a.at).slice(0,40),months:(Array.isArray(state.months)?state.months:[]).filter(e=>e&&months.includes(e.month)&&typeof e.scope==='string'&&Array.isArray(e.jobs)&&Number.isFinite(e.at)).slice(-8)};};
+ const prune=value=>{const months=jobCacheMonths(new Date(now())),state=value||empty();return {entries:(Array.isArray(state.entries)?state.entries:[]).filter(e=>e&&Array.isArray(e.months)&&e.months.every(m=>months.includes(m))&&typeof e.scope==='string'&&typeof e.key==='string'&&Array.isArray(e.value?.jobs)&&Number.isFinite(e.at)).sort((a,b)=>b.at-a.at).slice(0,40),months:(Array.isArray(state.months)?state.months:[]).filter(e=>e&&months.includes(e.month)&&typeof e.scope==='string'&&Array.isArray(e.jobs)&&Number.isFinite(e.at)).slice(-12)};};
  async function update(fn){try{await change(value=>fn(prune(value)));}catch{/* A full/unavailable cache must never fail a server operation. */}}
  async function invalidate(){epoch++;warming=null;await update(()=>empty());}
  function beginChange(){epoch++;warming=null;}
@@ -74,7 +74,7 @@ export function createJobListCache({read,change,send,getSession,online=()=>true,
    if(cached._jobCache.stale&&online())fetchList(path,options).then(result=>{if(result.listRevision!==null)notify({path});warm().catch(()=>{});}).catch(()=>{});
    return cached;
   }
-  if(!online())throw Object.assign(Error('Tento výběr ještě není uložený. Připojte se a otevřete aktuální nebo předchozí měsíc.'),{code:'jobs_not_cached'});
+  if(!online())throw Object.assign(Error('Tento výběr ještě není uložený. Připojte se a otevřete předchozí, aktuální nebo následující měsíc.'),{code:'jobs_not_cached'});
   const result=await fetchList(path,options);warm().catch(()=>{});return result;
  }
  async function warm(){

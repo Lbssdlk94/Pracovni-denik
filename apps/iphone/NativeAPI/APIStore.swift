@@ -26,6 +26,11 @@ final class APIStore: ObservableObject {
     private let monitor = NWPathMonitor()
     private var activeScope: String?
     private var started = false
+    var jobMonthEpoch=0
+    var jobMonthTask:Task<Void,Never>?
+    var jobMonthPreparation:Task<Void,Never>?
+    var jobMonthsReady=false
+    var jobMonthsAuthorized=false
     private var liveVault:APIVault?
     var userID: String { me["user"]["id"].string }
     var actualRole:String{me["user"]["role"].string}
@@ -40,10 +45,10 @@ final class APIStore: ObservableObject {
         guard authenticated,let source=liveVault ?? vault else{throw APIError.local("Nejdříve se přihlaste.")}
         if let role{
             let temporary=try APIVault(scope:source.scope+"|role-preview:"+role,memoryOnly:true)
-            temporary.state.session=source.state.session;temporary.state.verifiedAt=source.state.verifiedAt;temporary.state.cache=source.state.cache
+            temporary.state.session=source.state.session;temporary.state.verifiedAt=source.state.verifiedAt;temporary.state.cache=source.state.cache;temporary.state.jobMonths=source.state.jobMonths
             liveVault=source;vault=temporary
         }else{vault=source;liveVault=nil}
-        generation+=1;previewRole=role;transport.previewRole=role;route=nil;tab=0;revision=UUID();updateOutbox()
+        generation+=1;previewRole=role;transport.previewRole=role;route=nil;tab=0;revision=UUID();updateOutbox();resetJobMonthWork()
         NativePushController.shared.invalidatePresentation();WatchPhoneCoordinator.shared.invalidate()
     }
     func requireLiveRole()throws{if isRolePreview{throw APIError.local("V náhledu role nelze ukládat změny. Vraťte se ke své roli.")}}
@@ -83,7 +88,7 @@ final class APIStore: ObservableObject {
         me = value; authenticated = true; needsPasswordChange = false
         vault?.state.session = value; vault?.state.verifiedAt = Date(); try vault?.persist()
         if !fixture { UserDefaults.standard.set(next, forKey:"native-api-last-scope:" + transport.origin.host!) }
-        updateOutbox()
+        updateOutbox();resetJobMonthWork();if !fixture{scheduleJobMonths()}
     }
     // Role/module discovery belongs to process startup or an explicit account,
     // installation or discipline change, never to routine data refreshes.
@@ -94,7 +99,7 @@ final class APIStore: ObservableObject {
     }
     func restore() async {
         guard !busy, !authenticated else { return }; busy = true; defer { busy = false }
-        do { try bind(await transport.request("/api/me")); online = true; error = nil; await sync() }
+        do { try bind(await transport.request("/api/me")); online = true; error = nil; await sync();if !fixture{scheduleJobMonths()} }
         catch let e as APIError {
             if e.code == "password_change_required" { needsPasswordChange = true }
             else if e.isTransient, let last = UserDefaults.standard.string(forKey:"native-api-last-scope:" + transport.origin.host!), let local = try? APIVault(scope:last), local.offlineAllowed() {
@@ -139,7 +144,7 @@ final class APIStore: ObservableObject {
         transport.discipline = discipline
         do { try bind(await transport.request("/api/me")); revision = UUID() } catch { lock(); throw error }
     }
-    func lock() { liveVault=nil;previewRole=nil;transport.previewRole=nil;generation += 1; authenticated = false; me = .null; vault = nil; activeScope = nil; outbox = []; route = nil; NativePushController.shared.invalidatePresentation(); WatchPhoneCoordinator.shared.invalidate() }
+    func lock() { resetJobMonthWork();liveVault=nil;previewRole=nil;transport.previewRole=nil;generation += 1; authenticated = false; me = .null; vault = nil; activeScope = nil; outbox = []; route = nil; NativePushController.shared.invalidatePresentation(); WatchPhoneCoordinator.shared.invalidate() }
     func logout() async throws {
         try requireLiveRole()
         guard vault?.state.outbox.isEmpty != false else { throw APIError.local("Nejdříve synchronizujte neodeslanou práci.") }
@@ -148,16 +153,30 @@ final class APIStore: ObservableObject {
     }
     func get(_ path: String, refresh: Bool = false) async throws -> APIValue {
         let ticket = generation
-        let cacheKey=path
+        let requestedDiscipline=APIJobMonthCache.parameters(path,today:today)?["discipline"],selectedDiscipline=me["workspace"]["selectedDiscipline"].string
+        let matchingDiscipline=requestedDiscipline==nil || selectedDiscipline.isEmpty || selectedDiscipline=="all" || requestedDiscipline==selectedDiscipline
+        let cacheKey=path,list=APIJobMonthCache.isList(path),monthly=APIJobMonthCache.parameters(path,today:today) != nil && enabled("jobs") && enabled("offline") && matchingDiscipline
+        if monthly{
+            await prepareJobMonths()
+            guard ticket==generation else{throw APIError.local("Účet se změnil.")}
+            if refresh && online{beginJobMonthChange()}
+            else if let cached=cachedJobList(path){if cached["_jobCache"]["stale"].bool && online{scheduleJobMonths()};return cached}
+        }
+        let monthTicket=jobMonthEpoch
+        if !online,list,(!monthly || !jobMonthsAuthorized){throw APIError.local("Tento výběr zakázek ještě není uložený nebo vyžaduje nové ověření.")}
         if !online, let vault, vault.offlineAllowed(), let cached = vault.state.cache[cacheKey] { return cached }
         do {
             let result = try await transport.request(path)
             guard ticket == generation else { throw APIError.local("Přístup se změnil. Obnovte obrazovku.") }
-            vault?.state.cache[cacheKey] = result; try vault?.persist(); return result
+            guard !monthly || monthTicket==jobMonthEpoch else{throw APIError.local("Plán se mezitím změnil. Obnovte přehled.")}
+            if list{if monthly{vault?.state.cache[cacheKey]=result.merged(["jobs":.array(result["jobs"].array.map(APIJobMonthCache.lean))]);try? vault?.persist();scheduleJobMonths()}}
+            else{vault?.state.cache[cacheKey] = result; try vault?.persist()}
+            return result
         } catch let e as APIError {
+            guard ticket==generation else{throw APIError.local("Účet se změnil.")}
             if e.status == 401 { lock(); throw e }
-            if e.status == 403 { vault?.state.cache.removeValue(forKey:cacheKey);try? vault?.persist();throw e }
-            if e.isTransient, let vault, vault.offlineAllowed(), let cached = vault.state.cache[cacheKey] {if e.status==0{online=false}else{error="Server tuto část dočasně nenačetl. Zobrazují se poslední uložená data."};return cached}
+            if e.status == 403 || e.status == 404 && path.hasPrefix("/api/jobs/") { if list || path.hasPrefix("/api/jobs/"){beginJobMonthChange();purgeJobMonthCopies();jobMonthsAuthorized=false;revision=UUID()};vault?.state.cache.removeValue(forKey:cacheKey);try? vault?.persist();throw e }
+            if e.isTransient,(!list || monthly && jobMonthsAuthorized),let vault, vault.offlineAllowed(), let cached = vault.state.cache[cacheKey] {if e.status==0{online=false}else{error="Server tuto část dočasně nenačetl. Zobrazují se poslední uložená data."};return cached}
             throw e
         }
     }
@@ -165,6 +184,7 @@ final class APIStore: ObservableObject {
         try requireLiveRole()
         guard authenticated, let vault else { throw APIError.local("Nejdříve se přihlaste.") }
         let ticket = generation
+        if path.hasPrefix("/api/jobs"){beginJobMonthChange()}
         if offline && enabled("offline") {
             guard writer, online || vault.offlineAllowed() else { throw APIError.local("Platnost offline přístupu vyžaduje nové spuštění s připojením.") }
             var op = APIMutation(id:operationID ?? UUID().uuidString,path:path,method:method,body:body,bytes:nil,contentType:"application/json",headers:[:],scope:scope,dependsOn:dependsOn,draftKey:draftKey)
@@ -209,7 +229,7 @@ final class APIStore: ObservableObject {
                 let pendingBytes=try local.mutationBytes(op)
                 if op.method == "DRIVE_PHOTO", let bytes=pendingBytes, let metadata=op.body { try await APIJobPhotoUpload.send(store:self,path:op.path,data:bytes,metadata:metadata) }
                 else if let bytes = pendingBytes { _ = try await transport.bytes(op.path,method:op.method,data:bytes,type:op.contentType,headers:op.headers) }
-                else { let result=try await transport.request(op.path,method:op.method,body:op.body);applyAcknowledgement(path:op.path,result:result) }
+                else { let result=try await transport.request(op.path,method:op.method,body:op.body);guard generation==ticket else{return};applyAcknowledgement(path:op.path,result:result) }
                 guard generation == ticket else { return }
                 local.state.outbox.removeAll { $0.id == op.id }
                 if let key = op.draftKey, var draft=local.state.drafts[key], draft.operationID == op.id {
@@ -228,6 +248,9 @@ final class APIStore: ObservableObject {
         }
     }
     func applyAcknowledgement(path:String,result:APIValue){
+        var acknowledged=result
+        if !result["job"].id.isEmpty,!result["report"].isNull{acknowledged["job"]["protocolStatus"]=result["report"]["documentState"].string=="ready" ? .s("ready") : .s("draft")}
+        jobMonthsChanged(path:path,result:acknowledged)
         guard let vault else{return}
         let roots:[String:String]=["jobs":"job","customers":"customer","defects":"defect","vehicles":"vehicle","subscriptions":"subscription"]
         let parts=path.split(separator:"/");guard parts.count>=2,let singular=roots[String(parts[1])]else{return}

@@ -86,8 +86,8 @@ struct APIOverview:View {
         if store.enabled("customers"){DiaryTile(title:"Zákazníci",subtitle:"Kontakty a jejich zahrady",symbol:"person.crop.rectangle"){store.tab=3}}
         if !next.isNull{Text("Další návštěva").font(.title3.bold());NavigationLink{APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:next)}label:{APIRecordRow(entity:.jobs,value:next).diaryCard()}.buttonStyle(.plain)}else if store.enabled("jobs"){Text("Na dnešek není naplánovaná další aktivní návštěva.").foregroundStyle(.secondary)}
         if let problem{Text(problem).font(.footnote).foregroundStyle(.secondary)}
-    }.padding(20)}.background(DiaryStyle.background).navigationTitle(store.company).navigationBarTitleDisplayMode(.inline).toolbar{APIHeader(store:store)}.task(id:store.revision){await load()}.refreshable{await store.resume();await load()}}
-    func load()async{guard store.enabled("jobs")&&store.enabled("jobDay")else{return};do{let page=try await store.get("/api/jobs?state=all&order=schedule&month="+String(store.today.prefix(7))+"&day="+store.today+"&assignee="+store.userID);jobs=page["jobs"].array.filter{!["done","incomplete"].contains($0["status"].string)};next=jobs.first ?? .null;if next.isNull{let future=try await store.get("/api/jobs?state=active&order=schedule&after="+store.today+"&assignee="+store.userID);next=future["jobs"].array.first{!["done","incomplete"].contains($0["status"].string)} ?? .null};problem=nil}catch{problem=error.localizedDescription}}
+    }.padding(20)}.background(DiaryStyle.background).navigationTitle(store.company).navigationBarTitleDisplayMode(.inline).toolbar{APIHeader(store:store)}.task(id:store.revision){await load()}.refreshable{await store.resume();await load(refresh:true)}}
+    func load(refresh:Bool=false)async{guard store.enabled("jobs")&&store.enabled("jobDay")else{return};do{let page=try await store.get("/api/jobs?state=all&order=schedule&month="+String(store.today.prefix(7))+"&day="+store.today+"&assignee="+store.userID,refresh:refresh);jobs=page["jobs"].array.filter{!["done","incomplete"].contains($0["status"].string)};next=jobs.first ?? .null;if next.isNull{let future=try await store.get("/api/jobs?state=active&order=schedule&after="+store.today+"&assignee="+store.userID);next=future["jobs"].array.first{!["done","incomplete"].contains($0["status"].string)} ?? .null};problem=nil}catch{problem=error.localizedDescription}}
 }
 struct APIHeader:ToolbarContent {
     @ObservedObject var store:APIStore
@@ -106,6 +106,7 @@ struct APIJobsScreen:View {
     @State private var query=""
     @State private var rows:[APIValue]=[]
     @State private var cursor=""
+    @State private var cacheStatus:APIValue = .null
     @State private var filters=false
     @State private var calendar=false
     @State private var map=false
@@ -122,6 +123,7 @@ struct APIJobsScreen:View {
             if store.manager&&store.enabled("jobMap")&&store.enabled("location"){Button("Mapa zakázek"){map=true}}
             if store.enabled("jobList"){Toggle("Všechny dny",isOn:$allDates)}
         }.listRowBackground(Color.clear)
+        if !cacheStatus.isNull{Text("\(cacheStatus["offline"].bool ? "Offline kopie" : "Uložená kopie") · \(Date(timeIntervalSince1970:cacheStatus["at"].double/1000).formatted(date:.abbreviated,time:.shortened))").font(.caption).foregroundStyle(.secondary)}
         if loading&&rows.isEmpty{ProgressView("Načítám zakázky…")}
         ForEach(rows,id:\.id){job in APIJobListRow(store:store,job:job)}
         if rows.isEmpty && !loading{Text("Pro tento výběr nejsou návštěvy.").foregroundStyle(.secondary);if day==store.today && !allDates{APIUpcomingVisits(store:store,mine:mine)}}
@@ -129,12 +131,12 @@ struct APIJobsScreen:View {
         if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}
     }.listStyle(.insetGrouped).scrollContentBackground(.hidden).background(DiaryStyle.background).navigationTitle("Zakázky").navigationBarTitleDisplayMode(.inline).searchable(text:$query,prompt:"Hledat")
         .toolbar{APIHeader(store:store);if store.manager{ToolbarItem(placement:.topBarTrailing){Button{let r=APIResource(entity:.jobs);store.route=APIRoute(resource:r,value:r.initial(store),isNew:true)}label:{Image(systemName:"plus")}.accessibilityLabel("Nová zakázka")}}}
-        .task(id:filterKey){await load()}.refreshable{await store.resume();await load()}
+        .task(id:filterKey){await load()}.refreshable{await store.resume();await load(refresh:true)}
         .sheet(isPresented:$calendar){NavigationStack{DatePicker("Den návštěvy",selection:$date,displayedComponents:.date).datePickerStyle(.graphical).padding().toolbar{ToolbarItem(placement:.confirmationAction){Button("Hotovo"){allDates=false;calendar=false}}}}}
         .sheet(isPresented:$filters){NavigationStack{Form{Picker("Stav",selection:$state){ForEach(["all","planned","on_way","in_progress","incomplete","done"],id:\.self){Text($0=="all" ? "Všechny" : APIFormat.status($0)).tag($0)}};Picker("Protokol",selection:$protocolState){Text("Všechny").tag("");Text("Chybí nebo rozpracovaný").tag("unfinished");Text("Chybí").tag("missing");Text("Rozpracovaný").tag("draft");Text("Hotový").tag("ready")};Button("Vymazat filtry"){state="all";protocolState=""}}.navigationTitle("Filtry").toolbar{ToolbarItem(placement:.confirmationAction){Button("Hotovo"){filters=false}}}}}
         .sheet(isPresented:$map){NavigationStack{APIJobsMap(store:store,jobs:rows)}}
     }
-    func load(more:Bool=false)async{if more && loading{return};let ticket=UUID();requestID=ticket;loading=true;defer{if requestID==ticket{loading=false}};let scope=store.scope;do{var c=URLComponents(string:"/api/jobs")!;var q=[URLQueryItem(name:"state",value:state),URLQueryItem(name:"order",value:"schedule")];if !allDates{q += [URLQueryItem(name:"month",value:String(day.prefix(7))),URLQueryItem(name:"day",value:day)]};if mine || !store.manager{q.append(URLQueryItem(name:"assignee",value:store.userID))};if !protocolState.isEmpty{q.append(URLQueryItem(name:"protocol",value:protocolState))};if more{q.append(URLQueryItem(name:"cursor",value:cursor))};if !query.isEmpty{q.append(URLQueryItem(name:"q",value:String(query.prefix(100))));if !more{try await Task.sleep(for:.milliseconds(300))}};c.queryItems=q;let page=try await store.get(c.string!);guard scope==store.scope,requestID==ticket else{return};rows=more ? rows+page["jobs"].array.filter{j in !rows.contains{$0.id==j.id}} : page["jobs"].array;cursor=page["nextCursor"].string;problem=nil}catch is CancellationError{}catch{if requestID==ticket{problem=error.localizedDescription}}}
+    func load(more:Bool=false,refresh:Bool=false)async{if more && loading{return};let ticket=UUID();requestID=ticket;loading=true;defer{if requestID==ticket{loading=false}};let scope=store.scope;do{var c=URLComponents(string:"/api/jobs")!;var q=[URLQueryItem(name:"state",value:state),URLQueryItem(name:"order",value:"schedule")];if !allDates{q += [URLQueryItem(name:"month",value:String(day.prefix(7))),URLQueryItem(name:"day",value:day)]};if mine || !store.manager{q.append(URLQueryItem(name:"assignee",value:store.userID))};if !protocolState.isEmpty{q.append(URLQueryItem(name:"protocol",value:protocolState))};if more{q.append(URLQueryItem(name:"cursor",value:cursor))};if !query.isEmpty{q.append(URLQueryItem(name:"q",value:String(query.prefix(100))));if !more{try await Task.sleep(for:.milliseconds(300))}};c.queryItems=q;let page=try await store.get(c.string!,refresh:refresh);guard scope==store.scope,requestID==ticket else{return};rows=more ? rows+page["jobs"].array.filter{j in !rows.contains{$0.id==j.id}} : page["jobs"].array;cursor=page["nextCursor"].string;cacheStatus=page["_jobCache"];problem=nil}catch is CancellationError{}catch{if requestID==ticket{problem=error.localizedDescription}}}
 }
 struct APIMore:View {
     @ObservedObject var store:APIStore
