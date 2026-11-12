@@ -20,9 +20,19 @@ The SwiftUI jobs list shows the cached-copy timestamp, including offline use. No
 
 - Web: all 76 test files passed; production-format Worker build validated in isolated SQLite/R2.
 - Chromium integration: actual Worker, D1/R2 and IndexedDB; all three months including a real synthetic next-month visit served without another jobs-list request, cache reused after startup manifest fence, offline day card, unchanged isolated job, role/department separation and no routine identity polling.
-- Native: seven changed Swift files parsed without syntax errors; 13 build-policy and 4 signing-policy tests passed.
+- Communication: real Service Worker offline reload, stalled photo isolation, 502/503/504 recovery and exactly-once report/photo queue synchronization passed in Chromium.
+- Native: seven relevant Swift files parsed without syntax errors; 13 build-policy and 4 signing-policy tests passed.
 - Six native XCTest regressions added: calendar/year boundary; filtering/ranking/lean payload; complete three-month download + repeat/offline/manual reads; restart version fence preserving draft/outbox; acknowledged reschedule/deletion; legacy decoding + encrypted persistence. Xcode execution is reported separately below; syntax parsing is not a native compile or a device test.
 
 ## Release status
 
-Pending final site publication and GitHub native build result. Existing installed iPhone applications require a new successful native build and installation to gain this source change. Month caching stores job overview data; it does not automatically download every photo, PDF or full report. Those continue using their existing on-demand/offline mechanisms. Large or interrupted snapshot downloads safely keep server paging instead of treating partial data as complete.
+Published both websites without database migration or business-data writes:
+
+| Installation | Version | Source commit | Deployment |
+| --- | --- | --- | --- |
+| Dr. Závlaha | 127 | `89f21f5fa649769db2d71eb44d78b2b2bde0ca9d` | `appgdep_6af6079e53688191bc98f21863b6449a` — succeeded |
+| Dr. Garden | 47 | `319f13d59027ad827ad2882243956a687244b731` | `appgdep_6af607b941f88191ac8ef473770d759c` — succeeded |
+
+Both exact production artifacts passed the Chromium integration scenario using isolated data before publication. Public audiences, installation branding, existing API configuration and Service Worker asset lists were preserved.
+
+GitHub source commit: `b86d1c5efa2d23195201e114286f061524f92d8c`; draft [PR #9](https://github.com/Lbssdlk94/Pracovni-denik/pull/9) is stacked on the previous two-month-cache branch. Native build [43281458734](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/43281458734) was rejected before any steps. Check-run `131403498208` reports: “The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings”. Therefore Xcode compilation, native XCTest execution and a new IPA are **not verified/delivered**. Existing installed iPhone applications require a new successful native build and installation to gain this source change. Month caching stores job overview data; it does not automatically download every photo, PDF or full report. Those continue using their existing on-demand/offline mechanisms. Large or interrupted snapshot downloads safely keep server paging instead of treating partial data as complete.
