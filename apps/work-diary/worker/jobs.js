@@ -35,7 +35,7 @@ export async function handleJobs(request,env,m,h){
   if(!['active','all','planned','on_way','in_progress','done','incomplete'].includes(state))fail(400,'Neplatný filtr zakázek.');
   if(protocol&&!['unfinished','missing','draft','ready'].includes(protocol))fail(400,'Neplatný filtr protokolu.');
   if(assignee){validId(assignee);if(!manager&&assignee!==m.user_id)fail(403,'Můžete zobrazit pouze vlastní zakázky.');}
-  const cacheSnapshot=request.headers.get('x-job-cache-snapshot')==='1',listRevision=cacheSnapshot?((await one(env.DB,"SELECT version FROM settings WHERE key='job-planner-revision'"))?.version||0):null;
+  const cacheSnapshot=url.searchParams.get('cacheSnapshot')==='1',listRevision=cacheSnapshot?((await one(env.DB,"SELECT version FROM settings WHERE key='job-planner-revision'"))?.version||0):null;
   const clauses=['j.deleted=0',scope],args=[m.user_id];
   const disciplineFilter=url.searchParams.get('discipline');if(m._workspace&&disciplineFilter&&disciplineFilter!=='all'){clauses.push('j.discipline=?');args.push(disciplineFilter);}
   if(protocol){clauses.push("j.status='done'");clauses.push(protocol==='unfinished'?"("+protocolStateSql+") IN ('missing','draft')":"("+protocolStateSql+")=?");if(protocol!=='unfinished')args.push(protocol);}

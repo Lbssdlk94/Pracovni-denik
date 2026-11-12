@@ -85,8 +85,8 @@ export function createJobListCache({read,change,send,getSession,online=()=>true,
     const state=prune(await safeRead()),old=state.months.find(e=>e.scope===who&&e.month===month);if(old&&!old.dirty&&now()-old.at<freshMs)continue;
     const jobs=[],seen=new Set();let cursor=null,complete=false,revision;
     for(let page=0;page<50;page++){
-     const params=new URLSearchParams({state:'all',order:'schedule',month});if(cursor)params.set('cursor',cursor);
-     const result=await send('/api/jobs?'+params,{headers:{'x-job-cache-snapshot':'1'}});if(ticket!==epoch||who!==scope()||!permitted())return;
+     const params=new URLSearchParams({state:'all',order:'schedule',month,cacheSnapshot:'1'});if(cursor)params.set('cursor',cursor);
+     const result=await send('/api/jobs?'+params);if(ticket!==epoch||who!==scope()||!permitted())return;
      if(!Number.isSafeInteger(result.listRevision)||revision!==undefined&&revision!==result.listRevision)break;revision=result.listRevision;
      for(const job of result.jobs){if(!seen.has(job.id)){seen.add(job.id);jobs.push(summary(job));}}
      if(!result.nextCursor){complete=true;break;}if(result.nextCursor===cursor)throw Error('Opakovaná stránka zakázek.');cursor=result.nextCursor;

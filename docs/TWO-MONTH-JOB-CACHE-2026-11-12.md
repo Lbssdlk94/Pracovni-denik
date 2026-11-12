@@ -16,7 +16,7 @@ Uložený den je dostupný i offline, pokud to firma dovoluje a relace splňuje 
 - Při novém ověření společného prostoru se identifikátory uložených zakázek připojí k existujícímu manifestu. Server stejnými scope SQL podmínkami vrací jen povolená ID a jejich aktuální verze. Odepřený nebo změněný záznam zneplatní dotčený snapshot před dokončením přihlášení.
 - Kešované seznamy se nepřidávají do evidence protokolů, fronty neodeslaných změn ani provozních tabulek. Samotná změna čtecí kopie nevyvolává umělou obnovu oprávnění nebo reload stránky.
 - Neuchovávají se soukromé poznámky zahrady ani kontaktní telefony/adresář z připojené karty zákazníka. Jméno zákazníka a místo práce zůstávají součástí pracovního přehledu. Úplný detail čerpá aktuální oprávněná data ze serveru.
-- Úplné snapshoty jednotlivých stránek musí mít stejnou revizi plánu. Podpůrné čtení revize se provádí jen s hlavičkou snapshotu při přípravě měsíců; běžným API klientům nepřidává dva databázové dotazy.
+- Úplné snapshoty jednotlivých stránek musí mít stejnou revizi plánu. Podpůrné čtení revize se provádí jen s parametrem cacheSnapshot při přípravě měsíců; běžným API klientům nepřidává dva databázové dotazy.
 - Změny provozních dat, migrace databáze ani úpravy přihlašovacích práv nebyly potřeba. Selhání pomocného úložiště neoznačí úspěšný serverový zápis za chybu.
 
 ## Omezení
