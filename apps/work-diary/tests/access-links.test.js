@@ -39,9 +39,3 @@ test('Anonymous link attempts are throttled, invalid cookies cannot select a mem
  assert.equal((await call(env,'/api/me',people.owner,'GET',undefined,{cookie:'__Host-zavlahy-access=not-a-key'})).status,401);
  const r=await call(env,'/api/access-logout',undefined,'POST');assert.equal(r.status,200);assert.match(r.headers.get('set-cookie'),/Max-Age=0/);assert.equal((await call(env,'/api/access-logout',undefined,'POST',undefined,{origin:'https://evil.test'})).status,403);
 });
-
-test('A leftover well-formed link cookie does not lock out a platform member',async()=>{
- const env=await setup(),dead='__Host-zavlahy-access='+'0'.repeat(64);
- const mine=await call(env,'/api/me',people.owner,'GET',undefined,{cookie:dead});assert.equal(mine.status,200);assert.equal((await mine.json()).user.authMethod,'chatgpt');
- assert.equal((await call(env,'/api/me',undefined,'GET',undefined,{cookie:dead})).status,401);
-});

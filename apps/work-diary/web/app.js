@@ -39,7 +39,35 @@ import * as db from './cloud.js?v=workspace-controls-v1';
 import * as legacyDb from './storage.js?v=workspace-roles-v1';
 import {preparePhoto,annotatedPhoto,download,blobToDataURL} from './export.js?v=workspace-roles-v1';
 
-const app=document.querySelector('#app'),modal=document.querySelector('#modal');
+const app=document.querySelector('#app'),modal=document.querySelector('#modal');\n
+// --- EARLY DEBUG PANEL ---
+(function initDebug(){
+  function ensurePanel(){
+    let d = document.getElementById('debug-panel');
+    if(!d){
+      d = document.createElement('div');
+      d.id = 'debug-panel';
+      d.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:50vh;overflow:auto;background:#000;color:#0f0;font:13px/1.4 monospace;z-index:2147483647;padding:10px;white-space:pre-wrap;border-top:3px solid #0f0;pointer-events:auto;';
+      (document.body||document.documentElement).appendChild(d);
+    }
+    return d;
+  }
+  const log = m => {
+    const d = ensurePanel();
+    d.textContent += new Date().toLocaleTimeString() + ' ' + m + '\n';
+    d.scrollTop = d.scrollHeight;
+  };
+  window.__dbgLog = log;
+  window.addEventListener('error', e => log('ERROR: ' + e.message + ' @' + (e.filename||'') + ':' + e.lineno));
+  window.addEventListener('unhandledrejection', e => log('UNHANDLED: ' + (e.reason && (e.reason.message || e.reason) || 'unknown')));
+  const origError = console.error;
+  console.error = function(...a){ log('console.error: ' + a.map(x => typeof x==='object' ? JSON.stringify(x) : String(x)).join(' ')); origError.apply(console, a); };
+  const origWarn = console.warn;
+  console.warn = function(...a){ log('console.warn: ' + a.map(x => typeof x==='object' ? JSON.stringify(x) : String(x)).join(' ')); origWarn.apply(console, a); };
+  log('DEBUG PANEL ACTIVE (early)');
+  // re-check panel every 2s in case of innerHTML wipe
+  setInterval(ensurePanel, 2000);
+})();
 
 let modalCleanup=null,synchronizationFlight=null,synchronizationShow=false;
 modal.addEventListener('close',()=>{modalCleanup?.();modalCleanup=null;});
@@ -398,7 +426,7 @@ async function start(){
  nearby.restore().catch(report);
  if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').then(()=>{offlineReady=true;}).catch(()=>{offlineReady=false;});}
  const linkedJob=new URLSearchParams(location.search).get('job');if(linkedJob){history.replaceState(null,'',location.pathname);navigate('jobs');jobsUI.open(linkedJob).catch(report);}
- if(!sessionListeners){sessionListeners=true;setInterval(()=>{if(document.visibilityState==='visible'&&navigator.onLine)synchronize().catch(err=>console.warn('Auto-sync failed',err));},300000);
+ if(!sessionListeners){sessionListeners=true;setInterval(()=>{if(document.visibilityState==='visible'&&navigator.onLine)synchronize().catch(err=>console.warn('Auto-sync failed',err));},120000);
  document.addEventListener('visibilitychange',()=>{if(document.visibilityState!=='visible')return;if(navigator.onLine)synchronize().finally(()=>nearby.resume().catch(report));else nearby.resume().catch(report);});}
 }
 window.addEventListener('hashchange',()=>{const token=new URLSearchParams(location.hash.slice(1)).get('access');if(token){if(!leaveDraft()||planUI.hasAnyChanges()&&!confirm('Přepnout přístup a zahodit neuložené značky v plánu?')){history.replaceState(null,'',location.pathname+location.search);return;}gardenHistoryUI.clear();notificationsUI.clear();materialsUI.clear();subscriptionsUI.clear();serviceWorkUI.clear();customersUI.clear();jobsUI.clear();sessionGeneration++;sessionInfo=null;clearURLs();accessUI.open(token).catch(report);}});
