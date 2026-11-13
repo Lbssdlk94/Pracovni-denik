@@ -99,7 +99,7 @@ try{
  console.log('PASS native document contract creates actual PDF; photo annotation add/drag and native map selection persist into the real record');await click('Zpět na šachty');
 
  await execute('open',{jobId:'irrigation-job',action:'protocol'});await page.locator('#service-work-form').waitFor();await context.setOffline(true);await value('Provedené práce','Nativní zápis offline');await click('Uložit rozpracovaný protokol');await page.locator('#service-work-form').waitFor({state:'hidden'});
- const pending=await page.evaluate(async()=> (await import('/cloud.js?v=job-month-cache-v1')).pendingSummary());assert.ok(pending.total>0);
+ const pending=await page.evaluate(async()=> (await import('/cloud.js?v=job-diary-v1')).pendingSummary());assert.ok(pending.total>0);
  await context.setOffline(false);await page.waitForFunction(async()=>{const r=await fetch('/api/jobs/irrigation-job/service',{headers:{'x-workspace-client-version':'shared-directory-v1'}});const v=await r.json();return v.report?.work==='Nativní zápis offline';},{},{timeout:30000});
  assert.equal((await db.prepare("SELECT count(*) n FROM service_reports WHERE job_id='irrigation-job'").first()).n,1);assert.equal((await db.prepare("SELECT count(*) n FROM service_photos WHERE job_id='irrigation-job'").first()).n,1);
  console.log('PASS native offline edit and reconnection synchronize one report without duplicating a report or photograph');
