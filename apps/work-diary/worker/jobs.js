@@ -35,6 +35,7 @@ export async function handleJobs(request,env,m,h){
   if(!['active','all','planned','on_way','in_progress','done','incomplete'].includes(state))fail(400,'Neplatný filtr zakázek.');
   if(protocol&&!['unfinished','missing','draft','ready'].includes(protocol))fail(400,'Neplatný filtr protokolu.');
   if(assignee){validId(assignee);if(!manager&&assignee!==m.user_id)fail(403,'Můžete zobrazit pouze vlastní zakázky.');}
+  const cacheSnapshot=url.searchParams.get('cacheSnapshot')==='1',listRevision=cacheSnapshot?((await one(env.DB,"SELECT version FROM settings WHERE key='job-planner-revision'"))?.version||0):null;
   const clauses=['j.deleted=0',scope],args=[m.user_id];
   const disciplineFilter=url.searchParams.get('discipline');if(m._workspace&&disciplineFilter&&disciplineFilter!=='all'){clauses.push('j.discipline=?');args.push(disciplineFilter);}
   if(protocol){clauses.push("j.status='done'");clauses.push(protocol==='unfinished'?"("+protocolStateSql+") IN ('missing','draft')":"("+protocolStateSql+")=?");if(protocol!=='unfinished')args.push(protocol);}
@@ -59,7 +60,8 @@ export async function handleJobs(request,env,m,h){
   }
   const ordering=order==='schedule'?`${statusKey},${dateKey},${timeKey},j.id`:'j.created_at DESC,j.id DESC';
   const rows=await all(env.DB,select+' WHERE '+clauses.join(' AND ')+' ORDER BY '+ordering+' LIMIT 101',...args),more=rows.length>100,list=rows.slice(0,100),last=list.at(-1);
-  return json({jobs:list.map(record),nextCursor:more?btoa(JSON.stringify(order==='schedule'?{order,filter,completed:last.status==='in_progress'?0:last.status==='incomplete'?2:last.status==='done'?3:1,date:last.due_date||'9999-99-99',time:last.planned_start||last.start_time||'24:00',id:last.id}:{at:last.created_at,id:last.id})):null,...(calendar?{calendar}:{})});
+  const listRevisionAfter=cacheSnapshot?((await one(env.DB,"SELECT version FROM settings WHERE key='job-planner-revision'"))?.version||0):null;
+  return json({...cacheSnapshot?{listRevision:listRevision===listRevisionAfter?listRevision:null}:{},jobs:list.map(record),nextCursor:more?btoa(JSON.stringify(order==='schedule'?{order,filter,completed:last.status==='in_progress'?0:last.status==='incomplete'?2:last.status==='done'?3:1,date:last.due_date||'9999-99-99',time:last.planned_start||last.start_time||'24:00',id:last.id}:{at:last.created_at,id:last.id})):null,...(calendar?{calendar}:{})});
  }
  const match=path.match(/^\/api\/jobs\/([-a-zA-Z0-9_]{1,100})(\/(?:status|departure|geocode))?$/);if(!match)fail(404,'Zakázka nebyla nalezena.');
  const id=match[1],statusOnly=match[2]==='/status',departure=match[2]==='/departure';

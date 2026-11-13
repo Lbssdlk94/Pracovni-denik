@@ -379,6 +379,13 @@
       "when": 1793822400000,
       "tag": "0053_retire_volume_fixtures",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "6",
+      "when": 1794594069444,
+      "tag": "0054_job_diary_entries",
+      "breakpoints": true
     }
   ]
 }

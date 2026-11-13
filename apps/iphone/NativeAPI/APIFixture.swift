@@ -23,7 +23,25 @@ final class APIFixtureProtocol:URLProtocol {
         if path=="/api/auth/account"{return json(.object(["username":.s("fixture"),"version":.n(1)]))}
         if path=="/api/notifications/native/config"{return json(.object(["configured":.bool(false),"registered":.bool(false),"enabled":.bool(false),"userId":.s("fixture-owner")]))}
         if path=="/api/access-logout" || path=="/api/notifications/native"{return json(.object(["ok":.bool(true)]))}
-        if path=="/api/jobs"{var jobs=fixture["jobs"].array.map{job in records["/api/jobs/"+job.id] ?? job};let components=URLComponents(url:request.url!,resolvingAgainstBaseURL:false)!;let q=Dictionary(components.queryItems?.map{($0.name,$0.value ?? "")} ?? [],uniquingKeysWith:{$1});if let day=q["day"]{jobs=jobs.filter{$0["dueDate"].string==day}};let ranks=["in_progress":0,"on_way":1,"planned":2,"incomplete":3,"done":4];jobs.sort{(ranks[$0["status"].string] ?? 2)<(ranks[$1["status"].string] ?? 2)};return json(.object(["jobs":.array(jobs),"nextCursor":.null]))}
+        if path=="/api/jobs"{
+            let all=fixture["jobs"].array.map{records["/api/jobs/"+$0.id] ?? $0}
+            var jobs=all
+            let q=Dictionary(URLComponents(url:request.url!,resolvingAgainstBaseURL:false)!.queryItems?.map{($0.name,$0.value ?? "")} ?? [],uniquingKeysWith:{$1})
+            if let month=q["month"]{jobs=jobs.filter{$0["dueDate"].string.isEmpty || $0["dueDate"].string.hasPrefix(month+"-")}}
+            if let day=q["day"]{jobs=jobs.filter{$0["dueDate"].string==(day=="undated" ? "" : day)}}
+            let ranks=["in_progress":0,"on_way":1,"planned":2,"incomplete":3,"done":4];jobs.sort{(ranks[$0["status"].string] ?? 2)<(ranks[$1["status"].string] ?? 2)}
+            var page:APIValue = .object(["jobs":.array(jobs),"nextCursor":.null])
+            if q["cacheSnapshot"]=="1"{page["listRevision"] = .n(all.reduce(0){$0+$1["version"].int})}
+            return json(page)
+        }
+        if path=="/api/workspace/manifest"{
+            if let override=records[path]{return json(override)}
+            let b=body(),names=["records","gardens","services","serviceWork","defects"]
+            let jobs=fixture["jobs"].array.map{records["/api/jobs/"+$0.id] ?? $0},requested=Set(b["serviceWork"].array.map(\.string)),visible=jobs.filter{requested.contains($0.id)}
+            let revision=jobs.reduce(0){$0+$1["version"].int},stamp="fixture:"+String(revision)
+            if !b["expectedStamp"].string.isEmpty && b["expectedStamp"].string != stamp{return json(.object(["error":.s("Snapshot changed")]),409)}
+            return json(.object(["completeForRequestedIds":.bool(true),"stamp":.s(stamp),"requestedCounts":.object(Dictionary(uniqueKeysWithValues:names.map{($0,.n(b[$0].array.count))})),"allowed":.object(Dictionary(uniqueKeysWithValues:names.map{($0,$0=="serviceWork" ? .array(visible.map{.s($0.id)}) : .array([]))})),"jobVersions":.object(Dictionary(uniqueKeysWithValues:visible.map{($0.id,$0["version"])})),"workspace":me["workspace"]]))
+        }
         if path=="/api/customers"{return json(.object(["customers":.array(customers),"nextCursor":.null]))}
         if path=="/api/gardens"{return json(.object(["gardens":.array(gardens)]))}
         if path=="/api/materials"{return json(.object(["items":.array([material]),"categories":.array([.object(["id":.s("category-1"),"name":.s("Postřikovače"),"version":.n(1),"active":.bool(true)])]),"nextCursor":.null]))}
@@ -39,6 +57,19 @@ final class APIFixtureProtocol:URLProtocol {
         let parts=path.split(separator:"/").map(String.init)
         if parts.count>=3 && parts[1]=="jobs",let base=fixture["jobs"].array.first(where:{$0.id==parts[2]}){let key="/api/jobs/"+parts[2];var job=records[key] ?? base
             if parts.count==3{if method=="PUT"{let b=body();guard b["version"]==job["version"]else{return json(.object(["error":.s("Konflikt verze")]),409)};job=job.merged(b.object);job["version"] = .n(job["version"].int+1);records[key]=job};return json(.object(["job":job]))}
+            if parts[3]=="diary"{
+                let prefix=key+"/diary/"
+                if parts.count==4{return json(.object(["job":job,"entries":.array(records.filter{$0.key.hasPrefix(prefix)}.values.sorted{$0["date"].string>$1["date"].string}),"nextCursor":.null]))}
+                let entryKey=prefix+parts[4],old=records[entryKey] ?? .null
+                if method=="PUT"{
+                    let b=body()
+                    if old["operationId"]==b["operationId"],!old.isNull{return json(.object(["job":job,"entry":old,"replayed":.bool(true)]))}
+                    guard b["version"].int==old["version"].int else{return json(.object(["error":.s("Zápis se změnil"),"code":.s("diary_conflict")]),409)}
+                    records[entryKey]=b.merged(["id":.s(parts[4]),"version":.n(old["version"].int+1),"authorName":.s("Luboš – ukázka"),"createdBy":.s("fixture-owner"),"canEdit":.bool(true),"photos":.array([])])
+                }
+                guard let row=records[entryKey]else{return json(.object(["error":.s("Zápis neexistuje")]),404)}
+                return json(.object(["job":job,"entry":row]))
+            }
             if parts[3]=="status"{let b=body();guard b["version"]==job["version"]else{return json(.object(["error":.s("Konflikt verze")]),409)};job["status"]=b["status"];job["incompleteReason"]=b["incompleteReason"];job["version"] = .n(job["version"].int+1);records[key]=job;return json(.object(["job":job]))}
             if parts[3]=="service"{var report=records[key+"/report"] ?? .null;if method=="PUT"{let b=body();guard b["version"]==job["version"]else{return json(.object(["error":.s("Konflikt verze")]),409)};report=b["report"];report["version"] = .n(1);report["documentState"] = .s(b["finalizeReport"].bool ? "ready" : "draft");records[key+"/report"]=report;job["version"] = .n(job["version"].int+1);if b["complete"].bool{job["status"] = .s("done")};records[key]=job};return json(.object(["job":job,"report":report,"photos":.array([]),"billingPreview":.object([:])]))}
             if parts[3]=="handoffs"{return json(.object(["jobVersion":job["version"],"revision":.n(1),"handoffs":.array([.object(["userId":.s("fixture-owner"),"version":.n(1),"status":.s("pending")])])]))}
@@ -48,7 +79,7 @@ final class APIFixtureProtocol:URLProtocol {
         if parts.count==4 && parts[1]=="gardens" && parts[3]=="services"{return json(.object(["services":.array([])]))}
         return json(.object(["error":.s("Testovací server nemá tuto cestu: "+path)]),501)
     }
-    static func fixtureData()->APIValue{var raw=(try? JSONDecoder().decode(APIValue.self,from:Data(contentsOf:Bundle.main.url(forResource:"NativeFixture",withExtension:"json")!))) ?? .null;let f=DateFormatter();f.timeZone=TimeZone(identifier:"Europe/Prague");f.dateFormat="yyyy-MM-dd";let today=f.string(from:Date());raw["jobs"] = .array(raw["jobs"].array.map{$0.merged(["dueDate":.s(today),"gardenId":.s("garden-1"),"customerId":.s("customer-1"),"assignedTos":.array([.s("fixture-owner")]),"serviceApproval":.s("confirmed")])});var features=raw["context"]["features"].object;for k in ["offline","materials","vehicles","fleetFuel","fleetDriverSelection","fleetConsumption","fleetExpenses","photoUploads","protocolPhotos","gardenHistory","service","plans","shafts","blowout","jobHandoffs"]{features[k] = .bool(true)};raw["context"]["features"] = .object(features);return raw}
+    static func fixtureData()->APIValue{var raw=(try? JSONDecoder().decode(APIValue.self,from:Data(contentsOf:Bundle.main.url(forResource:"NativeFixture",withExtension:"json")!))) ?? .null;let f=DateFormatter();f.timeZone=TimeZone(identifier:"Europe/Prague");f.dateFormat="yyyy-MM-dd";let today=f.string(from:Date());raw["jobs"] = .array(raw["jobs"].array.map{$0.merged(["dueDate":.s(today),"gardenId":.s("garden-1"),"customerId":.s("customer-1"),"assignedTos":.array([.s("fixture-owner")]),"serviceApproval":.s("confirmed")])});var features=raw["context"]["features"].object;for k in ["offline","materials","vehicles","fleetFuel","fleetDriverSelection","fleetConsumption","fleetExpenses","photoUploads","protocolPhotos","gardenHistory","service","plans","shafts","blowout","jobHandoffs"]{features[k] = .bool(true)};raw["context"]["features"] = .object(features);raw["context"]["workspace"]["workspaceId"] = .s("fixture-workspace");raw["context"]["workspace"]["role"]=raw["context"]["user"]["role"];return raw}
     static var customers:[APIValue]{[.object(["id":.s("customer-1"),"name":.s("Jan Kortus – ukázka"),"version":.n(1),"email":.s("test@example.invalid"),"phones":.array([.object(["id":.s("phone-1"),"number":.s("+420123456789"),"label":.s("Mobil")])]),"addresses":.array([.object(["id":.s("address-1"),"label":.s("Zahrada maminky"),"address":.s("Lipová 1488"),"city":.s("Blatná")])])])]}
     static var gardens:[APIValue]{[.object(["id":.s("garden-1"),"name":.s("Zahrada maminky"),"address":.s("Lipová 1488, Blatná"),"customerId":.s("customer-1"),"version":.n(1),"addressDetails":.object(["customerAddressId":.s("address-1"),"city":.s("Blatná")])]),.object(["id":.s("garden-2"),"name":.s("Zahrada u domu"),"address":.s("Nádražní 12, Písek"),"customerId":.s("customer-1"),"version":.n(1)])]}
     static var material:APIValue{.object(["id":.s("material-1"),"name":.s("Rotační tryska"),"sku":.s("RN 12"),"unit":.s("ks"),"currency":.s("CZK"),"priceMinor":.n(24500),"version":.n(1),"categoryId":.s("category-1"),"active":.bool(true)])}

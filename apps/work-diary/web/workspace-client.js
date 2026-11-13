@@ -1,19 +1,22 @@
-import {workspaceInventory,workspaceSameAccount,planWorkspaceReconciliation} from './workspace-sync-model.js?v=github-sync-fix-v3';
+import {workspaceInventory,workspaceSameAccount,planWorkspaceReconciliation} from './workspace-sync-model.js?v=job-diary-v1';
 import {sealWorkspaceRecovery} from './workspace-recovery-crypto.js?v=shared-directory-v1';
 
 const STORES=['records','gardens','services','serviceWork','defects'];
 
 export async function verifyWorkspaceInventory(send,inventory){
-  const manifest={allowed:Object.fromEntries(STORES.map(store=>[store,[]])),requestedCounts:Object.fromEntries(STORES.map(store=>[store,inventory[store].length])),completeForRequestedIds:true};
+  const manifest={allowed:Object.fromEntries(STORES.map(store=>[store,[]])),requestedCounts:Object.fromEntries(STORES.map(store=>[store,inventory[store].length])),completeForRequestedIds:true,jobVersions:{}};
   const batches=Math.max(1,...STORES.map(store=>Math.ceil(inventory[store].length/1000)));
   for(let index=0;index<batches;index++){
     const slice=Object.fromEntries(STORES.map(store=>[store,inventory[store].slice(index*1000,(index+1)*1000)]));
     const response=await send('/api/workspace/manifest',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...slice,...manifest.stamp?{expectedStamp:manifest.stamp}:{} })});
     if(!response.completeForRequestedIds||!response.stamp||manifest.stamp&&response.stamp!==manifest.stamp||STORES.some(store=>response.requestedCounts?.[store]!==slice[store].length||!Array.isArray(response.allowed?.[store])||response.allowed[store].some(id=>!slice[store].includes(id))))throw Error('Server nepotvrdil úplné ověření místní práce.');
     for(const store of STORES)manifest.allowed[store].push(...response.allowed[store]);
+    Object.assign(manifest.jobVersions,response.jobVersions||{});
     Object.assign(manifest,{stamp:response.stamp,workspace:response.workspace,writable:response.writable,features:response.features});
   }
-  if((await send('/api/workspace/manifest',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...Object.fromEntries(STORES.map(store=>[store,[]])),expectedStamp:manifest.stamp})})).stamp!==manifest.stamp)throw Error('Oprávnění se během ověřování změnila.');
+  // Empty inventory exposes no cached records; its first response already checks
+  // current access. Retain the closing fence whenever any local ID is present.
+  if(STORES.some(store=>inventory[store].length)&&(await send('/api/workspace/manifest',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({...Object.fromEntries(STORES.map(store=>[store,[]])),expectedStamp:manifest.stamp})})).stamp!==manifest.stamp)throw Error('Oprávnění se během ověřování změnila.');
   return manifest;
 }
 
@@ -44,6 +47,7 @@ export function createWorkspaceClient(handlers){
       await handlers.replace({plan,current:next,archives});
       await handlers.onReduced({archives:archives.length,rebased});
     }else if(!previous?.workspace)await handlers.replace({plan,current:next,archives:[]});
+    await handlers.onVerified?.({manifest,current:next,plan});
     return plan;
   }
   return {
