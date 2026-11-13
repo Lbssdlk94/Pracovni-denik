@@ -1,5 +1,5 @@
 import {createWatchClient} from './watch-client.js?v=watch-companion-v1';
-import {createNativeScreens} from './native-screens.js?v=native-progressive-v1';
+import {createNativeScreens} from './native-screens.js?v=role-preview-v1';
 // A narrow, read-only data bridge for the first native iPhone screens.
 // Mutations and offline forms continue through the existing guarded web UI.
 const formOpen=()=>Object.assign(Error('Nejdříve uložte nebo zavřete otevřený formulář.'),{code:'native_form_open'});
@@ -15,7 +15,7 @@ export function createNativeClient({db,getName,onSession,openTarget,canResume,is
  const jobsAllowed=(s,day)=>{if(s.features?.jobs===false||s.features?.[day?'jobDay':'jobList']===false)throw Error('Tento pohled zakázek je pro firmu vypnutý.');};
  async function list(input={}){const s=current(),key=nativeIdentityKey(s),day=input.day||'';jobsAllowed(s,day);if(day&&!/^\d{4}-\d{2}-\d{2}$/.test(day)||!states.has(input.state||'all'))throw Error('Neplatný filtr zakázek.');
   const params=new URLSearchParams({state:input.state||'all',order:'schedule'});if(day){params.set('month',day.slice(0,7));params.set('day',day);}if(input.q)params.set('q',String(input.q).slice(0,100));if(input.cursor)params.set('cursor',String(input.cursor));if(input.mine||!s.permissions?.manage)params.set('assignee',s.user.id);
-  const result=await db.request('/api/jobs?'+params);guard(key);return result;
+  const result=await db.request('/api/jobs?'+params,{jobCacheRefresh:true});guard(key);return result;
  }
  const watch=createWatchClient({db,getName,onSession,canResume,isOnline,today,identityKey:nativeIdentityKey});
  return Object.freeze({async execute(command,input={}){

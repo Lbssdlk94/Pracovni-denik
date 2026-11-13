@@ -1,10 +1,11 @@
-import {createAccountUI} from './local-auth-ui.js?v=local-auth-v1';
-import {installNativeClient} from './native-client.js?v=watch-companion-v1';
+import {rolePreviewMarkup} from './role-preview-model.js?v=role-preview-v1';
+import {createAccountUI} from './local-auth-ui.js?v=session-startup-v1';
+import {installNativeClient} from './native-client.js?v=job-three-month-v1';
 import {transientConnectionError} from './io.js?v=connection-recovery-v1';
 import {createConnectionRecovery} from './connection-recovery.js?v=connection-recovery-v1';
 import {createWorkspaceUI,workspaceFilterMarkup,workspaceBadge,workspaceDisciplineField} from './workspace-ui.js?v=shared-directory-v1';
 import {createWorkspaceRecoveryUI} from './workspace-recovery-ui.js?v=shared-directory-v1';
-import {createOverviewUI} from './overview-ui.js?v=green-icon-v1';
+import {createOverviewUI} from './overview-ui.js?v=job-three-month-v1';
 import {interfaceIcon} from './interface-icons.js?v=approved-b-v2';
 import {createVehiclesUI} from './vehicles-ui.js?v=fleet-photo-v1';
 import {gardenSectionIds} from './features.js?v=fleet-photo-v1';
@@ -14,7 +15,7 @@ import {createOperationsUI} from './operations-ui.js?v=workspace-roles-v1';
 import {gardenChoiceLabel} from './garden-choice.js?v=workspace-roles-v1';
 import {createRecordLinksUI} from './record-links-ui.js?v=workspace-roles-v1';
 import {navigationIcon} from './navigation-icons.js?v=workspace-controls-v1';
-import {createGardenHistoryUI} from './garden-history-ui.js?v=workspace-platform-v1';
+import {createGardenHistoryUI} from './garden-history-ui.js?v=job-diary-v1';
 import {createDevicePermissionsUI} from './device-permissions-ui.js?v=workspace-roles-v1';
 import {attachFormDraft,captureFormFields,restoreFormFields,captureActiveFormDrafts} from './form-drafts.js?v=draft-recovery-v1';
 import {createEmailSettingsUI} from './email-settings-ui.js?v=workspace-controls-v1';
@@ -27,10 +28,10 @@ import {createServiceWorkUI} from './service-work-ui.js?v=draft-recovery-v1';
 import {createCustomersUI} from './customers-ui.js?v=draft-recovery-v1';
 import {createNotificationsUI} from './notifications-ui.js?v=native-push-v1';
 import {createDriveUI} from './drive-ui.js?v=workspace-controls-v1';
-import {createJobsUI} from './jobs-ui.js?v=draft-recovery-v1';
+import {createJobsUI} from './jobs-ui.js?v=job-diary-v1';
 import {createBlowoutUI} from './blowout-ui.js?v=workspace-controls-v1';
 import {createAttendanceUI} from './attendance-ui.js?v=workspace-roles-v1';
-import {createAccessUI} from './access-ui.js?v=local-auth-v1';
+import {createAccessUI} from './access-ui.js?v=session-startup-v1';
 import {createPlanUI} from './plan-ui.js?v=workspace-roles-v1';
 import {openPositionMap} from './position-map-ui.js?v=workspace-roles-v1';
 import {gardenAddressLocation} from './nearby.js?v=workspace-roles-v1';
@@ -40,7 +41,7 @@ import {gardenTabsMarkup,gardenPanel} from './garden-ui.js?v=workspace-roles-v1'
 import {FEATURE_OPTIONS,featureEnabled} from './features.js?v=fleet-photo-v1';
 import {settingsPage,bindSettings} from './settings-ui.js?v=workspace-controls-v1';
 import {COLORS,DEFAULT_ZONES,clamp,createMarker,normalizedPoint,validateBackup} from './model.js?v=workspace-roles-v1';
-import * as db from './cloud.js?v=draft-recovery-v1';
+import * as db from './cloud.js?v=job-diary-v1';
 import * as legacyDb from './storage.js?v=workspace-roles-v1';
 import {preparePhoto,annotatedPhoto,download,blobToDataURL} from './export.js?v=workspace-roles-v1';
 
@@ -57,7 +58,7 @@ const writable=()=>!!sessionInfo?.permissions.write&&writeConnection();
 const manageable=()=>!!sessionInfo?.permissions.manage;
 const nearby=createNearbyUI({db,getGardens:()=>gardens,getChoices:()=>gardenAddressChoices,setChoices:v=>gardenAddressChoices=v,enabled:()=>enabled('nearby'),onChange:()=>{if(page==='home'&&!activeGarden)render();},showModal,closeModal:()=>modal.close(),esc:v=>esc(v),editGarden,writable,isOnline:()=>navigator.onLine});
 const planUI=createPlanUI({showModal,closeModal:()=>modal.close(),esc:v=>esc(v),icon:name=>icon(name),getRows:id=>enabled('shafts')?records.filter(r=>r.gardenId===id):[],writable:()=>writable()&&enabled('plans')&&enabled('shafts'),isOnline:()=>mapOnline(),save:(g,m)=>db.savePlanMarkers(g,m),onSaved:async()=>{gardens=await db.cachedGardens();render();toast('Značky v plánu jsou uložené pro celý tým.');},onReload:async()=>{gardens=await db.getGardens();},onOpen:openRecord});
-const accountUI=createAccountUI({db,esc:v=>esc(v),showModal,modal,onSaved:async()=>{sessionInfo=await db.connect();if(manageable())await loadTeam();render();},roleOptions,disciplineField:()=>workspaceDisciplineField(sessionInfo,esc),getSession:()=>sessionInfo});
+const accountUI=createAccountUI({db,esc:v=>esc(v),showModal,modal,onSaved:async()=>{sessionInfo=await db.connect({refresh:true});if(manageable())await loadTeam();render();},roleOptions,disciplineField:()=>workspaceDisciplineField(sessionInfo,esc),getSession:()=>sessionInfo});
 const accessUI=createAccessUI({app,esc:v=>esc(v),db,onReady:enterFromAccess,onBeforeSwitch:async id=>{if(!id||db.session()?.user.id!==id)await notificationsUI.detach({allowInvalid:true});}});
 const attendanceUI=createAttendanceUI({db,esc:v=>esc(v),getSession:()=>sessionInfo,showModal,closeModal:()=>modal.close(),toast});
 const blowoutUI=createBlowoutUI({db,esc:v=>esc(v),showModal,modal,canEdit:()=>writable()&&enabled('blowout'),canAddPhotos:()=>enabled('photoUploads'),isOnline:()=>mapOnline(),onSaved:async()=>{gardens=await db.cachedGardens();render();},toast});
@@ -66,7 +67,7 @@ const customersUI=createCustomersUI({onSubscriptions:async(id,assign=false)=>{aw
 const emailSettingsUI=createEmailSettingsUI({db,esc:v=>esc(v),getSession:()=>sessionInfo,toast});
 const invoiceSettingsUI=createInvoiceSettingsUI({db,esc:v=>esc(v),getSession:()=>sessionInfo,toast});
 const workspaceRecoveryUI=createWorkspaceRecoveryUI({db,esc:v=>esc(v),getSession:()=>sessionInfo,showModal,modal,download,toast});
-const workspaceUI=createWorkspaceUI({db,esc:v=>esc(v),getSession:()=>sessionInfo,showModal,modal,toast,onChanged:async()=>{sessionInfo=await db.connect();if(page==='team')await loadTeam();render();}});
+const workspaceUI=createWorkspaceUI({db,esc:v=>esc(v),getSession:()=>sessionInfo,showModal,modal,toast,onChanged:async()=>{sessionInfo=await db.connect({refresh:true});if(page==='team')await loadTeam();render();}});
 const operationsUI=createOperationsUI({db,esc:v=>esc(v),getSession:()=>sessionInfo,toast});
 const reminderSettingsUI=createReminderSettingsUI({db,esc:v=>esc(v),getSession:()=>sessionInfo,isOnline:()=>mapOnline(),toast});
 const notificationsUI=createNotificationsUI({db,esc:v=>esc(v),getSession:()=>sessionInfo,isOnline:()=>mapOnline(),toast,onOpenTarget:async n=>{if(!leaveDraft())return;for(const d of [...document.querySelectorAll('dialog[open]')].reverse()){const close=d.querySelector('[data-close]')||d.querySelector('[data-photo-viewer-close]')||d.querySelector('header button');if(close){close.click();if(d.open)return;}else return;}if(n.kind.startsWith('job_')){navigate('jobs');await jobsUI.open(n.resourceId);}else if(n.kind==='vehicle_deadline'){navigate('vehicles');await vehiclesUI.open(n.resourceId);}else navigate('attendance');}});
@@ -111,7 +112,7 @@ app.addEventListener('click',e=>{if(e.target.closest('[data-show-sync]')){toast(
 window.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.querySelector('#mobile-more-menu.is-open')){e.preventDefault();closeMobileMore();document.querySelector('[data-mobile-more]')?.focus();}});window.addEventListener('resize',closeMobileMore);
 function shell(content){
   const active=page==='editor'?'home':page,brandName=appDisplayName(sessionInfo);document.title=brandName;
-  return `<div class="shell"><aside class="sidebar"><div class="brand brand-full"><img src="./work-diary-mark.svg?v=green-icon-v1" alt=""><div>${esc(brandName)}<small>Pracovní deník</small></div></div><nav class="nav" aria-label="Hlavní navigace">${navigationMarkup(active)}</nav></aside><main class="main"><header class="topbar"><div class="crumb">Pracovní prostor <span>/</span> <strong>${page==='overview'?'Přehled':page==='vehicles'?'Vozidla':page==='defects'?'Závady':page==='materials'?'Materiál':page==='subscriptions'?'Předplatné':page==='jobs'?'Zakázky':page==='customers'?'Zákazníci':page==='settings'?'Nastavení':page==='attendance'?'Docházka':page==='team'?'Náš tým':page==='zones'?'Závlahové zóny':page==='backup'?'Záloha a pomoc':page==='editor'?'Popis fotografie':'Týmové šachty'}</strong></div><div class="mobile-brand"><div class="brand"><img src="./work-diary-mark.svg?v=green-icon-v1" alt=""><div>${esc(brandName)}<small>Pracovní deník</small></div></div></div><button type="button" data-show-sync class="top-status" aria-label="${esc(connection)}" title="${esc(connection)}"><span class="dot"></span><span>${esc(connection)}</span></button>${workspaceFilterMarkup(sessionInfo,esc)}${notificationsUI.bell()}<div class="desktop-signout">${signoutLink()}</div></header>${content}</main></div>`;
+  return `<div class="shell ${sessionInfo?.rolePreview?.active?'is-role-preview':''}"><aside class="sidebar"><div class="brand brand-full"><img src="./work-diary-mark.svg?v=green-icon-v1" alt=""><div>${esc(brandName)}<small>Pracovní deník</small></div></div><nav class="nav" aria-label="Hlavní navigace">${navigationMarkup(active)}</nav></aside><main class="main">${rolePreviewMarkup(sessionInfo,esc)}<header class="topbar"><div class="crumb">Pracovní prostor <span>/</span> <strong>${page==='overview'?'Přehled':page==='vehicles'?'Vozidla':page==='defects'?'Závady':page==='materials'?'Materiál':page==='subscriptions'?'Předplatné':page==='jobs'?'Zakázky':page==='customers'?'Zákazníci':page==='settings'?'Nastavení':page==='attendance'?'Docházka':page==='team'?'Náš tým':page==='zones'?'Závlahové zóny':page==='backup'?'Záloha a pomoc':page==='editor'?'Popis fotografie':'Týmové šachty'}</strong></div><div class="mobile-brand"><div class="brand"><img src="./work-diary-mark.svg?v=green-icon-v1" alt=""><div>${esc(brandName)}<small>Pracovní deník</small></div></div></div><button type="button" data-show-sync class="top-status" aria-label="${esc(connection)}" title="${esc(connection)}"><span class="dot"></span><span>${esc(connection)}</span></button>${workspaceFilterMarkup(sessionInfo,esc)}${notificationsUI.bell()}<div class="desktop-signout">${signoutLink()}</div>${sessionInfo?.rolePreview?.active?'<div class="role-preview-quick-exit"><button type="button" class="btn small" data-role-preview-exit>↩ Zpět k mojí roli</button></div>':''}</header>${content}</main></div>`;
 }
 function render(){if(page!=='overview')overviewUI.clear();if(page==='vehicles'&&!enabled('vehicles'))page='home';if(page!=='vehicles')vehiclesUI.clear();if(page==='materials'&&!enabled('materials'))page='home';if(page!=='materials')materialsUI.clear();if(page==='backup')page='settings';if(page==='team'&&!manageable())page='home';if(page!=='subscriptions')subscriptionsUI.clear();if(page!=='customers')customersUI.clear();if(page!=='jobs')jobsUI.clear();if(page==='defects'&&!enabled('defects'))page='home';if(page==='editor'&&!enabled('shafts')&&!dirty)page='home';const focusedSearch=document.activeElement?.id==='search',selection=focusedSearch?[document.activeElement.selectionStart,document.activeElement.selectionEnd]:null;if(!enabled('search'))searchQuery='';if(!enabled('gardens')){activeGarden=null;gardenHistoryUI.clear();if(page==='defects')page='home';}if((page==='team'&&!enabled('teamManagement'))||(page==='zones'&&!enabled('zoneManagement'))||(page==='attendance'&&!enabled('attendance'))||(page==='jobs'&&!enabled('jobs'))||(page==='customers'&&!enabled('customers'))||(page==='subscriptions'&&!enabled('subscriptions')))page='home';disposeMap();blowoutUI.disposeView();clearURLs();app.innerHTML=shell(page==='overview'?overviewUI.markup():page==='vehicles'?vehiclesUI.markup():page==='defects'?gardenHistoryUI.markup():page==='materials'?materialsUI.markup():page==='home'?home():page==='zones'?zonesPage():page==='team'?teamPage():page==='settings'?'<div class="settings-workspace">'+settingsPage(sessionInfo)+'<section class="storage-card"><h2>Přihlášení</h2><button type="button" class="btn" data-password-self>Moje přihlášení</button>'+(sessionInfo?.user.role==='owner'?'<button type="button" class="btn" data-password-policy>Způsob přihlašování firmy</button>':'')+'</section>'+(manageable()?driveUI.markup():'')+notificationsUI.settingsMarkup()+devicePermissionsUI.settingsMarkup()+(sessionInfo?.workspace?workspaceRecoveryUI.markup():'')+(manageable()?recordLinksUI.markup()+emailSettingsUI.markup()+invoiceSettingsUI.markup()+reminderSettingsUI.markup()+operationsUI.markup()+backupSettings():'')+'</div>':page==='attendance'?attendanceUI.markup():page==='jobs'?jobsUI.markup():page==='customers'?customersUI.markup():page==='subscriptions'?subscriptionsUI.markup():editor());applyFeatureVisibility(app);sizeBottomNavigation();notificationsUI.bind();devicePermissionsUI.mount();if(page==='overview')overviewUI.bind();if(page==='vehicles')vehiclesUI.bind();if(page==='defects')gardenHistoryUI.bind();if(page==='materials')materialsUI.bind();if(page==='settings'&&manageable()){recordLinksUI.bind();driveUI.bind();reminderSettingsUI.bind();operationsUI.bind();invoiceSettingsUI.bind();emailSettingsUI.bind();}else{driveUI.clear();reminderSettingsUI.clear();operationsUI.clear();invoiceSettingsUI.clear();emailSettingsUI.clear();}if(page==='settings'){workspaceRecoveryUI.bind();}if(page==='settings')bindSettings(sessionInfo,{save:async(features,version)=>{await db.saveFeatures(features,version);sessionInfo=db.session();},reload:async()=>{try{sessionInfo=await db.connect();render();}catch(error){report(error);}},success:()=>{render();toast('Nastavení funkcí bylo uloženo pro celý tým.');}});if(page==='home'){renderRecords();if(activeGarden&&activeGarden!=='unassigned'){gardenHistoryUI.alert(document.querySelector('#garden-defect-alert'),{gardenId:activeGarden});if(gardenTab()==='history')gardenHistoryUI.history(document.querySelector('#garden-history'),activeGarden);if(gardenTab()==='defects')gardenHistoryUI.list(document.querySelector('#garden-defects'),{gardenId:activeGarden});}if(!activeGarden||gardenTab()==='plan')hydratePlan();if(!activeGarden||gardenTab()==='service')hydrateServices();if(gardenTab()==='map')renderGardenMap();if(gardenTab()==='blowout'){const g=gardens.find(g=>g.id===activeGarden);if(g)blowoutUI.bind(g).catch(report);}}if(page==='attendance')attendanceUI.bind();if(page==='jobs')jobsUI.bind();if(page==='customers')customersUI.bind();if(page==='subscriptions')subscriptionsUI.bind();if(page==='editor')bindEditor();const search=document.querySelector('#search');if(search){search.value=searchQuery;if(focusedSearch){search.focus({preventScroll:true});search.setSelectionRange(...selection);}}}
 function home(){if(activeGarden)return gardenHome();if(enabled('gardens'))return gardenOverview();if(!enabled('shafts'))return `<section class="storage-card"><h1>Pracovní prostor</h1><p>Pracovní funkce jsou nyní vypnuté.${manageable()?' Zapněte potřebné části v Nastavení → Funkce aplikace.':' O zapnutí potřebných částí požádejte správce.'}</p>${manageable()?'<button type="button" class="btn primary" data-page="settings">Otevřít nastavení</button>':''}</section>`;return `${teamStatus()}<section class="hero"><div><span class="eyebrow">Váš pomocník v terénu</span><h1>Každý ventil <br>má svůj popisek.</h1><p>Vyfoťte šachtu, označte ventily a napište, co který ovládá. Až se vrátíte, budete vědět přesně, co který ovládá.</p><div class="actions">${writable()?button('Přidat šachtu','add-shaft','primary','plus'):'<span class="role-pill">Máte přístup k prohlížení fotografií</span>'}</div></div><div class="art-card"><img src="./demo.svg" alt="Ilustrační závlahová šachta se třemi označenými ventily"><div class="art-note">${icon('check')} Přehledné popisky přímo ve fotografii <span>· Ukázka</span></div></div></section><div class="steps"><div class="step"><span class="step-num">01</span><div><strong>Vyfoťte šachtu</strong><small>Nebo vyberte snímek.</small></div></div><div class="step"><span class="step-num">02</span><div><strong>Označte ventily</strong><small>Klepněte a napište popisek.</small></div></div><div class="step"><span class="step-num">03</span><div><strong>Uložte a sdílejte</strong><small>Vše na jednom obrázku.</small></div></div></div>${gardenFolders()}<section><div class="section-head"><div><h2>Všechny šachty <span class="count">${records.length}</span></h2><p>Společné fotografie a popisky vašeho týmu.</p></div>${records.length?`<label class="search">${icon('search')}<input id="search" aria-label="Hledat šachtu" placeholder="Hledat šachtu…" type="search"></label>`:''}</div><div id="records"></div></section>`;}
@@ -310,7 +311,7 @@ app.addEventListener('click',async e=>{
 
   const logout=e.target.closest('[data-signout]');if(logout){e.preventDefault();if(!leaveDraft())return;if(planUI.hasAnyChanges()&&!confirm('V plánu jsou neuložené značky. Odhlásit se a zahodit tyto úpravy?'))return;if((await db.pendingSummary()).total&&!confirm('V telefonu jsou změny, které ještě nebyly sdíleny. Odhlášením se jejich místní kopie smaže. Opravdu se odhlásit?'))return;const previousSession=sessionInfo;try{await notificationsUI.detach();}catch{report(new Error('Pro bezpečné odhlášení oznámení se připojte k internetu a zkuste to znovu.'));return;}notificationsUI.clear();vehiclesUI.clear();sessionGeneration++;sessionInfo=null;await db.waitForRefresh();if(['link','password'].includes(previousSession?.user.authMethod)){try{await db.request('/api/access-logout',{method:'POST'});}catch(error){sessionInfo=previousSession;report(new Error('Pro odhlášení se připojte k internetu.'));return;}}await db.forgetSession();subscriptionsUI.clear();serviceWorkUI.clear();customersUI.clear();jobsUI.clear();attendanceUI.clear();planUI.clear();blowoutUI.clear();inviteText='';location.href=logout.href;return;}
   const customerContact=e.target.closest('[data-open-garden-customer]');if(customerContact){await customersUI.open(customerContact.dataset.openGardenCustomer).catch(report);return;}const assignCustomer=e.target.closest('[data-assign-garden-customer]');if(assignCustomer){await customersUI.assignGarden(assignCustomer.dataset.assignGardenCustomer).catch(report);return;}
-  const nav=e.target.closest('[data-page]');if(nav){if(nav.dataset.page==='team'&&!manageable()||nav.dataset.page==='backup'&&!manageable())return;if(nav.dataset.page==='settings'&&navigator.onLine){try{sessionInfo=await db.connect();}catch(error){if([401,403].includes(error.status)&&error.code!=='connection_timeout'){await db.lockSession();sessionInfo=null;clearURLs();showLogin(error);return;}toast('Nastavení týmu se nepodařilo obnovit. Zobrazuje se načtená kopie.',true);}}if(nav.dataset.page==='team'){await loadTeam();}if(nav.dataset.page==='home'){activeGarden=null;searchQuery='';}navigate(nav.dataset.page);return;}
+  const nav=e.target.closest('[data-page]');if(nav){if(nav.dataset.page==='team'&&!manageable()||nav.dataset.page==='backup'&&!manageable())return;if(nav.dataset.page==='team'){await loadTeam();}if(nav.dataset.page==='home'){activeGarden=null;searchQuery='';}navigate(nav.dataset.page);return;}
   const driverButton=e.target.closest('[data-member-driver]');if(driverButton){await vehiclesUI.editDriver(driverButton.dataset.memberDriver);return;}
   const member=e.target.closest('[data-member-remove]');if(member){if(confirm('Odebrat tohoto kolegu z týmu?')){await teamRequest('/api/members/'+encodeURIComponent(member.dataset.memberRemove),{method:'DELETE'});}return;}
   const invite=e.target.closest('[data-invitation-remove]');if(invite){await teamRequest('/api/invitations',{method:'DELETE',body:JSON.stringify({email:invite.dataset.invitationRemove})});return;}
@@ -330,7 +331,7 @@ app.addEventListener('input',e=>{if(e.target.id==='search'){searchQuery=e.target
 for(const id of ['camera-input','photo-input'])document.getElementById(id).addEventListener('change',async e=>{await openPhoto(e.target.files[0]);e.target.value='';});
 document.querySelector('#backup-input').addEventListener('change',async e=>{try{await importBackup(e.target.files[0]);}catch(error){report(error);}finally{e.target.value='';}});
 window.addEventListener('beforeunload',e=>{if(dirty||planUI.hasAnyChanges()){e.preventDefault();e.returnValue='';}});
-const connectionRecovery=createConnectionRecovery({run:()=>synchronize(),available:()=>!!sessionInfo&&navigator.onLine&&document.visibilityState==='visible'});
+const connectionRecovery=createConnectionRecovery({run:()=>synchronize(),successIntervalMs:300000,available:()=>!!sessionInfo&&navigator.onLine&&document.visibilityState==='visible'});
 window.addEventListener('online',()=>connectionRecovery.retryNow());
 window.addEventListener('communication-retry-needed',()=>connectionRecovery.failed());
 window.addEventListener('offline',()=>{updateConnection('Offline · změny čekají na připojení');if(page==='jobs')jobsUI.refresh();if(!enabled('offline')&&!dirty&&!modal.open)render();});
@@ -359,13 +360,13 @@ function queueAncillaryRefresh(){
  const task=(async()=>{
   const results=await Promise.allSettled([db.refreshRecords({reconnect:false}),db.syncPendingChanges()]);
   if(generation!==sessionGeneration||!sessionInfo)return;
-  const denied=results.find(r=>r.status==='rejected'&&[401,403].includes(r.reason.status));
+  const denied=results.find(r=>r.status==='rejected'&&r.reason.status===401);
   if(denied){await db.lockSession();sessionInfo=null;clearURLs();showLogin(denied.reason);return;}
-  records=await db.getRecords();recordsLoading=false;
+  records=results[0].status==='rejected'&&results[0].reason.status===403?[]:await db.getRecords();recordsLoading=false;
   recordsLoadError=results[0].status==='rejected'?results[0].reason.message:'';
   serviceStats=await db.pendingSummary();
   if(generation!==sessionGeneration||!sessionInfo)return;
-  if(results.some(r=>r.status==='rejected'))connectionRecovery.failed();
+  if(results.some(r=>r.status==='rejected'&&transientConnectionError(r.reason)))connectionRecovery.failed();
   if(page==='home'&&!modal.open)render();
   if(page==='editor'&&!dirty){const current=records.find(r=>r.id===draft.id);if(current&&current.version!==draft.version){draft=current;render();}else if(!current&&draft.version&&!recordsLoadError){dirty=false;navigate('home');toast('Tuto šachtu kolega smazal.');}}
  })().catch(error=>{if(generation===sessionGeneration){recordsLoading=false;recordsLoadError=error.message;connectionRecovery.failed();}}).finally(()=>{if(ancillaryFlight===task)ancillaryFlight=null;});
@@ -375,7 +376,7 @@ async function runSynchronization(){
  if(!sessionInfo)return false;const generation=sessionGeneration;
  try{
   const previousRole=sessionInfo.user.role,previousWrite=writable(),previousFeatures=JSON.stringify(sessionInfo.features);
-  await db.connect();if(generation!==sessionGeneration)return false;sessionInfo=db.session();
+  if(generation!==sessionGeneration)return false;sessionInfo=db.session();if(!sessionInfo)return false;
   if(previousRole!==sessionInfo.user.role){materialsUI.clear();gardenHistoryUI.clear();vehiclesUI.clear();}
   if(previousRole!==sessionInfo.user.role||!enabled('subscriptions')){serviceWorkUI.clear();subscriptionsUI.clear();}
   // Start the visible module before background photos and outbox uploads.
@@ -392,7 +393,8 @@ async function runSynchronization(){
   return true;
  }catch(error){
   if(generation!==sessionGeneration)return false;
-  if([401,403].includes(error.status)&&error.code!=='connection_timeout'){await db.lockSession();sessionInfo=null;clearURLs();inviteText='';showLogin(error);return false;}
+  if(error.status===401){await db.lockSession();sessionInfo=null;clearURLs();inviteText='';showLogin(error);return false;}
+  if(error.status===403){connectionRecovery.stop();updateConnection('Změněný přístup · otevřete deník znovu');if(synchronizationShow)report(error);return false;}
   updateConnection(navigator.onLine?'Server nyní neodpovídá · zkouším obnovit spojení':'Offline · neodeslané změny zůstávají v telefonu');
   connectionRecovery.failed();if(synchronizationShow)report(error);return false;
  }
@@ -420,6 +422,23 @@ app.addEventListener('change',async e=>{if(e.target.dataset.memberRole)await tea
 function showLogin(error){gardenHistoryUI.clear();devicePermissionsUI.clear();notificationsUI.clear();materialsUI.clear();subscriptionsUI.clear();serviceWorkUI.clear();customersUI.clear();jobsUI.clear();blowoutUI.clear();attendanceUI.clear();accessUI.login(error).catch(startupError);app.querySelector('main')?.insertAdjacentHTML('beforeend',workspaceRecoveryUI.markup());workspaceRecoveryUI.bind();}
 async function enterFromAccess(){gardenHistoryUI.clear();devicePermissionsUI.clear();notificationsUI.clear();materialsUI.clear();subscriptionsUI.clear();serviceWorkUI.clear();customersUI.clear();jobsUI.clear();attendanceUI.clear();sessionGeneration++;sessionInfo=null;await db.waitForRefresh();inviteText='';draft=null;dirty=false;page='home';activeGarden=null;records=[];gardens=[];zones=[];teamData=null;legacyRecords=[];serviceLists.clear();gardenAddressChoices={};planUI.clear();blowoutUI.clear();clearURLs();await start().catch(startupError);}
 let startupRetryTimer=null,startupFailures=0;
+function refreshStartupReferences(generation){
+ // Account and cached-record access have already been checked by connect().
+ // Reference lists must not hold up the overview or overwrite an open form.
+ Promise.allSettled([
+  db.getGardens().then(value=>{if(generation===sessionGeneration)gardens=value;}),
+  (async()=>db.getZones(sessionInfo?.user.role==='owner'?(await legacyDb.getZones()||DEFAULT_ZONES):DEFAULT_ZONES))().then(value=>{if(generation===sessionGeneration)zones=value;})
+ ]).then(async results=>{
+  if(generation!==sessionGeneration||!sessionInfo)return;
+  const denied=results.find(result=>result.status==='rejected'&&result.reason.status===401);
+  if(denied){await db.lockSession();if(generation!==sessionGeneration)return;sessionInfo=null;clearURLs();showLogin(denied.reason);return;}
+  if(results[0].status==='rejected'&&results[0].reason.status===403)gardens=[];
+  if(results[1].status==='rejected'&&results[1].reason.status===403)zones=[];
+  if(results.some(result=>result.status==='rejected')){updateConnection('Připojeno · část údajů čeká na obnovení');connectionRecovery.failed();}
+  if(['home','zones'].includes(page)&&!dirty&&!modal.open&&!planUI.hasAnyChanges())render();
+  if(page==='overview'){const count=document.querySelector('#overview [data-page="home"] small');if(count)count.textContent=`${gardens.length} uložených míst`;}
+ }).catch(error=>{if(generation===sessionGeneration)report(error);});
+}
 function startupError(error){
  clearTimeout(startupRetryTimer);startupRetryTimer=null;
  devicePermissionsUI.clear();notificationsUI.clear();materialsUI.clear();subscriptionsUI.clear();serviceWorkUI.clear();customersUI.clear();jobsUI.clear();sessionInfo=null;recordsLoading=false;
@@ -438,11 +457,13 @@ async function start(){
  app.innerHTML='<div class="loading" role="status">Ověřuji přístup do vašeho závlahového deníku…</div>';
  try{
   sessionInfo=await db.connect();if(generation!==sessionGeneration)return;page=new URLSearchParams(location.search).has('drive')?'settings':landingPage();
-  app.querySelector('.loading').textContent='Načítám vaše zahrady…';
-  const initial=await Promise.all([db.getRecords(),db.getGardens(),(async()=>db.getZones(sessionInfo.user.role==='owner'?(await legacyDb.getZones()||DEFAULT_ZONES):DEFAULT_ZONES))(),db.gardenChoices(),db.pendingSummary()]);
+  app.querySelector('.loading').textContent=page==='overview'?'Otevírám pracovní přehled…':'Načítám vaše zahrady…';
+  const fastOverview=page==='overview';
+  const initial=await Promise.all([db.getRecords(),fastOverview?db.cachedGardens():db.getGardens(),fastOverview?db.cachedZones().then(value=>value||DEFAULT_ZONES):(async()=>db.getZones(sessionInfo.user.role==='owner'?(await legacyDb.getZones()||DEFAULT_ZONES):DEFAULT_ZONES))(),db.gardenChoices(),db.pendingSummary()]);
   if(generation!==sessionGeneration)return;
   [records,gardens,zones,gardenAddressChoices,serviceStats]=initial;startupFailures=0;
   recordsLoading=true;recordsLoadError='';connection='Připojeno · obnovuji data na pozadí';render();
+  if(fastOverview)refreshStartupReferences(generation);
   queueAncillaryRefresh();
   if(sessionInfo.user.role==='owner')legacyDb.getRecords().then(rows=>{if(generation===sessionGeneration)legacyRecords=rows.filter(r=>!records.some(other=>other.id===r.id));}).catch(()=>{});
  }catch(error){
@@ -507,3 +528,20 @@ installNativeClient({db,getName:appDisplayName,captureDrafts:captureActiveFormDr
   if(!navigationItems().some(([id])=>id===target.page))throw Error('Tato sekce není dostupná.');
   const button=[...document.querySelectorAll('.nav [data-page]')].find(b=>b.dataset.page===target.page);if(!button)throw Error('Sekce není dostupná.');button.click();
  }});
+
+let rolePreviewChanging=false;
+async function changeRolePreview(role){
+ if(rolePreviewChanging||busy)return false;
+ if(modal.open){toast('Nejprve zavřete otevřený formulář.',true);return false;}
+ if(!leaveDraft())return false;
+ if(planUI.hasAnyChanges()){toast('Nejprve uložte nebo zahoďte rozepsané značky v plánu.',true);return false;}
+ rolePreviewChanging=true;
+ try{
+  await db.waitForRefresh();
+  sessionInfo=db.setRolePreview(role||null);sessionGeneration++;
+  teamData=null;gardenHistoryUI.clear();notificationsUI.clear();materialsUI.clear();subscriptionsUI.clear();serviceWorkUI.clear();customersUI.clear();jobsUI.clear();attendanceUI.clear();vehiclesUI.clear();planUI.clear();
+  activeGarden=null;page='overview';draft=null;dirty=false;render();scrollTo(0,0);return true;
+ }catch(error){report(error);return false;}finally{rolePreviewChanging=false;}
+}
+app.addEventListener('change',async event=>{if(!event.target.matches('[data-role-preview]'))return;const select=event.target;select.disabled=true;try{if(!await changeRolePreview(select.value))select.value=sessionInfo?.rolePreview?.selectedRole||'';}finally{select.disabled=false;}});
+app.addEventListener('click',event=>{if(event.target.closest('[data-role-preview-exit]'))changeRolePreview(null);});

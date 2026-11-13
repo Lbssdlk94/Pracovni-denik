@@ -50,7 +50,7 @@ export function planWorkspaceReconciliation(previous,next,caches,inventory,manif
     }
     for(const record of caches[store]||[]){
       if(record._pending||record.pending){
-        if(workspaceCanKeepPending(store,record,next,manifest,legacyDiscipline))keep[store].push({...record,...record.ownerId?{ownerId:next.user.id}:{},...store==='serviceWork'?{id:next.user.id+'|'+record.jobId}:{},...store!=='records'&&store!=='serviceWork'?{discipline:record.discipline||record.payload?.discipline||legacyDiscipline}:{}});
+        if(workspaceCanKeepPending(store,record,next,manifest,legacyDiscipline))keep[store].push({...record,...record.ownerId?{ownerId:next.user.id}:{},...store==='serviceWork'?{id:next.user.id+'|'+record.jobId+(record.kind==='jobDiary'?'|diary|'+record.entryId:record.kind==='jobDiaryIndex'?'|diary':'')}:{},...store!=='records'&&store!=='serviceWork'?{discipline:record.discipline||record.payload?.discipline||legacyDiscipline}:{}});
         else revoked.push({kind:store,record});
       }else if(manifest.allowed[store].includes(store==='serviceWork'?record.jobId:record.id))keep[store].push(record);
     }

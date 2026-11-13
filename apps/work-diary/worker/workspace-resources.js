@@ -25,7 +25,7 @@ export async function workspaceResourceAccess(request, env, member, fail) {
   member._workspace = authorization;
   member.role = authorization.role;
   // This version fence protects old cached clients; SQL permissions remain authoritative.
-  const legacySafe=metadataRoute||method==='GET'&&path==='/api/drive/oauth/callback'||['GET','HEAD'].includes(method)&&/\/(?:photo|plan|content|file|assets\/\d+|photos\/[-\w]+)$/.test(path);
+  const legacySafe=metadataRoute||method==='GET'&&['/api/drive/oauth/callback','/api/drive/native-start'].includes(path)||['GET','HEAD'].includes(method)&&/\/(?:photo|plan|content|file|assets\/\d+|photos\/[-\w]+)$/.test(path);
   if(!legacySafe&&request.headers.get('x-workspace-client-version')!=='shared-directory-v1')fail(403,'Aplikace potřebuje novou verzi. Zavřete ji, připojte se k internetu a znovu ji otevřete.',{code:'client_update_required'});
   if (authorization.state === 'read_only' && !['GET', 'HEAD'].includes(method) && !/^\/api\/(?:access-|notifications|system-backups|privacy|workspace\/(?:recovery|manifest))/.test(path)) fail(409, 'Společný pracovní prostor je dočasně pouze ke čtení.');
   const irrigation = /^\/api\/(?:shafts|zones)(?:\/|$)/.test(path) || /^\/api\/gardens\/[^/]+\/(?:blowout|plan)(?:\/|-|$)/.test(path);

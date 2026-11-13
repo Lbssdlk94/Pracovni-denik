@@ -24,7 +24,7 @@ export function createNativeScreens({db,getSession,captureDrafts=()=>[]}){
   if(el.nodeType===3){if(!visible(el))return [];const value=text(el);return value?[{id:path,handle:id(el),kind:'text',text:value}]:[];}
   if(el.nodeType!==1||['SCRIPT','STYLE','NOSCRIPT','SVG','PATH','OPTION'].includes(el.tagName)||!visible(el))return [];
   const tag=el.tagName,handle=id(el),base={id:el.id?'id:'+el.id:path,handle};
-  if(el.matches('.sidebar,.topbar,.nav,.mobile-account'))return [];
+  if(el.matches('.sidebar,.topbar,.nav,.mobile-account,.role-preview'))return [];
   // Semantic presentation for the native app only. Every destination still
   // invokes the same live element; no records are joined by display text.
   const category=(title,children,symbol='folder',key=base.id)=>({id:key,handle,kind:'category',text:title,symbol,children});
@@ -89,7 +89,7 @@ export function createNativeScreens({db,getSession,captureDrafts=()=>[]}){
  }
  async function snapshot(){await permitted();mapProxy();for(const [key,n]of nodes)if(!n.isConnected)nodes.delete(key);for(const [el]of maps)if(!el.isConnected)maps.delete(el);
   const dialogs=[...document.querySelectorAll('dialog[open]')],modal=dialogs.at(-1),root=modal||document.querySelector('#app .main')||document.querySelector('#app');if(!root)return {revision:++revision,title:'Pracovní deník',nodes:[],busy:true};
-  const header=modal?[]:[...document.querySelectorAll('[data-workspace-filter],[data-notifications-open],[data-show-sync]')].filter((el,i,all)=>all.findIndex(other=>other.outerHTML===el.outerHTML)===i).flatMap((el,i)=>read(el,'header.'+i));const content=[...header,...read(root)];
+  const header=modal?[]:[...document.querySelectorAll('[data-workspace-filter],[data-notifications-open],[data-show-sync],[data-role-preview],[data-role-preview-exit]')].filter((el,i,all)=>all.findIndex(other=>other.outerHTML===el.outerHTML)===i).flatMap((el,i)=>read(el,'header.'+i));const content=[...header,...read(root)];
   if(!modal&&root.querySelector('.settings-workspace')){const logout=document.querySelector('[data-signout]');if(logout&&visible(logout))content.push({id:'native-account',handle:id(logout),kind:'category',text:'Účet a odhlášení',symbol:'person.crop.circle',children:read(logout,'account.logout')});}
   const inlineCustomer=modal?.querySelector('[data-customer-view]')&&!modal.querySelector('form'),name=inlineCustomer?modal.querySelector('.customer-contact h3')?.cloneNode(true):null;
   name?.querySelectorAll('span,svg').forEach(n=>n.remove());
