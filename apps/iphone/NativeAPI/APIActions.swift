@@ -53,6 +53,7 @@ struct APIJobDetailContent:View {
                 if !job["assignedName"].string.isEmpty{Label(job["assignedName"].string,systemImage:"person")}
                 if job["status"].string=="incomplete"{Text("Důvod: "+job["incompleteReason"].string).foregroundStyle(DiaryStyle.warning)}
             }
+            if job["jobType"].string=="installation"{NavigationLink{APIJobDiary(store:store,job:job)}label:{Label("Deník realizace",systemImage:"book.closed").frame(minHeight:44)}.diaryCard()}
             if !job["address"].string.isEmpty{DiarySection(title:"Místo",symbol:"mappin"){Text(job["address"].string);if let url=APIFormat.navigation(job["address"].string){Link("Navigovat",destination:url).frame(minHeight:44)}}}
             if (assigned||store.manager) && store.writer{
                 HStack{if store.writer && store.enabled("jobTravel") && !["done","incomplete"].contains(job["status"].string){Button("Jsem na cestě"){departure=true}.buttonStyle(.borderedProminent)};Button("Změnit stav"){status=true}.buttonStyle(.bordered)}.frame(minHeight:44)
