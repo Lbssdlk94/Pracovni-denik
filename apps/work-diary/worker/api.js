@@ -31,6 +31,7 @@ import {handleWorkRates} from './work-charges.js';
 import {handleVolumeFixtureCleanup} from './volume-fixture-cleanup.js';
 import {handleMaterials} from './materials.js';
 import {handleSubscriptions} from './subscriptions.js';
+import {handleJobDiary} from './job-diary.js';
 import {handleServiceWork} from './service-work.js';
 import {handleServiceReminders} from './service-reminders.js';
 import {handleApprovedImport} from './approved-import.js';
@@ -68,9 +69,8 @@ async function memberFor(request,env){
   if(!env.DB||!env.BUCKET||!env.TEAM_OWNER_EMAIL)fail(503,'Týmové úložiště se připravuje. Zkuste to za chvíli.');
   await assertInstallation(env);await ensureInitialAdministrator(env);
   const cookie=(request.headers.get('cookie')||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(ACCESS_COOKIE+'='));
-  const onlyPassword=await passwordOnly(env);
   if(cookie!==undefined){const token=cookie.slice(ACCESS_COOKIE.length+1),hash=await accessHash(token),guest=/^[a-f0-9]{64}$/.test(token)?await sessionMember(env,hash):null;if(!guest||guest.session_auth_method!=='password')fail(401,'Přihlaste se svým přihlašovacím jménem a heslem.',{code:'session_expired'});return {...guest,_authMethod:'password',_mustChange:guest.session_auth_method==='password'&&!!guest.password_must_change,_sessionHash:hash};}
-  if(onlyPassword)fail(401,'Přihlaste se svým přihlašovacím jménem a heslem.',{code:'password_login_required'});
+  if(await passwordOnly(env))fail(401,'Přihlaste se svým přihlašovacím jménem a heslem.',{code:'password_login_required'});
   const user=userFrom(request),workspaceIdentity=await workspaceIdentityMember(env,user);
   if(workspaceIdentity.member)return workspaceIdentity.member;
   if(!workspaceIdentity.active&&user.email===env.TEAM_OWNER_EMAIL.toLowerCase()&&env.PLATFORM_REQUIRE_INVITATION!=='1')await execute(env.DB,"INSERT OR IGNORE INTO members(user_id,email,name,role,created_at) VALUES(?,?,?,'owner',?)",user.id,user.email,user.name,Date.now());
@@ -248,6 +248,7 @@ async function workspaceRawApi(request,env,ctx){
     if(path==='/api/materials'||path.startsWith('/api/materials/'))return await handleMaterials(request,env,m,{body,fail,json,validId,cleanText,expectedVersion});
     if(path.startsWith('/api/service-reminders/'))return await handleServiceReminders(request,env,m,{json,fail,boundedBytes,body});
     if(/^\/api\/jobs\/[-\w]+\/protocol-emails(?:\/|$)/.test(path)){const {features}=await featureSettingsOnce();if(!features.jobs)fail(403,'Zakázky jsou vypnuté.');return await handleProtocolEmails(request,env,ctx,m,{body,fail,json,validId,cleanText,boundedBytes});}
+    if(/^\/api\/jobs\/[-\w]+\/diary(?:\/|$)/.test(path)){const {features}=await featureSettingsOnce();if(!features.jobs)fail(403,'Zakázky jsou vypnuté.',{code:'jobs_disabled'});return await handleJobDiary(request,env,m,{body,fail,json,validId,cleanText,features});}
     if(/^\/api\/jobs\/[-\w]+\/service(?:\/|$)/.test(path)){const {features}=await featureSettingsOnce();if(!features.jobs)fail(403,'Zakázky jsou v nastavení vypnuté.',{code:'jobs_disabled'});const response=await handleServiceWork(request,env,ctx,m,{body,fail,json,validId,cleanText,boundedBytes,features});if(method!=='GET')deliver();return response;}
     if(path.startsWith('/api/subscriptions')||path.startsWith('/api/tariffs')){const {features}=await featureSettingsOnce();if(!features.subscriptions||!features.jobs||!features.customers)fail(403,'Předplatné, zákazníci nebo zakázky jsou v nastavení vypnuté.',{code:'subscriptions_disabled'});const response=await handleSubscriptions(request,env,m,{body,fail,json,validId,cleanText,boundedBytes});if(method!=='GET')deliver();return response;}
     if(path==='/api/notifications'||path.startsWith('/api/notifications/')){const {features}=await featureSettingsOnce();if(!features.notifications&&!(method==='GET'&&['/api/notifications/subscription','/api/notifications/preferences','/api/notifications/native/config','/api/notifications/native'].includes(path))&&!(method==='DELETE'&&['/api/notifications/subscription','/api/notifications/native'].includes(path)))fail(403,'Upozornění jsou v nastavení týmu vypnutá.');const response=await handleNotifications(request,env,m,{body,fail,json,one,all,execute,features});if(method==='GET'&&path==='/api/notifications'&&!request.headers.get('x-work-diary-preview-role'))deliver();return response;}

@@ -1,11 +1,11 @@
 import {rolePreviewMarkup} from './role-preview-model.js?v=role-preview-v1';
 import {createAccountUI} from './local-auth-ui.js?v=session-startup-v1';
-import {installNativeClient} from './native-client.js?v=role-preview-v1';
+import {installNativeClient} from './native-client.js?v=job-three-month-v1';
 import {transientConnectionError} from './io.js?v=connection-recovery-v1';
 import {createConnectionRecovery} from './connection-recovery.js?v=connection-recovery-v1';
 import {createWorkspaceUI,workspaceFilterMarkup,workspaceBadge,workspaceDisciplineField} from './workspace-ui.js?v=shared-directory-v1';
 import {createWorkspaceRecoveryUI} from './workspace-recovery-ui.js?v=shared-directory-v1';
-import {createOverviewUI} from './overview-ui.js?v=green-icon-v1';
+import {createOverviewUI} from './overview-ui.js?v=job-three-month-v1';
 import {interfaceIcon} from './interface-icons.js?v=approved-b-v2';
 import {createVehiclesUI} from './vehicles-ui.js?v=fleet-photo-v1';
 import {gardenSectionIds} from './features.js?v=fleet-photo-v1';
@@ -15,7 +15,7 @@ import {createOperationsUI} from './operations-ui.js?v=workspace-roles-v1';
 import {gardenChoiceLabel} from './garden-choice.js?v=workspace-roles-v1';
 import {createRecordLinksUI} from './record-links-ui.js?v=workspace-roles-v1';
 import {navigationIcon} from './navigation-icons.js?v=workspace-controls-v1';
-import {createGardenHistoryUI} from './garden-history-ui.js?v=workspace-platform-v1';
+import {createGardenHistoryUI} from './garden-history-ui.js?v=job-diary-v1';
 import {createDevicePermissionsUI} from './device-permissions-ui.js?v=workspace-roles-v1';
 import {attachFormDraft,captureFormFields,restoreFormFields,captureActiveFormDrafts} from './form-drafts.js?v=draft-recovery-v1';
 import {createEmailSettingsUI} from './email-settings-ui.js?v=workspace-controls-v1';
@@ -28,7 +28,7 @@ import {createServiceWorkUI} from './service-work-ui.js?v=draft-recovery-v1';
 import {createCustomersUI} from './customers-ui.js?v=draft-recovery-v1';
 import {createNotificationsUI} from './notifications-ui.js?v=native-push-v1';
 import {createDriveUI} from './drive-ui.js?v=workspace-controls-v1';
-import {createJobsUI} from './jobs-ui.js?v=draft-recovery-v1';
+import {createJobsUI} from './jobs-ui.js?v=job-diary-v1';
 import {createBlowoutUI} from './blowout-ui.js?v=workspace-controls-v1';
 import {createAttendanceUI} from './attendance-ui.js?v=workspace-roles-v1';
 import {createAccessUI} from './access-ui.js?v=session-startup-v1';
@@ -41,7 +41,7 @@ import {gardenTabsMarkup,gardenPanel} from './garden-ui.js?v=workspace-roles-v1'
 import {FEATURE_OPTIONS,featureEnabled} from './features.js?v=fleet-photo-v1';
 import {settingsPage,bindSettings} from './settings-ui.js?v=workspace-controls-v1';
 import {COLORS,DEFAULT_ZONES,clamp,createMarker,normalizedPoint,validateBackup} from './model.js?v=workspace-roles-v1';
-import * as db from './cloud.js?v=role-preview-v1';
+import * as db from './cloud.js?v=job-diary-v1';
 import * as legacyDb from './storage.js?v=workspace-roles-v1';
 import {preparePhoto,annotatedPhoto,download,blobToDataURL} from './export.js?v=workspace-roles-v1';
 
@@ -422,6 +422,23 @@ app.addEventListener('change',async e=>{if(e.target.dataset.memberRole)await tea
 function showLogin(error){gardenHistoryUI.clear();devicePermissionsUI.clear();notificationsUI.clear();materialsUI.clear();subscriptionsUI.clear();serviceWorkUI.clear();customersUI.clear();jobsUI.clear();blowoutUI.clear();attendanceUI.clear();accessUI.login(error).catch(startupError);app.querySelector('main')?.insertAdjacentHTML('beforeend',workspaceRecoveryUI.markup());workspaceRecoveryUI.bind();}
 async function enterFromAccess(){gardenHistoryUI.clear();devicePermissionsUI.clear();notificationsUI.clear();materialsUI.clear();subscriptionsUI.clear();serviceWorkUI.clear();customersUI.clear();jobsUI.clear();attendanceUI.clear();sessionGeneration++;sessionInfo=null;await db.waitForRefresh();inviteText='';draft=null;dirty=false;page='home';activeGarden=null;records=[];gardens=[];zones=[];teamData=null;legacyRecords=[];serviceLists.clear();gardenAddressChoices={};planUI.clear();blowoutUI.clear();clearURLs();await start().catch(startupError);}
 let startupRetryTimer=null,startupFailures=0;
+function refreshStartupReferences(generation){
+ // Account and cached-record access have already been checked by connect().
+ // Reference lists must not hold up the overview or overwrite an open form.
+ Promise.allSettled([
+  db.getGardens().then(value=>{if(generation===sessionGeneration)gardens=value;}),
+  (async()=>db.getZones(sessionInfo?.user.role==='owner'?(await legacyDb.getZones()||DEFAULT_ZONES):DEFAULT_ZONES))().then(value=>{if(generation===sessionGeneration)zones=value;})
+ ]).then(async results=>{
+  if(generation!==sessionGeneration||!sessionInfo)return;
+  const denied=results.find(result=>result.status==='rejected'&&result.reason.status===401);
+  if(denied){await db.lockSession();if(generation!==sessionGeneration)return;sessionInfo=null;clearURLs();showLogin(denied.reason);return;}
+  if(results[0].status==='rejected'&&results[0].reason.status===403)gardens=[];
+  if(results[1].status==='rejected'&&results[1].reason.status===403)zones=[];
+  if(results.some(result=>result.status==='rejected')){updateConnection('Připojeno · část údajů čeká na obnovení');connectionRecovery.failed();}
+  if(['home','zones'].includes(page)&&!dirty&&!modal.open&&!planUI.hasAnyChanges())render();
+  if(page==='overview'){const count=document.querySelector('#overview [data-page="home"] small');if(count)count.textContent=`${gardens.length} uložených míst`;}
+ }).catch(error=>{if(generation===sessionGeneration)report(error);});
+}
 function startupError(error){
  clearTimeout(startupRetryTimer);startupRetryTimer=null;
  devicePermissionsUI.clear();notificationsUI.clear();materialsUI.clear();subscriptionsUI.clear();serviceWorkUI.clear();customersUI.clear();jobsUI.clear();sessionInfo=null;recordsLoading=false;
@@ -440,11 +457,13 @@ async function start(){
  app.innerHTML='<div class="loading" role="status">Ověřuji přístup do vašeho závlahového deníku…</div>';
  try{
   sessionInfo=await db.connect();if(generation!==sessionGeneration)return;page=new URLSearchParams(location.search).has('drive')?'settings':landingPage();
-  app.querySelector('.loading').textContent='Načítám vaše zahrady…';
-  const initial=await Promise.all([db.getRecords(),db.getGardens(),(async()=>db.getZones(sessionInfo.user.role==='owner'?(await legacyDb.getZones()||DEFAULT_ZONES):DEFAULT_ZONES))(),db.gardenChoices(),db.pendingSummary()]);
+  app.querySelector('.loading').textContent=page==='overview'?'Otevírám pracovní přehled…':'Načítám vaše zahrady…';
+  const fastOverview=page==='overview';
+  const initial=await Promise.all([db.getRecords(),fastOverview?db.cachedGardens():db.getGardens(),fastOverview?db.cachedZones().then(value=>value||DEFAULT_ZONES):(async()=>db.getZones(sessionInfo.user.role==='owner'?(await legacyDb.getZones()||DEFAULT_ZONES):DEFAULT_ZONES))(),db.gardenChoices(),db.pendingSummary()]);
   if(generation!==sessionGeneration)return;
   [records,gardens,zones,gardenAddressChoices,serviceStats]=initial;startupFailures=0;
   recordsLoading=true;recordsLoadError='';connection='Připojeno · obnovuji data na pozadí';render();
+  if(fastOverview)refreshStartupReferences(generation);
   queueAncillaryRefresh();
   if(sessionInfo.user.role==='owner')legacyDb.getRecords().then(rows=>{if(generation===sessionGeneration)legacyRecords=rows.filter(r=>!records.some(other=>other.id===r.id));}).catch(()=>{});
  }catch(error){

@@ -31,6 +31,7 @@ struct APILocalState: Codable {
     var cache: [String:APIValue] = [:]
     var drafts: [String:APIDraft] = [:]
     var outbox: [APIMutation] = []
+    var jobMonths:APIJobMonthState? = nil
 }
 @MainActor
 final class APIVault {

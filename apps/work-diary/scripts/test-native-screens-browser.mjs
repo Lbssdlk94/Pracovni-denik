@@ -77,7 +77,7 @@ try{
  await execute('open',{page:'customers'});await page.locator('#customers-new').waitFor();await click('Nový zákazník');await page.locator('#customer-form').waitFor();
  await value('Jméno nebo název','Nativní zákazník');await value('Telefonní číslo','+420777123456');await value('Ulice, číslo','Ukázková 12');await value('Město / obec','Blatná');await click('Uložit zákazníka');await page.locator('#customer-form').waitFor({state:'hidden'});
  assert.equal((await db.prepare("SELECT count(*) n FROM customers WHERE name='Nativní zákazník'").first()).n,1);assert.equal((await db.prepare("SELECT count(*) n FROM gardens WHERE customer_id IN (SELECT id FROM customers WHERE name='Nativní zákazník')").first()).n,1);
- const savedContact=await node('Nativní zákazník','contact');assert.ok(savedContact.children.some(n=>n.intent==='call'&&n.handle),'Customer row must retain a separate live call action');
+ await page.locator('[data-customer-open]').filter({hasText:'Nativní zákazník'}).first().waitFor();const savedContact=await node('Nativní zákazník','contact');assert.ok(savedContact.children.some(n=>n.intent==='call'&&n.handle),'Customer row must retain a separate live call action');
  await execute('open',{jobId:'irrigation-job',action:'protocol'});await page.locator('#service-work-form').waitFor();
  await value('Provedené práce','Nativní ovládací prvky – servis systému');
  const canvas=await node('Podpis zákazníka','canvas');await execute('control',{handle:canvas.handle,action:'draw',points:[{x:.1,y:.5},{x:.3,y:.2},{x:.6,y:.8},{x:.8,y:.4}]});
@@ -99,7 +99,7 @@ try{
  console.log('PASS native document contract creates actual PDF; photo annotation add/drag and native map selection persist into the real record');await click('Zpět na šachty');
 
  await execute('open',{jobId:'irrigation-job',action:'protocol'});await page.locator('#service-work-form').waitFor();await context.setOffline(true);await value('Provedené práce','Nativní zápis offline');await click('Uložit rozpracovaný protokol');await page.locator('#service-work-form').waitFor({state:'hidden'});
- const pending=await page.evaluate(async()=> (await import('/cloud.js?v=role-preview-v1')).pendingSummary());assert.ok(pending.total>0);
+ const pending=await page.evaluate(async()=> (await import('/cloud.js?v=job-diary-v1')).pendingSummary());assert.ok(pending.total>0);
  await context.setOffline(false);await page.waitForFunction(async()=>{const r=await fetch('/api/jobs/irrigation-job/service',{headers:{'x-workspace-client-version':'shared-directory-v1'}});const v=await r.json();return v.report?.work==='Nativní zápis offline';},{},{timeout:30000});
  assert.equal((await db.prepare("SELECT count(*) n FROM service_reports WHERE job_id='irrigation-job'").first()).n,1);assert.equal((await db.prepare("SELECT count(*) n FROM service_photos WHERE job_id='irrigation-job'").first()).n,1);
  console.log('PASS native offline edit and reconnection synchronize one report without duplicating a report or photograph');
