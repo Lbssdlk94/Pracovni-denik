@@ -1,4 +1,4 @@
-import {workspaceInventory,workspaceSameAccount,planWorkspaceReconciliation} from './workspace-sync-model.js?v=github-sync-fix-v3';
+import {workspaceInventory,workspaceSameAccount,planWorkspaceReconciliation} from './workspace-sync-model.js?v=job-diary-v1';
 import {sealWorkspaceRecovery} from './workspace-recovery-crypto.js?v=shared-directory-v1';
 
 const STORES=['records','gardens','services','serviceWork','defects'];

@@ -31,6 +31,7 @@ import {handleWorkRates} from './work-charges.js';
 import {handleVolumeFixtureCleanup} from './volume-fixture-cleanup.js';
 import {handleMaterials} from './materials.js';
 import {handleSubscriptions} from './subscriptions.js';
+import {handleJobDiary} from './job-diary.js';
 import {handleServiceWork} from './service-work.js';
 import {handleServiceReminders} from './service-reminders.js';
 import {handleApprovedImport} from './approved-import.js';
@@ -247,6 +248,7 @@ async function workspaceRawApi(request,env,ctx){
     if(path==='/api/materials'||path.startsWith('/api/materials/'))return await handleMaterials(request,env,m,{body,fail,json,validId,cleanText,expectedVersion});
     if(path.startsWith('/api/service-reminders/'))return await handleServiceReminders(request,env,m,{json,fail,boundedBytes,body});
     if(/^\/api\/jobs\/[-\w]+\/protocol-emails(?:\/|$)/.test(path)){const {features}=await featureSettingsOnce();if(!features.jobs)fail(403,'Zakázky jsou vypnuté.');return await handleProtocolEmails(request,env,ctx,m,{body,fail,json,validId,cleanText,boundedBytes});}
+    if(/^\/api\/jobs\/[-\w]+\/diary(?:\/|$)/.test(path)){const {features}=await featureSettingsOnce();if(!features.jobs)fail(403,'Zakázky jsou vypnuté.',{code:'jobs_disabled'});return await handleJobDiary(request,env,m,{body,fail,json,validId,cleanText,features});}
     if(/^\/api\/jobs\/[-\w]+\/service(?:\/|$)/.test(path)){const {features}=await featureSettingsOnce();if(!features.jobs)fail(403,'Zakázky jsou v nastavení vypnuté.',{code:'jobs_disabled'});const response=await handleServiceWork(request,env,ctx,m,{body,fail,json,validId,cleanText,boundedBytes,features});if(method!=='GET')deliver();return response;}
     if(path.startsWith('/api/subscriptions')||path.startsWith('/api/tariffs')){const {features}=await featureSettingsOnce();if(!features.subscriptions||!features.jobs||!features.customers)fail(403,'Předplatné, zákazníci nebo zakázky jsou v nastavení vypnuté.',{code:'subscriptions_disabled'});const response=await handleSubscriptions(request,env,m,{body,fail,json,validId,cleanText,boundedBytes});if(method!=='GET')deliver();return response;}
     if(path==='/api/notifications'||path.startsWith('/api/notifications/')){const {features}=await featureSettingsOnce();if(!features.notifications&&!(method==='GET'&&['/api/notifications/subscription','/api/notifications/preferences','/api/notifications/native/config','/api/notifications/native'].includes(path))&&!(method==='DELETE'&&['/api/notifications/subscription','/api/notifications/native'].includes(path)))fail(403,'Upozornění jsou v nastavení týmu vypnutá.');const response=await handleNotifications(request,env,m,{body,fail,json,one,all,execute,features});if(method==='GET'&&path==='/api/notifications'&&!request.headers.get('x-work-diary-preview-role'))deliver();return response;}

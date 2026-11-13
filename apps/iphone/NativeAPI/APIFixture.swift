@@ -57,6 +57,19 @@ final class APIFixtureProtocol:URLProtocol {
         let parts=path.split(separator:"/").map(String.init)
         if parts.count>=3 && parts[1]=="jobs",let base=fixture["jobs"].array.first(where:{$0.id==parts[2]}){let key="/api/jobs/"+parts[2];var job=records[key] ?? base
             if parts.count==3{if method=="PUT"{let b=body();guard b["version"]==job["version"]else{return json(.object(["error":.s("Konflikt verze")]),409)};job=job.merged(b.object);job["version"] = .n(job["version"].int+1);records[key]=job};return json(.object(["job":job]))}
+            if parts[3]=="diary"{
+                let prefix=key+"/diary/"
+                if parts.count==4{return json(.object(["job":job,"entries":.array(records.filter{$0.key.hasPrefix(prefix)}.values.sorted{$0["date"].string>$1["date"].string}),"nextCursor":.null]))}
+                let entryKey=prefix+parts[4],old=records[entryKey] ?? .null
+                if method=="PUT"{
+                    let b=body()
+                    if old["operationId"]==b["operationId"],!old.isNull{return json(.object(["job":job,"entry":old,"replayed":.bool(true)]))}
+                    guard b["version"].int==old["version"].int else{return json(.object(["error":.s("Zápis se změnil"),"code":.s("diary_conflict")]),409)}
+                    records[entryKey]=b.merged(["id":.s(parts[4]),"version":.n(old["version"].int+1),"authorName":.s("Luboš – ukázka"),"createdBy":.s("fixture-owner"),"canEdit":.bool(true),"photos":.array([])])
+                }
+                guard let row=records[entryKey]else{return json(.object(["error":.s("Zápis neexistuje")]),404)}
+                return json(.object(["job":job,"entry":row]))
+            }
             if parts[3]=="status"{let b=body();guard b["version"]==job["version"]else{return json(.object(["error":.s("Konflikt verze")]),409)};job["status"]=b["status"];job["incompleteReason"]=b["incompleteReason"];job["version"] = .n(job["version"].int+1);records[key]=job;return json(.object(["job":job]))}
             if parts[3]=="service"{var report=records[key+"/report"] ?? .null;if method=="PUT"{let b=body();guard b["version"]==job["version"]else{return json(.object(["error":.s("Konflikt verze")]),409)};report=b["report"];report["version"] = .n(1);report["documentState"] = .s(b["finalizeReport"].bool ? "ready" : "draft");records[key+"/report"]=report;job["version"] = .n(job["version"].int+1);if b["complete"].bool{job["status"] = .s("done")};records[key]=job};return json(.object(["job":job,"report":report,"photos":.array([]),"billingPreview":.object([:])]))}
             if parts[3]=="handoffs"{return json(.object(["jobVersion":job["version"],"revision":.n(1),"handoffs":.array([.object(["userId":.s("fixture-owner"),"version":.n(1),"status":.s("pending")])])]))}
