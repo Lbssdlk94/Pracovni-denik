@@ -235,3 +235,8 @@ dialog#modal.job-detail-dialog .modal-head{margin-bottom:22px}
  .shell:not(.admin-shell)>.sidebar>.nav>.nav-overflow{bottom:calc(100% + 8px);max-height:calc(100dvh - var(--bottom-navigation-height,88px) - 24px);overscroll-behavior:contain}
  .shell:not(.admin-shell)>.main{padding-bottom:calc(var(--bottom-navigation-height,calc(80px + env(safe-area-inset-bottom))) + 24px)}
 }
+
+/* Keep the current choice visible after focus moves or the pointer leaves it. */
+.composer-presets .btn[aria-pressed=true],.composer-presets .btn[aria-pressed=true]:hover{color:#fff;background:var(--pd-forest,#193F3B);border-color:var(--pd-forest,#193F3B);font-weight:700;box-shadow:0 0 0 1px var(--pd-forest,#193F3B)}
+.composer-selection-mark{display:inline-block;flex:none;width:1em;text-align:center;visibility:hidden}.composer-presets .btn[aria-pressed=true] .composer-selection-mark{visibility:visible}
+@media(forced-colors:active){.composer-presets .btn[aria-pressed=true]{color:HighlightText;background:Highlight;border:2px solid Highlight;box-shadow:none}}
