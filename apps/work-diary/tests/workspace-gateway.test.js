@@ -30,3 +30,8 @@ test('Role preview marker survives the signed Garden relay without replacing the
  globalThis.fetch=(url,options)=>workspaceGateway(new Request(url,options),f.env,f.ctx,req=>{assert.equal(req.headers.get('x-work-diary-preview-role'),'reader');assert.equal(req.headers.get('oai-authenticated-user-id'),'owner-id');return Response.json({ok:true});});
  try{const response=await workspaceGateway(new Request(entry+'/api/jobs',{headers:{'oai-authenticated-user-id':'owner-id','x-work-diary-preview-role':'reader'}}),f.proxy,f.ctx);assert.equal(response.status,200);}finally{globalThis.fetch=original;}
 });
+test('Month snapshot revision requests survive the signed Garden entry as query parameters',async()=>{
+ const f=fixture(),original=globalThis.fetch;
+ globalThis.fetch=(url,options)=>workspaceGateway(new Request(url,options),f.env,f.ctx,req=>{const url=new URL(req.url);assert.equal(url.searchParams.get('cacheSnapshot'),'1');assert.equal(url.searchParams.get('month'),'2026-11');assert.equal(req.headers.get('oai-authenticated-user-id'),'owner-id');return Response.json({jobs:[],listRevision:7,nextCursor:null});});
+ try{const response=await workspaceGateway(new Request(entry+'/api/jobs?state=all&order=schedule&month=2026-11&cacheSnapshot=1',{headers:{'oai-authenticated-user-id':'owner-id'}}),f.proxy,f.ctx);assert.equal(response.status,200);assert.equal((await response.json()).listRevision,7);}finally{globalThis.fetch=original;}
+});

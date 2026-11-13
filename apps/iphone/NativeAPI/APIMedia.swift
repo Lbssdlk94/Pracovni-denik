@@ -57,6 +57,7 @@ struct APIFilesView:View {
     let record:APIValue
     var attached:((String)->Void)? = nil
     var selection:Binding<APIValue>? = nil
+    var selectionLabel="Zahrnout do protokolu"
     @State private var picked:PhotosPickerItem?
     @State private var camera=false
     @State private var importing=false
@@ -73,7 +74,7 @@ struct APIFilesView:View {
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
             if mode != .vehicle && mode != .plan {
-                ForEach(Array(files.enumerated()),id:\.offset){_,file in VStack(alignment:.leading){Button(file["name"].string.isEmpty ? file["fileName"].string : file["name"].string){Task{await open(file)}}.frame(minHeight:44);if let selection{Toggle("Zahrnout do protokolu",isOn:Binding(get:{selection.wrappedValue.array.contains(.s(file.id))},set:{on in var ids=selection.wrappedValue.array;ids.removeAll{$0 == .s(file.id)};if on{ids.append(.s(file.id))};selection.wrappedValue = .array(ids)}))};if mode == .job{if !file["note"].string.isEmpty{Text(file["note"].string).font(.footnote)};if store.writer{Button("Upravit poznámku"){photoAction=APIDomainAction(title:"Poznámka k fotografii",path:path+"/"+file.id,method:"PATCH",fields:[.field("note","Poznámka",.notes)],value:.object(["version":file["version"],"note":file["note"]]))}};if store.manager{Button("Přesunout do koše na Disku",role:.destructive){removePhoto=file;confirmRemoval=true}}}}}
+                ForEach(Array(files.enumerated()),id:\.offset){_,file in VStack(alignment:.leading){Button(file["name"].string.isEmpty ? file["fileName"].string : file["name"].string){Task{await open(file)}}.frame(minHeight:44);if let selection{Toggle(selectionLabel,isOn:Binding(get:{selection.wrappedValue.array.contains(.s(file.id))},set:{on in var ids=selection.wrappedValue.array;ids.removeAll{$0 == .s(file.id)};if on{ids.append(.s(file.id))};selection.wrappedValue = .array(ids)}))};if mode == .job{if !file["note"].string.isEmpty{Text(file["note"].string).font(.footnote)};if store.writer{Button("Upravit poznámku"){photoAction=APIDomainAction(title:"Poznámka k fotografii",path:path+"/"+file.id,method:"PATCH",fields:[.field("note","Poznámka",.notes)],value:.object(["version":file["version"],"note":file["note"]]))}};if store.manager{Button("Přesunout do koše na Disku",role:.destructive){removePhoto=file;confirmRemoval=true}}}}}
             }
             if allowed {
                 if mode == .job{Picker("Kategorie fotografií",selection:$category){Text("Před prací").tag("before");Text("Průběh").tag("during");Text("Hotová práce").tag("after")};TextField("Poznámka k nové fotografii",text:$note,axis:.vertical)}
