@@ -90,8 +90,15 @@ async function memberFor(request,env){
   if(!env.DB||!env.BUCKET||!env.TEAM_OWNER_EMAIL)fail(503,'Týmové úložiště se připravuje. Zkuste to za chvíli.');
   await assertInstallation(env);await ensureInitialAdministrator(env);
   const cookie=(request.headers.get('cookie')||'').split(';').map(v=>v.trim()).find(v=>v.startsWith(ACCESS_COOKIE+'='));
-  if(cookie!==undefined){const token=cookie.slice(ACCESS_COOKIE.length+1),guest=/^[a-f0-9]{64}$/.test(token)?await sessionMember(env,await accessHash(token))||await linkedMember(env,await accessHash(token)):null;if(!guest)fail(401,'Osobní přístup už není platný. Otevřete nový odkaz od správce.',{code:'link_invalid'});return {...guest,_authMethod:'link'};}
-  const user=userFrom(request);
+  let user=null;
+  if(cookie!==undefined){
+    const token=cookie.slice(ACCESS_COOKIE.length+1),guest=/^[a-f0-9]{64}$/.test(token)?await sessionMember(env,await accessHash(token))||await linkedMember(env,await accessHash(token)):null;
+    if(guest)return {...guest,_authMethod:'link'};
+    if(!/^[a-f0-9]{64}$/.test(token))fail(401,'Osobní přístup už není platný. Otevřete nový odkaz od správce.',{code:'link_invalid'});
+    // A leftover well-formed link cookie (expired or revoked session) must not lock out a member with a valid platform sign-in.
+    try{user=userFrom(request);}catch{fail(401,'Osobní přístup už není platný. Otevřete nový odkaz od správce.',{code:'link_invalid'});}
+  }
+  if(!user)user=userFrom(request);
   if(user.email===env.TEAM_OWNER_EMAIL.toLowerCase()&&env.PLATFORM_REQUIRE_INVITATION!=='1')await execute(env.DB,"INSERT OR IGNORE INTO members(user_id,email,name,role,created_at) VALUES(?,?,?,'owner',?)",user.id,user.email,user.name,Date.now());
   let m=await one(env.DB,'SELECT * FROM members WHERE user_id=?',user.id);
   if(!m){
