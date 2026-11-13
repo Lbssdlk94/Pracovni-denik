@@ -1,0 +1,182 @@
+name: iPhone and Apple Watch build and IPA
+on:
+  push:
+    paths:
+      - 'apps/iphone/**'
+      - '.github/workflows/iphone.yml'
+  pull_request:
+    paths:
+      - 'apps/iphone/**'
+      - '.github/workflows/iphone.yml'
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: 'Xcode 27 preview image (standard runner), with compatible fallback images'
+        required: false
+        type: choice
+        default: xcode-27
+        options: [xcode-27, macos-26, macos-15-intel, macos-15]
+      sign_ipa:
+        description: 'Build a signed IPA using configured Apple certificate and APNs provisioning profile'
+        required: false
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: iphone-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+jobs:
+  ios:
+    runs-on: ${{ inputs.runner || 'xcode-27' }}
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Xcode
+        run: |
+          mkdir -p build
+          xcodebuild -version | tee build/xcode-version.txt
+          xcrun --sdk iphonesimulator --show-sdk-version | tee build/ios-sdk-version.txt
+          python3 -c 'import pathlib; v=int(pathlib.Path("build/ios-sdk-version.txt").read_text().split(".")[0]); assert v>=26, "Native UI requires Xcode 26 or later"'
+          xcrun simctl list runtimes
+      - name: Install pinned XcodeGen
+        run: |
+          git clone --depth 1 --branch 2.44.1 https://github.com/yonaskolb/XcodeGen.git /tmp/XcodeGen
+          cd /tmp/XcodeGen
+          swift build -c release
+          cp .build/release/xcodegen /usr/local/bin/xcodegen
+      - name: Verify signing profile policy
+        run: |
+          python3 -m unittest discover -s apps/iphone/signing -p 'test_*.py'
+          python3 -m unittest discover -s apps/iphone/build_tests -p 'test_*.py'
+      - name: Prepare isolated portrait iPhone and Watch simulators
+        run: python3 apps/iphone/prepare_simulators.py
+      - name: Generate Xcode project
+        run: cd apps/iphone && xcodegen generate
+      - name: Simulator build and tests
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p build
+          UDID="$DIARY_PHONE_SIMULATOR_ID"
+          xcodebuild -project apps/iphone/PracovniDenik.xcodeproj -scheme PracovniDenik -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build/simulator -resultBundlePath build/Tests.xcresult test CODE_SIGNING_ALLOWED=NO | tee build/simulator.log
+      - name: Export iPhone UI previews
+        if: always()
+        run: |
+          if [ -d build/Tests.xcresult ]; then
+            xcrun xcresulttool export attachments --path build/Tests.xcresult --output-path build/iphone-previews
+          fi
+      - name: Unsigned iPhone build
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild -project apps/iphone/PracovniDenik.xcodeproj -scheme PracovniDenik -configuration Release -destination 'generic/platform=iOS' -derivedDataPath build/device build CODE_SIGNING_ALLOWED=NO | tee build/device.log
+          python3 apps/iphone/verify_bundle.py build/device/Build/Products/Release-iphoneos/PracovniDenik.app
+          python3 apps/iphone/verify_watch_bundle.py build/device/Build/Products/Release-iphoneos/PracovniDenik.app
+          mkdir -p build/package/Payload
+          cp -R build/device/Build/Products/Release-iphoneos/PracovniDenik.app build/package/Payload/
+          cd build/package
+          zip -qr ../PracovniDenik-UNSIGNED-REQUIRES-SIGNING.ipa Payload
+          cd ../..
+          shasum -a 256 build/PracovniDenik-UNSIGNED-REQUIRES-SIGNING.ipa > build/IPA-SHA256.txt
+      - name: Apple Watch simulator build and previews
+        shell: bash
+        run: |
+          set -euo pipefail
+          WATCH_UDID="$DIARY_WATCH_SIMULATOR_ID"
+          xcodebuild -project apps/iphone/PracovniDenik.xcodeproj -scheme PracovniDenikWatch -destination "platform=watchOS Simulator,id=$WATCH_UDID" -derivedDataPath build/watch-simulator build CODE_SIGNING_ALLOWED=NO | tee build/watch-simulator.log
+          PHONE_UDID="$DIARY_PHONE_SIMULATOR_ID"
+          xcrun simctl shutdown "$WATCH_UDID" >/dev/null 2>&1 || true
+          xcrun simctl shutdown "$PHONE_UDID" >/dev/null 2>&1 || true
+          python3 apps/iphone/pair_watch_simulators.py "$WATCH_UDID" "$PHONE_UDID"
+          xcrun simctl boot "$PHONE_UDID"
+          xcrun simctl bootstatus "$PHONE_UDID" -b
+          xcrun simctl install "$PHONE_UDID" build/simulator/Build/Products/Debug-iphonesimulator/PracovniDenik.app
+          WATCH_APP=build/watch-simulator/Build/Products/Debug-watchsimulator/PracovniDenikWatch.app
+          # A paired Watch may be auto-booted/shut down during phone startup.
+          # Retry only this ephemeral simulator boot/install, never app writes.
+          for ATTEMPT in 1 2; do
+            xcrun simctl boot "$WATCH_UDID" >/dev/null 2>&1 || true
+            if xcrun simctl bootstatus "$WATCH_UDID" -b && xcrun simctl install "$WATCH_UDID" "$WATCH_APP"; then break; fi
+            if [[ "$ATTEMPT" == 2 ]]; then exit 1; fi
+            sleep 3
+          done
+          mkdir -p build/watch-previews
+          for SCREEN in day detail inbox; do
+            xcrun simctl terminate "$WATCH_UDID" cz.pracovnidenik.app.watchapp >/dev/null 2>&1 || true
+            ARGS=(--watch-preview)
+            if [[ "$SCREEN" == detail ]]; then ARGS+=(--watch-preview-detail); fi
+            if [[ "$SCREEN" == inbox ]]; then ARGS+=(--watch-preview-inbox); fi
+            xcrun simctl launch "$WATCH_UDID" cz.pracovnidenik.app.watchapp "${ARGS[@]}"
+            # A cold debug launch can still be on the system launch animation at 3s.
+            sleep 10
+            xcrun simctl io "$WATCH_UDID" screenshot "build/watch-previews/$SCREEN.png"
+          done
+      - name: Signed IPA with Push Notifications
+        if: github.event_name == 'workflow_dispatch' && inputs.sign_ipa == true
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_PROFILE_BASE64: ${{ secrets.APPLE_PROFILE_BASE64 }}
+          APPLE_WATCH_PROFILE_BASE64: ${{ secrets.APPLE_WATCH_PROFILE_BASE64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$APPLE_CERTIFICATE_P12_BASE64" || -z "$APPLE_CERTIFICATE_PASSWORD" || -z "$APPLE_PROFILE_BASE64" || -z "$APPLE_WATCH_PROFILE_BASE64" ]]; then
+            echo 'Configure Apple signing secrets in GitHub first; never paste them into chat.'
+            exit 1
+          fi
+          KEYCHAIN_PATH="$RUNNER_TEMP/diary-signing.keychain-db"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+          cleanup() {
+            security delete-keychain "$KEYCHAIN_PATH" >/dev/null 2>&1 || true
+            rm -f "$RUNNER_TEMP/diary-signing.p12" "$RUNNER_TEMP/diary.mobileprovision" "$RUNNER_TEMP/diary-profile.plist" "$RUNNER_TEMP/watch.mobileprovision" "$RUNNER_TEMP/watch-profile.plist"
+            if [[ -n "${WATCH_PROFILE_UUID:-}" ]]; then rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/$WATCH_PROFILE_UUID.mobileprovision"; fi
+            if [[ -n "${APPLE_PROFILE_UUID:-}" ]]; then rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/$APPLE_PROFILE_UUID.mobileprovision"; fi
+          }
+          trap cleanup EXIT
+          printf '%s' "$APPLE_CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/diary-signing.p12"
+          printf '%s' "$APPLE_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/diary.mobileprovision"
+          security cms -D -i "$RUNNER_TEMP/diary.mobileprovision" > "$RUNNER_TEMP/diary-profile.plist"
+          printf '%s' "$APPLE_WATCH_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/watch.mobileprovision"
+          security cms -D -i "$RUNNER_TEMP/watch.mobileprovision" > "$RUNNER_TEMP/watch-profile.plist"
+          python3 apps/iphone/signing/prepare_profile.py "$RUNNER_TEMP/diary-profile.plist" "$RUNNER_TEMP/diary-export.plist" "$RUNNER_TEMP/diary-signing.env" "$RUNNER_TEMP/watch-profile.plist"
+          source "$RUNNER_TEMP/diary-signing.env"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/diary-signing.p12" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH" >/dev/null
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN_PATH" "$HOME/Library/Keychains/login.keychain-db"
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | sed -nE 's/.* ([A-F0-9]{40}) .*/\1/p' | head -1)
+          test -n "$IDENTITY"
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          cp "$RUNNER_TEMP/diary.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$APPLE_PROFILE_UUID.mobileprovision"
+          cp "$RUNNER_TEMP/watch.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$WATCH_PROFILE_UUID.mobileprovision"
+          xcodebuild -project apps/iphone/PracovniDenik.xcodeproj -scheme PracovniDenik -configuration Release -destination 'generic/platform=iOS' -archivePath build/DiarySigned.xcarchive archive CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_IDENTITY="$IDENTITY" APPLE_PROFILE_UUID="$APPLE_PROFILE_UUID" WATCH_PROFILE_UUID="$WATCH_PROFILE_UUID" APNS_ENVIRONMENT="$SIGNED_APNS_ENVIRONMENT"
+          xcodebuild -exportArchive -archivePath build/DiarySigned.xcarchive -exportOptionsPlist "$RUNNER_TEMP/diary-export.plist" -exportPath build/signed
+          IPA_PATH=$(find build/signed -maxdepth 1 -name '*.ipa' -print -quit)
+          test -n "$IPA_PATH"
+          unzip -q "$IPA_PATH" -d build/signed-check
+          codesign --verify --deep --strict build/signed-check/Payload/PracovniDenik.app
+          codesign --display --entitlements :- build/signed-check/Payload/PracovniDenik.app > "$RUNNER_TEMP/signed-entitlements.plist" 2>/dev/null
+          python3 -c 'import os,plistlib,pathlib; p=plistlib.loads(pathlib.Path(os.environ["RUNNER_TEMP"],"signed-entitlements.plist").read_bytes()); assert p.get("aps-environment") in ("development","production"), "Signed IPA lacks Push Notifications entitlement"'
+          cp "$IPA_PATH" build/PracovniDenik-SIGNED.ipa
+          shasum -a 256 build/PracovniDenik-SIGNED.ipa > build/SIGNED-IPA-SHA256.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: PracovniDenik-builds-and-logs-${{ inputs.sign_ipa && 'SIGNED' || 'UNSIGNED' }}
+          retention-days: 14
+          path: |
+            build/*.ipa
+            build/*.log
+            build/*version.txt
+            build/simulator-devices.json
+            build/IPA-SHA256.txt
+            build/SIGNED-IPA-SHA256.txt
+            build/Tests.xcresult
+            build/watch-previews/*.png
+            build/iphone-previews/**

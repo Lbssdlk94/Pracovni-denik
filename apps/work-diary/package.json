@@ -20,12 +20,13 @@
   "devDependencies": {
     "drizzle-kit": "0.31.11",
     "drizzle-orm": "^0.45.2",
-    "miniflare": "^4.20260730.0",
-    "esbuild": "0.25.12"
+    "esbuild": "0.25.12",
+    "miniflare": "^4.20260730.0"
   },
   "dependencies": {
-    "leaflet": "1.9.4",
-    "jspdf": "4.2.1"
+    "@noble/hashes": "2.4.0",
+    "jspdf": "4.2.1",
+    "leaflet": "1.9.4"
   },
   "overrides": {
     "undici": "7.29.1",

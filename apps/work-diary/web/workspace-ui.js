@@ -1,0 +1,18 @@
+import {DISCIPLINE_LABELS,disciplineLabel} from './discipline-model.js?v=shared-directory-v1';
+export function workspaceBadge(value,esc){const values=Array.isArray(value)?value:value?[value]:[];return values.length?'<span class="role-pill workspace-discipline">'+esc(disciplineLabel(values))+'</span>':'';}
+export function workspaceDisciplineField(session,esc,value=null){
+ const workspace=session?.workspace;if(!workspace)return '';
+ const selected=value||workspace.selectedDiscipline||workspace.disciplines[0];
+ return '<label class="field">Pracovní obor<select name="discipline" '+(value?'disabled':'')+'>'+workspace.disciplines.map(key=>'<option value="'+key+'" '+(key===selected?'selected':'')+'>'+esc(DISCIPLINE_LABELS[key])+'</option>').join('')+'</select></label>';
+}
+export function workspaceFilterMarkup(session,esc){const workspace=session?.workspace;if(!workspace)return '';if(workspace.disciplines.length===1)return '<span class="role-pill">'+esc(DISCIPLINE_LABELS[workspace.disciplines[0]])+'</span>';return '<label class="workspace-scope">Obor <select data-workspace-filter aria-label="Pracovní obor"><option value="all" '+(workspace.selectedDiscipline==='all'?'selected':'')+'>Vše</option>'+workspace.disciplines.map(key=>'<option value="'+key+'" '+(workspace.selectedDiscipline===key?'selected':'')+'>'+esc(DISCIPLINE_LABELS[key])+'</option>').join('')+'</select></label>';}
+export function createWorkspaceUI({db,esc,getSession,showModal,modal,toast,onChanged}){
+ async function edit(entity,id,label){
+  const route='/api/workspace/'+entity+'/'+encodeURIComponent(id)+'/disciplines',old=(await db.request(route)).membership;
+  showModal('Příslušnost k oborům','<form id="workspace-membership-form"><h3>'+esc(label)+'</h3><p>Příslušnost nerozšiřuje uživatelskou roli. U pracovníka nadále rozhoduje také přiřazení ke konkrétní zakázce.</p>'+Object.entries(DISCIPLINE_LABELS).map(([key,title])=>'<label class="workspace-membership-choice"><input type="checkbox" name="disciplines" value="'+key+'" '+(old.disciplines.includes(key)?'checked':'')+'> '+esc(title)+'</label>').join('')+'<p>Obor zákazníka s pracovní historií nelze odebrat. Změny jsou zaznamenány s autorem a časem.</p><p class="form-message" role="alert"></p><button class="btn primary">Uložit příslušnost</button></form>');
+  const form=modal.querySelector('form'),operationId=crypto.randomUUID();form.onsubmit=async event=>{event.preventDefault();const button=form.querySelector('button');button.disabled=true;try{const disciplines=[...form.querySelectorAll('[name=disciplines]:checked')].map(input=>input.value);if(!disciplines.length)throw Error('Vyberte alespoň jeden obor.');await db.request(route,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({version:old.version,operationId,disciplines})});modal.close();toast('Příslušnost byla uložena.');await onChanged();}catch(error){if(form.isConnected)form.querySelector('.form-message').textContent=error.message;}finally{button.disabled=false;}};
+ }
+ document.addEventListener('click',event=>{const target=event.target.closest('[data-workspace-customer],[data-workspace-member]');if(!target||!getSession()?.permissions.manage)return;event.stopPropagation();edit(target.dataset.workspaceCustomer?'customers':'members',target.dataset.workspaceCustomer||target.dataset.workspaceMember,target.dataset.workspaceName||'').catch(error=>toast(error.message,true));});
+ document.addEventListener('change',event=>{if(event.target.matches('[data-workspace-filter]'))db.setWorkspaceDiscipline(event.target.value).then(()=>location.reload()).catch(error=>toast(error.message,true));});
+ return {edit};
+}

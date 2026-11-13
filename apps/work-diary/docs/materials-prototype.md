@@ -1,3 +1,5 @@
+> Aktualizace 4. 11. 2026: katalog je nyní dostupný všem firemním rolím, správu provádí správci. Aktuální oprávnění a ověření: [Materiál pro tým](MATERIAL-PRO-TYM-2026-11-04.md). Níže je původní popis prototypu.
+
 # Katalog materiálu – soukromý prototyp vlastníka
 
 Celý modul je přístupný pouze roli **owner**. Správce, pracovník ani čtenář nevidí nabídku Materiál ani výběr katalogových položek v protokolu. Všechny požadavky `/api/materials` ověřují vlastníka na serveru; skrytá tlačítka nejsou jedinou ochranou. U protokolů ostatní role nedostávají katalogové řádky ani jejich ceny, a to ani v historii nebo podkladech pro PDF. Dosavadní ruční text materiálu zůstává dostupný podle oprávnění zakázky.

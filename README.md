@@ -9,6 +9,10 @@ Společný zdroj existujícího pracovního deníku a oddělené centrální adm
 
 Použití a hranice architektury: [docs/PLATFORMA-A-PROVOZ.md](docs/PLATFORMA-A-PROVOZ.md).
 
+## iPhone a Apple Watch
+
+[Nativní SwiftUI klient 0.8 s přímým API — aktuální stav a ověření](docs/IPHONE-NATIVE-API-2026-11-06.md). Poslední sestavení prošlo, navazující dokončení zatím blokuje GitHub Billing & plans; PR #4 zůstává rozpracovaný.
+
 ## Vývoj
 
 `npm ci`, `npm run check`, `npm test`, `npm run build`, `npm run build:tenant`, `npm run test:tenant`.

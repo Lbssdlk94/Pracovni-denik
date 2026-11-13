@@ -1,0 +1,190 @@
+{
+  "capturedAt": "2026-10-30",
+  "source": "Sites recent worker logs; bounded sample, not full request history",
+  "events": [
+    {
+      "at": "2026-10-30T17:10:11.998Z",
+      "route": "/api/me",
+      "status": null,
+      "outcome": "canceled",
+      "wallMs": 12702,
+      "cpuMs": 15
+    },
+    {
+      "at": "2026-10-30T17:10:02.774Z",
+      "route": "/api/jobs",
+      "status": null,
+      "outcome": "canceled",
+      "wallMs": 10271,
+      "cpuMs": 19
+    },
+    {
+      "at": "2026-10-30T17:09:46.036Z",
+      "route": "/api/me",
+      "status": null,
+      "outcome": "canceled",
+      "wallMs": 14957,
+      "cpuMs": 13
+    },
+    {
+      "at": "2026-10-30T17:09:33.939Z",
+      "route": "/api/jobs",
+      "status": null,
+      "outcome": "canceled",
+      "wallMs": 11551,
+      "cpuMs": 16
+    },
+    {
+      "at": "2026-10-30T17:09:18.891Z",
+      "route": "/api/me",
+      "status": null,
+      "outcome": "canceled",
+      "wallMs": 14958,
+      "cpuMs": 15
+    },
+    {
+      "at": "2026-10-30T17:09:16.301Z",
+      "route": "/api/customers",
+      "status": null,
+      "outcome": "canceled",
+      "wallMs": 1845,
+      "cpuMs": 42
+    },
+    {
+      "at": "2026-10-30T17:09:16.274Z",
+      "route": "/api/jobs",
+      "status": null,
+      "outcome": "canceled",
+      "wallMs": 1541,
+      "cpuMs": 32
+    },
+    {
+      "at": "2026-10-30T17:08:57.984Z",
+      "route": "/api/jobs",
+      "status": null,
+      "outcome": "canceled",
+      "wallMs": 246,
+      "cpuMs": 5
+    },
+    {
+      "at": "2026-10-30T17:08:28.158Z",
+      "route": "/api/workspace",
+      "status": null,
+      "outcome": "canceled",
+      "wallMs": 1436,
+      "cpuMs": 19
+    },
+    {
+      "at": "2026-10-30T15:40:22.411Z",
+      "route": "/api/jobs",
+      "status": null,
+      "outcome": "canceled",
+      "wallMs": 345,
+      "cpuMs": 3
+    },
+    {
+      "at": "2026-10-30T15:40:19.389Z",
+      "route": "/api/jobs",
+      "status": null,
+      "outcome": "canceled",
+      "wallMs": 2000,
+      "cpuMs": 21
+    },
+    {
+      "at": "2026-10-30T15:40:03.226Z",
+      "route": "/api/jobs",
+      "status": null,
+      "outcome": "canceled",
+      "wallMs": 2026,
+      "cpuMs": 20
+    },
+    {
+      "at": "2026-10-30T15:40:03.211Z",
+      "route": "/api/notifications",
+      "status": null,
+      "outcome": "canceled",
+      "wallMs": 2068,
+      "cpuMs": 25
+    },
+    {
+      "at": "2026-10-30T15:40:01.168Z",
+      "route": "/api/jobs",
+      "status": null,
+      "outcome": "canceled",
+      "wallMs": 470,
+      "cpuMs": 3
+    },
+    {
+      "at": "2026-10-30T15:40:01.133Z",
+      "route": "/api/notifications",
+      "status": null,
+      "outcome": "canceled",
+      "wallMs": 1903,
+      "cpuMs": 24
+    },
+    {
+      "at": "2026-10-30T15:05:24.598Z",
+      "route": "/api/shafts",
+      "status": null,
+      "outcome": "canceled",
+      "wallMs": 2022,
+      "cpuMs": 34
+    },
+    {
+      "at": "2026-10-30T14:59:23.618Z",
+      "route": "/api/shafts",
+      "status": null,
+      "outcome": "canceled",
+      "wallMs": 277,
+      "cpuMs": 4
+    },
+    {
+      "at": "2026-10-30T14:50:38.340Z",
+      "route": "/api/workspace",
+      "status": null,
+      "outcome": "canceled",
+      "wallMs": 1321,
+      "cpuMs": 16
+    },
+    {
+      "at": "2026-10-30T14:47:29.101Z",
+      "route": "/api/notifications",
+      "status": 403,
+      "outcome": "ok",
+      "wallMs": 1289,
+      "cpuMs": 28
+    },
+    {
+      "at": "2026-10-30T14:47:28.938Z",
+      "route": "/api/notifications",
+      "status": 403,
+      "outcome": "ok",
+      "wallMs": 1318,
+      "cpuMs": 26
+    },
+    {
+      "at": "2026-10-30T14:47:27.857Z",
+      "route": "/api/notifications",
+      "status": 403,
+      "outcome": "ok",
+      "wallMs": 2055,
+      "cpuMs": 48
+    },
+    {
+      "at": "2026-10-30T14:46:32.475Z",
+      "route": "/api/zones",
+      "status": 403,
+      "outcome": "ok",
+      "wallMs": 1271,
+      "cpuMs": 13
+    },
+    {
+      "at": "2026-10-30T14:46:32.470Z",
+      "route": "/api/gardens",
+      "status": 403,
+      "outcome": "ok",
+      "wallMs": 1273,
+      "cpuMs": 13
+    }
+  ]
+}

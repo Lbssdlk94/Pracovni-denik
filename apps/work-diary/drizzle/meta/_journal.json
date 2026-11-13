@@ -302,6 +302,90 @@
       "when": 1792704000000,
       "tag": "0042_customer_signature",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "6",
+      "when": 1793300735951,
+      "tag": "0043_shared_workspace",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "6",
+      "when": 1793302853648,
+      "tag": "0044_workspace_identity_and_recovery",
+      "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "6",
+      "when": 1793339712105,
+      "tag": "0045_workspace_address_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "6",
+      "when": 1793340759869,
+      "tag": "0046_workspace_organization_policies",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "6",
+      "when": 1793341465751,
+      "tag": "0047_workspace_tariff_scopes",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "6",
+      "when": 1793342715525,
+      "tag": "0048_workspace_member_capacity",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "6",
+      "when": 1793347916779,
+      "tag": "0049_workspace_transfer_fence",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "6",
+      "when": 1793797678967,
+      "tag": "0050_native_push_transport",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "6",
+      "when": 1793804402488,
+      "tag": "0051_local_password_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "6",
+      "when": 1793806000000,
+      "tag": "0052_local_auth_fences",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "6",
+      "when": 1793822400000,
+      "tag": "0053_retire_volume_fixtures",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "6",
+      "when": 1794594069444,
+      "tag": "0054_job_diary_entries",
+      "breakpoints": true
     }
   ]
 }
