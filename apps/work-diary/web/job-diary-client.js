@@ -1,6 +1,6 @@
 // Reuses the protocol store, original-photo packing, access lease and outbox sender.
 export const diaryRecordKey=(user,job,entry='')=>user+'|'+job+'|diary'+(entry?'|'+entry:'');
-export const mergeDiaryEntries=(snapshot,pending)=>[...new Map([...(snapshot?.entries||[]),...pending.map(record=>({...record.snapshot?.entry,...record.payload,id:record.entryId,jobId:record.jobId,authorName:record.snapshot?.entry?.authorName||record.authorName,createdBy:record.snapshot?.entry?.createdBy||record.ownerId,canEdit:true,photos:[...(record.snapshot?.entry?.photos||[]),...(record.photos||[]).map(p=>({id:p.id,name:p.file.name,file:p.file}))],pending:true,conflict:!!record.conflict,blocked:!!record.blocked,error:record.error||''}))].map(e=>[e.id,e])).values()].sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+export const mergeDiaryEntries=(snapshot,pending)=>[...new Map([...(snapshot?.entries||[]),...pending.map(record=>({...record.snapshot?.entry,...record.payload,id:record.entryId,jobId:record.jobId,authorName:record.snapshot?.entry?.authorName||record.authorName,createdBy:record.snapshot?.entry?.createdBy||record.ownerId,canEdit:true,photos:[...(record.snapshot?.entry?.photos||[]),...(record.photos||[]).map(p=>({id:p.id,name:p.file.name,file:p.file}))],pending:true,conflict:!!record.conflict,blocked:!!record.blocked,photoRequired:record.blockedCode==='diary_photo_required',error:record.error||''}))].map(e=>[e.id,e])).values()].sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
 export function createJobDiaryClient({all,change,send,request,getSession,isPreview,isLocked,checkWrite,packPhotos}){
  const key=(job,id='')=>diaryRecordKey(getSession()?.user.id,job,id),base=job=>'/api/jobs/'+encodeURIComponent(job)+'/diary';
  const valid=async()=>{if(!getSession()?.user||await isLocked()||getSession()?.features.jobs===false)throw Error('Přihlaste se k účtu s povolenými zakázkami.');const s=getSession();if(s.license&&(!s.license.active||s.license.expiresAt<=Date.now())||!navigator.onLine&&(s.features.offline===false||!s.verifiedAt||Date.now()-s.verifiedAt>86400000))throw Error('Platnost offline přístupu vyžaduje ověření s internetem.');};
@@ -19,11 +19,13 @@ export function createJobDiaryClient({all,change,send,request,getSession,isPrevi
  async function save(jobId,value,photos=[]){
   checkWrite();await valid();if(!getSession()?.permissions.write)throw Error('Pro zápis potřebujete oprávnění pracovníka.');
   const user=getSession().user,id=key(jobId,value.id),records=await all(),index=records.find(r=>r.id===key(jobId)),old=records.find(r=>r.id===id);
-  if(old?.pending)throw Error('Nejdříve sdílejte nebo porovnejte předchozí změnu zápisu.');
+  const repairing=old?.pending&&old.blockedCode==='diary_photo_required'&&!old.conflict;
+  if(old?.pending&&!repairing)throw Error('Nejdříve sdílejte nebo porovnejte předchozí změnu zápisu.');
+  if(!value.photoIds?.length)throw Error('K dennímu zápisu přidejte alespoň jednu fotografii.');
   if(!index?.snapshot||index.expiresAt<Date.now()||index.accessRole!==user.role||index.snapshot.job.cancelled)throw Error('Nejdříve načtěte aktuální deník s připojením.');
   const packed=await packPhotos(photos);if(user.id!==getSession()?.user.id||user.role!==getSession()?.user.role)throw Error('Přihlášení se změnilo.');
   const payload={...value,operationId:crypto.randomUUID()};delete payload.id;
-  await change(id,()=>({id,kind:'jobDiary',entryId:value.id,jobId,ownerId:user.id,authorName:user.name,accessRole:user.role,snapshot:{job:index.snapshot.job,entry:index.snapshot.entries.find(e=>e.id===value.id)||null},expiresAt:index.expiresAt,photos:packed,payload,mutationId:payload.operationId,pending:true,conflict:false,blocked:false,error:'',updatedAt:Date.now()}));
+  await change(id,current=>{if(repairing&&current?.mutationId!==old.mutationId)throw Error('Neodeslaný zápis se změnil. Obnovte deník.');return {id,kind:'jobDiary',entryId:value.id,jobId,ownerId:user.id,authorName:user.name,accessRole:user.role,snapshot:{job:index.snapshot.job,entry:index.snapshot.entries.find(e=>e.id===value.id)||null},expiresAt:index.expiresAt,photos:packed,payload,mutationId:payload.operationId,pending:true,conflict:false,blocked:false,error:'',updatedAt:Date.now()};});
   if(navigator.onLine){try{await send(id);}catch(e){if(e.status&&e.status<500)throw e;}}
   return load(jobId,false);
  }

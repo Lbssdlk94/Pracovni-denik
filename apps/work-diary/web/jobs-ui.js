@@ -1,4 +1,4 @@
-import {createJobDiaryUI} from './job-diary-ui.js?v=diary-workspace-v2';
+import {createJobDiaryUI} from './job-diary-ui.js?v=diary-required-photo-v1';
 import {workspaceBadge,workspaceDisciplineField} from './workspace-ui.js?v=shared-directory-v1';
 import {interfaceIcon} from './interface-icons.js?v=approved-b-v2';
 import {featureEnabled} from './features.js?v=fleet-photo-v1';
@@ -6,7 +6,7 @@ import {compareWorkJobs,INCOMPLETE_REASONS,protocolBadge} from './job-workflow-m
 import {gardenChoiceLabel} from './garden-choice.js?v=workspace-roles-v1';
 import {jobGardenAddress,jobAddressId} from './job-address-model.js?v=workspace-roles-v1';
 import {backlogMarkup} from './job-backlog-ui.js?v=workspace-roles-v1';
-import {mountJobSideEditor} from './job-side-editor.js?v=diary-workspace-v2';
+import {mountJobSideEditor} from './job-side-editor.js?v=diary-required-photo-v1';
 import {enhanceJobComposer} from './job-composer.js?v=selected-work-v1';
 import {planningFields,readPlanningFields,saveJobWithWarnings,scheduleText} from './planning-fields.js?v=workspace-roles-v1';
 import {planClock} from './planning-model.js?v=workspace-roles-v1';

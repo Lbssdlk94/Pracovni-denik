@@ -1,5 +1,11 @@
 import SwiftUI
 
+enum APIJobDiaryRules {
+    static func requirePhoto(_ value:APIValue)throws {
+        guard !value["photoIds"].array.isEmpty else{throw APIError.local("K dennímu zápisu přidejte alespoň jednu fotografii.")}
+    }
+}
+
 // Native screens use the existing API store, encrypted drafts/outbox and photo picker.
 struct APIJobDiary:View {
     @ObservedObject var store:APIStore
@@ -54,15 +60,16 @@ struct APIJobDiaryEditor:View {
     var body:some View{NavigationStack{Form{
         if loaded{
             APIFieldsView(fields:fields,value:$value)
-            Section("Fotografie"){
+            Section("Fotografie · povinné"){
+                Text("K zápisu přidejte alespoň jednu fotografii.").font(.footnote).foregroundStyle(.secondary)
                 APIFilesView(store:store,path:"/api/jobs/"+job.id+"/service",mode:.service,record:job,attached:{id in var ids=value["photoIds"].array;if !ids.contains(.s(id)){ids.append(.s(id))};value["photoIds"] = .array(ids);photoUploads.append(id);persist()},selection:photoSelection,selectionLabel:"Zahrnout do denního zápisu")
             }
             if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}
-            Button(saving ? "Ukládám…" : "Uložit denní zápis"){Task{await save()}}.disabled(saving||value["work"].string.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty)
+            Button(saving ? "Ukládám…" : "Uložit denní zápis"){Task{await save()}}.disabled(saving||value["work"].string.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty||value["photoIds"].array.isEmpty)
         }else{ProgressView()}
     }.navigationTitle(initial.id.isEmpty ? "Dnešní zápis" : "Upravit zápis").toolbar{ToolbarItem(placement:.cancellationAction){Button("Zavřít"){persist();dismiss()}.disabled(saving)}}.task{if !loaded{let base=initial.isNull ? APIValue.object(["id":.s(UUID().uuidString),"version":.n(0),"date":.s(store.today),"work":.s(""),"material":.s(""),"notes":.s(""),"nextStep":.s(""),"photoIds":.array([])]) : initial;let draft=store.draft(key,fallback:base);value=draft.value;operationID=draft.operationID;photoUploads=value["photoIds"].array.map(\.string).filter{id in store.outbox.contains{$0.id==id}};loaded=true;store.beginEdit()}}
       .onChange(of:value){_,_ in if loaded{persist()}}.onDisappear{persist();if loaded{store.endEdit()}}
     }}
     func persist(){guard loaded else{return};store.saveDraft(key,draft:APIDraft(value:value,baseVersion:value["version"].int,operationID:operationID,updatedAt:Date()))}
-    func save()async{saving=true;defer{saving=false};do{guard !value["date"].string.isEmpty,value["date"].string<=store.today else{throw APIError.local("Vyberte skutečné datum práce, nejpozději dnešní.")};persist();var payload=value.selecting(["version","date","work","material","notes","nextStep","photoIds"]);payload["operationId"] = .s(operationID);_ = try await store.write("/api/jobs/"+job.id+"/diary/"+value.id,method:"PUT",body:payload,offline:true,draftKey:key,operationID:operationID,dependsOn:photoUploads);loaded=false;store.endEdit();dismiss()}catch{problem=error.localizedDescription}}
+    func save()async{saving=true;defer{saving=false};do{guard !value["date"].string.isEmpty,value["date"].string<=store.today else{throw APIError.local("Vyberte skutečné datum práce, nejpozději dnešní.")};try APIJobDiaryRules.requirePhoto(value);persist();var payload=value.selecting(["version","date","work","material","notes","nextStep","photoIds"]);payload["operationId"] = .s(operationID);_ = try await store.write("/api/jobs/"+job.id+"/diary/"+value.id,method:"PUT",body:payload,offline:true,draftKey:key,operationID:operationID,dependsOn:photoUploads);loaded=false;store.endEdit();dismiss()}catch{problem=error.localizedDescription}}
 }

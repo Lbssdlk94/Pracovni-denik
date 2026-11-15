@@ -40,6 +40,7 @@ export async function handleJobDiary(request,env,m,h){
  if(!subDate(input.date)||input.date>subToday())fail(400,'Vyberte skutečný den práce, nejpozději dnešní.');
  const work=cleanText(input.work,8000,true),material=cleanText(input.material||'',4000),notes=cleanText(input.notes||'',3000),nextStep=cleanText(input.nextStep||'',3000);
  if(!Array.isArray(input.photoIds)||input.photoIds.length>40||new Set(input.photoIds).size!==input.photoIds.length)fail(400,'Vyberte nejvýše 40 různých fotografií.');
+ if(!input.photoIds.length)fail(400,'K dennímu zápisu přidejte alespoň jednu fotografii.',{code:'diary_photo_required'});
  const photoIds=input.photoIds.map(validId);
  if(photoIds.length){const valid=await subAll(env.DB,"SELECT id FROM service_photos WHERE job_id=? AND status='ready' AND id IN (SELECT value FROM json_each(?)) UNION SELECT id FROM job_photos WHERE job_id=? AND status='complete' AND id IN (SELECT value FROM json_each(?))",jobId,JSON.stringify(photoIds),jobId,JSON.stringify(photoIds));if(valid.length!==photoIds.length)fail(400,'Fotografie nepatří k zakázce nebo ještě není nahraná.');}
  const now=Date.now(),access=`EXISTS(SELECT 1 FROM jobs j WHERE j.id=? AND j.job_type='installation' AND j.deleted=0 AND ${subWorkScope}) AND EXISTS(SELECT 1 FROM members w WHERE w.user_id=? AND w.role IN ('owner','administrator','admin','worker'))`,accessArgs=[jobId,m.user_id,m.user_id],operationGate='EXISTS(SELECT 1 FROM job_diary_entries WHERE id=? AND job_id=? AND version=? AND last_mutation_id=?)',gateArgs=[entryId,jobId,input.version+1,operationId];
