@@ -38,3 +38,4 @@ Náhledy z testovacích dat: `/workspace/artifacts/job-diary-2026-11-15/`.
 - Dr. Závlaha: verze 130, zdroj `7395801fee551f1e032ac3c7ce73f8b2b822a5bc`, nasazení `appgdep_6af9e98bcf9c8191b933315ef3383b68` – úspěšné.
 - Dr. Garden: verze 50, zdroj `50d9e5da51b3de4f763956b49c76fed645a16fa3`, nasazení `appgdep_6af9e9a2ba9881918d37740cb740f66d` – úspěšné.
 - GitHub: samostatná větev `feat/clear-installation-diary-2026-11-15`, [PR #13](https://github.com/Lbssdlk94/Pracovni-denik/pull/13). Firemní konfigurace, backend, migrace a úložiště nejsou v tomto vydání měněny.
+- Po nasazení: chráněné čtení čtyř statických souborů na každém webu (`job-diary-ui.js`, `jobs-ui.js`, `approved-layout.css`, `sw.js`), všech 8 odpovědí HTTP 200 a shodný SHA-256 s příslušným minifikovaným sestaveným artefaktem. Kontrola nečte ani nemění firemní záznamy.
