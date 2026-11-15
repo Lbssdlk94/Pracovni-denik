@@ -494,8 +494,17 @@ function sizeBottomNavigation(){
  update();if('ResizeObserver' in window){navigationSizeObserver=new ResizeObserver(update);navigationSizeObserver.observe(bar,{box:'border-box'});}
 }
 window.addEventListener('resize',sizeBottomNavigation);
-function updateVisibleViewport(){const v=window.visualViewport;if(!v)return;const root=document.documentElement;root.style.setProperty('--visual-height',v.height+'px');root.style.setProperty('--keyboard-inset',Math.max(0,innerHeight-v.height-v.offsetTop)+'px');root.classList.toggle('keyboard-open',v.height<innerHeight*.75&&!!document.activeElement?.matches('input,textarea,select'));}
-window.visualViewport?.addEventListener('resize',updateVisibleViewport);window.visualViewport?.addEventListener('scroll',updateVisibleViewport);document.addEventListener('focusin',updateVisibleViewport);document.addEventListener('focusout',()=>requestAnimationFrame(updateVisibleViewport));updateVisibleViewport();
+function updateVisibleViewport(){const v=window.visualViewport;if(!v)return;const root=document.documentElement;root.style.setProperty('--visual-height',v.height+'px');root.style.setProperty('--visual-top',Math.max(0,v.offsetTop)+'px');root.style.setProperty('--keyboard-inset',Math.max(0,innerHeight-v.height-v.offsetTop)+'px');root.classList.toggle('keyboard-open',v.height<innerHeight*.75&&!!document.activeElement?.matches('input,textarea,select'));}
+// Reveal the diary field after keyboard resizing, never while the user manually scrolls.
+let diaryFieldFrame=null;
+function revealDiaryField(){
+ diaryFieldFrame=null;const viewport=window.visualViewport,field=document.activeElement,dialog=field?.closest('dialog.job-diary-dialog[open]');
+ if(!viewport||viewport.scale>1.05||!matchMedia('(max-width:760px)').matches||!document.documentElement.classList.contains('keyboard-open')||!field?.matches('[data-diary-form] input,[data-diary-form] textarea,[data-diary-form] select')||!dialog)return;
+ const box=field.getBoundingClientRect(),bounds=dialog.getBoundingClientRect(),header=dialog.querySelector('.modal-head'),top=Math.max(viewport.offsetTop,bounds.top)+(header?.getBoundingClientRect().height||0)+12,bottom=Math.min(viewport.offsetTop+viewport.height,bounds.bottom)-16;
+ if(bottom<=top)return;if(box.top<top)dialog.scrollTop+=box.top-top;else if(box.bottom>bottom)dialog.scrollTop+=Math.min(box.bottom-bottom,box.top-top);
+}
+function resizeVisibleViewport(){updateVisibleViewport();if(diaryFieldFrame!==null)cancelAnimationFrame(diaryFieldFrame);diaryFieldFrame=requestAnimationFrame(revealDiaryField);}
+window.visualViewport?.addEventListener('resize',resizeVisibleViewport);window.visualViewport?.addEventListener('scroll',updateVisibleViewport);document.addEventListener('focusin',resizeVisibleViewport);document.addEventListener('focusout',()=>requestAnimationFrame(updateVisibleViewport));updateVisibleViewport();
 
 
 // Revoked content is removed from the DOM and in-memory modules before reload.
