@@ -7,6 +7,7 @@
     "check": "node scripts/syntax-check.mjs",
     "db:generate": "drizzle-kit generate",
     "build": "node scripts/build.mjs && node scripts/validate-artifact.mjs",
+    "package:site": "node scripts/package-workspace-release.mjs",
     "test:worker": "node scripts/test-push-worker.mjs",
     "test:subscriptions-worker": "node scripts/test-subscriptions-worker.mjs",
     "test:planning-worker": "node scripts/test-planning-worker.mjs",
