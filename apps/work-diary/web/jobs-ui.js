@@ -1,4 +1,4 @@
-import {createJobDiaryUI} from './job-diary-ui.js?v=diary-required-photo-v1';
+import {createJobDiaryUI} from './job-diary-ui.js?v=diary-single-date-v1';
 import {workspaceBadge,workspaceDisciplineField} from './workspace-ui.js?v=shared-directory-v1';
 import {interfaceIcon} from './interface-icons.js?v=approved-b-v2';
 import {featureEnabled} from './features.js?v=fleet-photo-v1';
