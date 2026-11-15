@@ -65,6 +65,7 @@ final class APIFixtureProtocol:URLProtocol {
                     let b=body()
                     if old["operationId"]==b["operationId"],!old.isNull{return json(.object(["job":job,"entry":old,"replayed":.bool(true)]))}
                     guard b["version"].int==old["version"].int else{return json(.object(["error":.s("Zápis se změnil"),"code":.s("diary_conflict")]),409)}
+                    guard !b["photoIds"].array.isEmpty else{return json(.object(["error":.s("K dennímu zápisu přidejte alespoň jednu fotografii."),"code":.s("diary_photo_required")]),400)}
                     records[entryKey]=b.merged(["id":.s(parts[4]),"version":.n(old["version"].int+1),"authorName":.s("Luboš – ukázka"),"createdBy":.s("fixture-owner"),"canEdit":.bool(true),"photos":.array([])])
                 }
                 guard let row=records[entryKey]else{return json(.object(["error":.s("Zápis neexistuje")]),404)}
