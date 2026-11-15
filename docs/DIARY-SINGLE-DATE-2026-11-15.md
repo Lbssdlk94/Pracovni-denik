@@ -7,3 +7,5 @@ Ověřeno v existujícím izolovaném browser testu sestaveného Workeru/D1/R2/I
 Bez databázových nebo backendových změn. Standardní balíček Dr. Závlahy obsahuje kořenové migrace. Pro prezentační vydání Dr. Garden byla opět ověřena shoda sestaveného backendu mimo vložený objekt ASSETS; zmrazená lokální databáze a její migrační historie se nemění (stejný postup jako při opravě klávesnice).
 
 Náhled: `/workspace/artifacts/job-diary-single-date-2026-11-15/mobile-390.png`.
+
+Nasazeno úspěšně: Dr. Závlaha verze 134 (zdroj `9583456c642128b3897a38ea90ab944cf9f2cd6d`, nasazení `appgdep_6afa2203e2d4819195d4fd257711be21`); Dr. Garden verze 54 (zdroj `9e2bcbfcc1033da04b2b02fbcc7f9f143e9a62ca`, nasazení `appgdep_6afa2219d660819187d45c794800151f`). GitHub: [PR #17](https://github.com/Lbssdlk94/Pracovni-denik/pull/17).
