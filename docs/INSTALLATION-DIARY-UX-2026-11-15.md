@@ -32,3 +32,9 @@ Stávající API, původní identifikátory, stránkování, práva na serveru, 
 Všechny zápisy testů jsou v izolovaných databázích; žádné skutečné zakázky nebyly přepsány. Není ověřeno na fyzickém iPhonu, v Safari ani s jeho softwarovou klávesnicí. Tato změna upravuje web/PWA, nikoliv nativní SwiftUI obrazovku nebo IPA.
 
 Náhledy z testovacích dat: `/workspace/artifacts/job-diary-2026-11-15/`.
+
+## Nasazení
+
+- Dr. Závlaha: verze 130, zdroj `7395801fee551f1e032ac3c7ce73f8b2b822a5bc`, nasazení `appgdep_6af9e98bcf9c8191b933315ef3383b68` – úspěšné.
+- Dr. Garden: verze 50, zdroj `50d9e5da51b3de4f763956b49c76fed645a16fa3`, nasazení `appgdep_6af9e9a2ba9881918d37740cb740f66d` – úspěšné.
+- GitHub: samostatná větev `feat/clear-installation-diary-2026-11-15`, [PR #13](https://github.com/Lbssdlk94/Pracovni-denik/pull/13). Firemní konfigurace, backend, migrace a úložiště nejsou v tomto vydání měněny.
