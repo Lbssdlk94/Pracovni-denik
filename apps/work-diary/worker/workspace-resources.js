@@ -58,7 +58,7 @@ export async function workspaceResourceAccess(request, env, member, fail) {
   }
   // Garden had no Drive connection to migrate. Keep the existing irrigation
   // connection confined to its original work until Drive integration is requested.
-  if(env.WORKSPACE_ORGANIZATION_DISCIPLINE==='garden'&&(/^\/api\/drive(?:\/|$)/.test(path)||/^\/api\/jobs\/[-\w]+\/photos(?:\/|$)/.test(path)))fail(409,'Google Disk pro Garden zatím není propojený. Fotografie servisního protokolu lze dál uložit do interního úložiště.',{code:'integration_not_migrated'});
+  if(env.WORKSPACE_ORGANIZATION_DISCIPLINE==='garden'&&/^\/api\/drive(?:\/|$)/.test(path))fail(409,'Google Disk pro Garden zatím není propojený. Fotografie servisního protokolu lze dál uložit do interního úložiště.',{code:'integration_not_migrated'});
   return authorization;
 }
 

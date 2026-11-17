@@ -56,7 +56,7 @@ export const FEATURE_OPTIONS=[
  {key:'subscriptions',label:'Servisní předplatné',description:'Tarify, sjednaná období, servisní plány a platby.',requires:['jobs','customers']},
  {key:'customers',label:'Seznam zákazníků',description:'Jména, více telefonů a adres. Kolega vidí jen zákazníky svých přiřazených zakázek.'},
  {key:'notifications',label:'Upozornění',description:'Soukromé centrum upozornění a volitelná push oznámení na telefonech kolegů.'},
- {key:'drivePhotos',label:'Fotodokumentace zakázek',description:'Originály fotografií ve třech fázích realizace na Google Disku.',requires:['jobs']},
+ {key:'drivePhotos',label:'Fotodokumentace zakázek',description:'Fotografie ve třech fázích realizace. Bez připojeného Google Disku se ukládají do aplikace.',requires:['jobs']},
  {key:'jobMap',label:'Mapa zakázek',description:'Pouze správce a vlastník: rozmístění zakázek podle adres a vzdálenosti vzdušnou čarou.',requires:['jobs','location']},
  {key:'jobs',label:'Zakázky',description:'Zakázky, servisní protokoly a PDF. Kolega vidí vlastní zakázky a mění jejich stav.'},
  {key:'attendance',label:'Docházkový deník',description:'Příchody, odchody, měsíční výkazy a schvalování oprav. GPS docházky vidí pouze správce.'},

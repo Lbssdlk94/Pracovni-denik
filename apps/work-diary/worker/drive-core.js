@@ -42,5 +42,5 @@ export function createDrive(env,h){
  async function folders(conn,rootId,j){await privateFolder(conn.id,rootId);const local=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(j.created_at)),year=local.slice(0,4),day=local.split('-').reverse().join('.'),label=[j.city,j.customer_name||j.title,day].filter(Boolean).join(' - ').replace(/[\u0000-\u001f]/g,' ').slice(0,180)+' ['+j.id.slice(0,8)+']';
   const yearRow=await folder(conn,rootId,'year',year,rootId,year),jobRow=await folder(conn,rootId,'job',j.id,yearRow.file_id,label,j.id),categories={};for(const [key,name] of Object.entries(DRIVE_CATEGORIES))categories[key]=await folder(conn,rootId,'category',j.id+':'+key,jobRow.file_id,name,j.id);return {job:jobRow,categories};
  }
- return {controllerRow,configuredKey,config,manager,job,http,oauth,connection,access,request,meta,privateFolder,newId,folder,folders,googleError};
+ return {jobScope:workspaceJobScope,controllerRow,configuredKey,config,manager,job,http,oauth,connection,access,request,meta,privateFolder,newId,folder,folders,googleError};
 }
