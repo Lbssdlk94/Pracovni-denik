@@ -4,6 +4,37 @@ export async function handleJobPhotos(request,env,ctx,m,h){
  if(!match)fail(404,'Fotografie nebyla nalezena.');const jobId=match[1],photoId=match[2],action=match[3],method=request.method;
  const readBody=async(input,max)=>{const value=await body(input,max);if(!value||typeof value!=='object'||Array.isArray(value))fail(400,'Neplatné údaje požadavku.');return value;};
  const j=await d.job(m,jobId,!['GET','HEAD'].includes(method));
+ if(photoId&&action==='content'&&method==='PUT'&&url.searchParams.get('storage')==='app'){if(await one(env.DB,'SELECT id FROM job_photos WHERE id=?',photoId))fail(409,'Identifikátor už patří fotografii na Disku.');return h.storeOriginal(new Request(url.origin+'/api/jobs/'+jobId+'/service/photos/'+photoId,{method:'PUT',headers:request.headers,body:request.body,duplex:'half'}));}
+ const localRecord=p=>({id:p.id,jobId:p.job_id,storage:'app',category:p.gallery_category,note:p.gallery_note,fileName:p.name,originalName:p.name,mimeType:p.mime_type,size:p.size,uploadedAt:p.created_at,createdAt:p.created_at,version:p.gallery_version});
+ const localGate=`EXISTS(SELECT 1 FROM jobs j WHERE j.id=service_photos.job_id AND j.deleted=0 AND ${d.jobScope()}) AND EXISTS(SELECT 1 FROM members writer WHERE writer.user_id=? AND writer.role IN ('owner','administrator','admin','worker'))`;
+ const localPhoto=photoId?await one(env.DB,"SELECT * FROM service_photos WHERE id=? AND job_id=? AND status='ready'",photoId,jobId):null;
+ if(localPhoto){
+  if(!action&&method==='PATCH'){
+   const b=await readBody(request,5000),category=b.category??localPhoto.gallery_category,note=cleanText(b.note??localPhoto.gallery_note,2000);
+   if(!Object.hasOwn(DRIVE_CATEGORIES,category))fail(400,'Vyberte fázi fotografie.');
+   if(!localPhoto.gallery_category&&h.features.photoUploads===false)fail(403,'Přidávání fotografií je vypnuté.',{code:'feature_disabled'});
+   if(localPhoto.gallery_category===category&&localPhoto.gallery_note===note){await d.job(m,jobId,true);return json({ok:true,photo:localRecord(localPhoto)});}
+   if(b.version!==localPhoto.gallery_version)fail(409,'Fotografii mezitím změnil kolega. Obnovte galerii.');
+   const changed=await execute(env.DB,`UPDATE service_photos SET gallery_category=?,gallery_note=?,gallery_version=gallery_version+1 WHERE id=? AND job_id=? AND gallery_version=? AND status='ready' AND ${localGate}`,category,note,photoId,jobId,b.version,m.user_id,m.user_id);
+   if(!changed.meta.changes)fail(409,'Fotografie nebo oprávnění se změnily. Obnovte galerii.');return json({ok:true,photo:localRecord(await one(env.DB,'SELECT * FROM service_photos WHERE id=?',photoId))});
+  }
+  if(!localPhoto.gallery_category)fail(404,'Fotografie není ve fotodokumentaci.');
+  const thumbnailKey='service-thumbnails/'+jobId+'/'+photoId+'/'+localPhoto.sha256+'.jpg';
+  if(action==='thumbnail'&&method==='PUT'){
+   const bytes=await boundedBytes(request,256*1024);if(request.headers.get('content-type')!=='image/jpeg'||bytes[0]!==255||bytes[1]!==216||bytes[2]!==255)fail(400,'Náhled musí být JPG do 256 kB.');
+   await env.BUCKET.put(thumbnailKey,bytes,{httpMetadata:{contentType:'image/jpeg'}});const saved=await execute(env.DB,`UPDATE service_photos SET gallery_thumbnail_key=? WHERE id=? AND job_id=? AND status='ready' AND gallery_category IS NOT NULL AND ${localGate}`,thumbnailKey,photoId,jobId,m.user_id,m.user_id);if(!saved.meta.changes)fail(409,'Fotografie nebo oprávnění se změnily.');await d.job(m,jobId,true);return json({ok:true});
+  }
+  if(['content','thumbnail'].includes(action)&&method==='GET'){
+   if(action==='thumbnail'&&!localPhoto.gallery_thumbnail_key)fail(404,'Náhled není dostupný. Otevřete originál.');const object=await env.BUCKET.get(action==='thumbnail'?localPhoto.gallery_thumbnail_key:localPhoto.object_key);if(!object)fail(404,action==='thumbnail'?'Náhled není dostupný. Otevřete originál.':'Fotografie není dostupná.');await d.job(m,jobId);
+   return new Response(object.body,{headers:{'content-type':action==='thumbnail'?'image/jpeg':localPhoto.mime_type,'cache-control':'private, no-store','x-content-type-options':'nosniff','content-disposition':`inline; filename*=UTF-8''${encodeURIComponent(localPhoto.name).replace(/'/g,'%27')}`}});
+  }
+  if(!action&&method==='DELETE'){
+   await d.manager(m);const b=await readBody(request,2000);if(b.confirm!=='REMOVE_APP_GALLERY_PHOTO'||b.version!==localPhoto.gallery_version)fail(409,'Potvrďte odebrání fotografie z fotodokumentace.');
+   const changed=await execute(env.DB,`UPDATE service_photos SET gallery_category=NULL,gallery_version=gallery_version+1 WHERE id=? AND job_id=? AND gallery_version=? AND ${localGate} AND EXISTS(SELECT 1 FROM members admin WHERE admin.user_id=? AND admin.role IN ('owner','administrator','admin'))`,photoId,jobId,b.version,m.user_id,m.user_id,m.user_id);
+   if(!changed.meta.changes)fail(409,'Fotografie nebo oprávnění se změnily.');return json({ok:true});
+  }
+  fail(405,'Nepodporovaná operace.');
+ }
  const photoRecord=p=>({id:p.id,jobId:p.job_id,fileId:p.file_id,category:p.category,note:p.note,fileName:p.file_name,originalName:p.original_name,mimeType:p.mime_type,size:p.size,uploadedAt:p.uploaded_at,createdAt:p.created_at,version:p.version,connectionId:p.connection_id});
  const readPhoto=async()=>{const row=await one(env.DB,"SELECT * FROM job_photos WHERE id=? AND job_id=? AND status<>'deleted'",photoId,jobId);if(!row)fail(404,'Fotografie nebyla nalezena.');return row;};
  const validFile=async(row,info)=>{
@@ -27,9 +58,10 @@ export async function handleJobPhotos(request,env,ctx,m,h){
  const thumbnailType=key=>key.endsWith('.png')?'image/png':key.endsWith('.webp')?'image/webp':'image/jpeg';
  const progress=value=>({id:value.row.id,complete:value.complete,offset:value.offset,size:value.row.size,chunkSize:DRIVE_CHUNK});
  if(!photoId&&method==='GET'){
-  const photos=await all(env.DB,"SELECT * FROM job_photos WHERE job_id=? AND status='complete' ORDER BY created_at,id",jobId),folders=await all(env.DB,"SELECT f.file_id,c.email,c.state FROM drive_folders f JOIN drive_connections c ON c.id=f.connection_id WHERE f.job_id=? AND f.kind='job' ORDER BY f.created_at",jobId),control=await d.controllerRow(),conn=control.active_connection_id?await one(env.DB,'SELECT state,root_id FROM drive_connections WHERE id=?',control.active_connection_id):null;
-  await d.job(m,jobId);const member=await one(env.DB,'SELECT role FROM members WHERE user_id=?',m.user_id);return json({photos:photos.map(photoRecord),folders:folders.map(f=>({id:f.file_id,email:['owner','administrator','admin'].includes(member?.role)?f.email:undefined,available:f.state==='connected',url:'https://drive.google.com/drive/folders/'+encodeURIComponent(f.file_id)})),canUpload:!!conn?.root_id&&conn.state==='connected'&&['owner','administrator','admin','worker'].includes(member?.role),connected:conn?.state==='connected',hasRoot:!!conn?.root_id});
+  const driveEnabled=h.features.googleDrive!==false&&env.WORKSPACE_ORGANIZATION_DISCIPLINE!=='garden',photos=driveEnabled?await all(env.DB,"SELECT * FROM job_photos WHERE job_id=? AND status='complete' ORDER BY created_at,id",jobId):[],local=await all(env.DB,"SELECT * FROM service_photos WHERE job_id=? AND status='ready' AND gallery_category IS NOT NULL ORDER BY created_at,id",jobId),folders=driveEnabled?await all(env.DB,"SELECT f.file_id,c.email,c.state FROM drive_folders f JOIN drive_connections c ON c.id=f.connection_id WHERE f.job_id=? AND f.kind='job' ORDER BY f.created_at",jobId):[],control=driveEnabled?await d.controllerRow():null,conn=control?.active_connection_id?await one(env.DB,'SELECT state,root_id,credentials FROM drive_connections WHERE id=?',control.active_connection_id):null,uploadStorage=conn?.root_id&&conn.state==='connected'&&conn.credentials&&d.configuredKey()?'drive':'app';
+  await d.job(m,jobId);const member=await one(env.DB,'SELECT role FROM members WHERE user_id=?',m.user_id);return json({photos:[...photos.map(p=>({...photoRecord(p),storage:'drive'})),...local.map(localRecord)].sort((a,b)=>a.createdAt-b.createdAt||a.id.localeCompare(b.id)),folders:folders.map(f=>({id:f.file_id,email:['owner','administrator','admin'].includes(member?.role)?f.email:undefined,available:f.state==='connected',url:'https://drive.google.com/drive/folders/'+encodeURIComponent(f.file_id)})),canUpload:['owner','administrator','admin','worker'].includes(member?.role),uploadStorage,maxFileSize:(uploadStorage==='drive'?100:25)*1024*1024,connected:conn?.state==='connected',hasRoot:!!conn?.root_id});
  }
+ if(h.features.googleDrive===false||env.WORKSPACE_ORGANIZATION_DISCIPLINE==='garden')fail(403,'Google Disk je v nastavení vypnutý.');
  if(!photoId&&method==='POST'){
   const b=await readBody(request,8000),id=validId(b.id),category=b.category,note=cleanText(b.note??'',2000),originalName=cleanText(b.originalName,200,true).split(/[\\/]/).pop().replace(/[\u0000-\u001f\u007f]/g,''),mimeType=b.mimeType,size=b.size,sha256=b.sha256;
   if(!Object.hasOwn(DRIVE_CATEGORIES,category)||!['image/jpeg','image/png','image/heic','image/heif'].includes(mimeType)||!Number.isSafeInteger(size)||size<8||size>100*1024*1024||!/^([a-f0-9]{64})$/.test(sha256||''))fail(400,'Vyberte JPG, PNG nebo HEIC/HEIF do 100 MB a platnou kategorii.');

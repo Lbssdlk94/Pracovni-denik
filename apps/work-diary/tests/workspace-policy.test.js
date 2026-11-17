@@ -533,9 +533,9 @@ test('technical heartbeat totals follow department seats, activity and backups c
 test('deferred Garden Drive cannot inherit the irrigation connection or upload Google job photos',async()=>{
  const e=await setup();try{
   const requestGarden=path=>request(path,people.owner,'GET',undefined,{'x-work-discipline':'garden'});
-  for(const path of ['/api/drive/status','/api/jobs/g/photos']){
-   const response=await api(requestGarden(path),e,context);assert.equal(response.status,409,await response.clone().text());assert.equal((await response.json()).code,'integration_not_migrated');
-  }
+  const drive=await api(requestGarden('/api/drive/status'),e,context);assert.equal(drive.status,409,await drive.clone().text());assert.equal((await drive.json()).code,'integration_not_migrated');
+  const gallery=await api(requestGarden('/api/jobs/g/photos'),e,context);assert.equal(gallery.status,200,await gallery.clone().text());const state=await gallery.json();assert.equal(state.uploadStorage,'app');assert.deepEqual(state.folders,[]);assert.equal(state.connected,false);
+  const googleUpload=await api(request('/api/jobs/g/photos',people.owner,'POST',{}, {'x-work-discipline':'garden'}),e,context);assert.equal(googleUpload.status,403,await googleUpload.clone().text());
   const denied=await api(request('/api/jobs/g/photos',people.worker),e,context);assert.equal(denied.status,404,await denied.clone().text());
   const response=await api(request('/api/jobs/i/service',people.owner),e,context);assert.equal(response.status,200,await response.clone().text());
  }finally{e.sqlite.close();}

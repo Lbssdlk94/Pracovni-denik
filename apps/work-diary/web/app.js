@@ -24,11 +24,11 @@ import {createMaterialsUI} from './materials-ui.js?v=workspace-roles-v1';
 import {createReminderSettingsUI} from './reminder-settings-ui.js?v=workspace-controls-v1';
 import {closeDialog} from './dialog.js?v=workspace-roles-v1';
 import {createSubscriptionsUI} from './subscriptions-ui.js?v=workspace-roles-v1';
-import {createServiceWorkUI} from './service-work-ui.js?v=draft-recovery-v1';
+import {createServiceWorkUI} from './service-work-ui.js?v=app-photo-fallback-v1';
 import {createCustomersUI} from './customers-ui.js?v=draft-recovery-v1';
 import {createNotificationsUI} from './notifications-ui.js?v=native-push-v1';
 import {createDriveUI} from './drive-ui.js?v=workspace-controls-v1';
-import {createJobsUI} from './jobs-ui.js?v=diary-single-date-v1';
+import {createJobsUI} from './jobs-ui.js?v=app-photo-fallback-v1';
 import {createBlowoutUI} from './blowout-ui.js?v=workspace-controls-v1';
 import {createAttendanceUI} from './attendance-ui.js?v=workspace-roles-v1';
 import {createAccessUI} from './access-ui.js?v=session-startup-v1';
@@ -494,6 +494,10 @@ function sizeBottomNavigation(){
  update();if('ResizeObserver' in window){navigationSizeObserver=new ResizeObserver(update);navigationSizeObserver.observe(bar,{box:'border-box'});}
 }
 window.addEventListener('resize',sizeBottomNavigation);
+// Keep touch/key feedback visible briefly, including when a request is still starting.
+const tapTimers=new WeakMap();
+function showTapFeedback(event){if(event.type==='keydown'&&!['Enter',' '].includes(event.key))return;const button=event.target?.closest?.('button,.btn');if(!button||button.disabled||button.getAttribute('aria-disabled')==='true')return;button.classList.add('tap-feedback');clearTimeout(tapTimers.get(button));tapTimers.set(button,setTimeout(()=>{button.classList.remove('tap-feedback');tapTimers.delete(button);},350));}
+document.addEventListener('pointerdown',showTapFeedback);document.addEventListener('keydown',showTapFeedback);
 function updateVisibleViewport(){const v=window.visualViewport;if(!v)return;const root=document.documentElement;root.style.setProperty('--visual-height',v.height+'px');root.style.setProperty('--visual-top',Math.max(0,v.offsetTop)+'px');root.style.setProperty('--keyboard-inset',Math.max(0,innerHeight-v.height-v.offsetTop)+'px');root.classList.toggle('keyboard-open',v.height<innerHeight*.75&&!!document.activeElement?.matches('input,textarea,select'));}
 // Reveal the diary field after keyboard resizing, never while the user manually scrolls.
 let diaryFieldFrame=null;
