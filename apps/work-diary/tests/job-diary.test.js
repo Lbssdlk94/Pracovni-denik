@@ -46,3 +46,28 @@ test('A diary save requires a ready photograph from this job; legacy entries rem
  const saved=await good(await call(e,'/api/jobs/build/diary/legacy',people.worker,'PUT',write(1,'add-required-photo')));assert.deepEqual(saved.entry.photoIds,['day-photo']);assert.equal(saved.entry.version,2);
  const replay=await good(await call(e,'/api/jobs/build/diary/legacy',people.worker,'PUT',write(1,'add-required-photo')));assert.equal(replay.replayed,true);assert.equal(e.sqlite.prepare('SELECT count(*) n FROM job_diary_entries').get().n,1);assert.deepEqual(e.sqlite.prepare("SELECT version,status FROM jobs WHERE id='build'").get(),before);
  }finally{e.sqlite.close();}});
+
+test('Only owner/administrator can delete an entry; CAS, audit, idempotency, history and private photos survive',async()=>{const e=await setup();try{
+ await good(await call(e,'/api/jobs/build/diary/day1',people.worker,'PUT',write()));
+ const del={version:1,operationId:'delete-day1',confirm:'DELETE_JOB_DIARY_ENTRY'};
+ for(const who of [people.worker,people.admin,people.reader,people.outsider])assert.ok([403,404].includes((await call(e,'/api/jobs/build/diary/day1',who,'DELETE',del)).status));
+ assert.equal((await call(e,'/api/jobs/build/diary/day1',people.owner,'DELETE',{...del,version:99})).status,409);
+ assert.equal((await call(e,'/api/jobs/build/diary/day1',people.owner,'DELETE',{...del,confirm:'no'})).status,400);
+ const before=e.sqlite.prepare("SELECT status,version FROM jobs WHERE id='build'").get();await good(await call(e,'/api/jobs/build/diary/day1',people.owner,'DELETE',del));
+ assert.equal((await good(await call(e,'/api/jobs/build/diary/day1',people.owner,'DELETE',del))).replayed,true);
+ assert.equal((await call(e,'/api/jobs/build/diary/day1',people.owner)).status,404);assert.equal((await good(await call(e,'/api/jobs/build/diary'))).entries.length,0);
+ const row=e.sqlite.prepare("SELECT * FROM job_diary_entries WHERE id='day1'").get();assert.ok(row.deleted_at);assert.equal(row.deleted_by,people.owner.id);assert.equal(row.work,write().work);assert.equal(row.version,2);
+ assert.equal((await call(e,'/api/jobs/build/diary/day1',people.worker,'PUT',write(0,'recreate'))).status,409);assert.equal((await call(e,'/api/jobs/build/diary/day1',people.worker,'PUT',write())).status,409);
+ assert.equal((await good(await call(e,'/api/gardens/site/history'))).visits.find(v=>v.jobId==='build').diaryEntries.length,0);assert.deepEqual(e.sqlite.prepare("SELECT status,version FROM jobs WHERE id='build'").get(),before);assert.equal(e.objects.size,1);assert.equal((await call(e,'/api/jobs/build/service/photos/day-photo',people.worker)).status,200);
+ // An administrator is a distinct assignable role, not the ordinary admin/správce.
+ e.sqlite.prepare('UPDATE members SET role=? WHERE user_id=?').run('administrator',people.admin.id);
+ await good(await call(e,'/api/jobs/build/diary/day2',people.worker,'PUT',write(0,'second-day')));assert.equal((await good(await call(e,'/api/jobs/build/diary/day2',people.admin))).entry.canDelete,true);
+ await good(await call(e,'/api/jobs/build/diary/day2',people.admin,'DELETE',{...del,operationId:'admin-delete'}));assert.equal(e.sqlite.prepare("SELECT deleted_by FROM job_diary_entries WHERE id='day2'").get().deleted_by,people.admin.id);
+ }finally{e.sqlite.close();}});
+
+test('Deleting cannot race past a role revocation or affect an entry in another job',async()=>{const e=await setup();try{
+ await good(await call(e,'/api/jobs/build/diary/day1',people.worker,'PUT',write()));await good(await call(e,'/api/jobs/other',people.owner,'PUT',{version:0,title:'Jiná realizace',jobType:'installation',assignedTo:people.worker.id,status:'planned'}));
+ const b={version:1,operationId:'delete-race',confirm:'DELETE_JOB_DIARY_ENTRY'};assert.equal((await call(e,'/api/jobs/other/diary/day1',people.owner,'DELETE',b)).status,404);
+ const batch=e.DB.batch;e.DB.batch=async statements=>{e.sqlite.prepare("UPDATE members SET role='worker' WHERE user_id=?").run(people.owner.id);return batch(statements);};
+ assert.ok([403,404,409].includes((await call(e,'/api/jobs/build/diary/day1',people.owner,'DELETE',b)).status));assert.equal(e.sqlite.prepare("SELECT deleted_at FROM job_diary_entries WHERE id='day1'").get().deleted_at,null);assert.equal(e.sqlite.prepare("SELECT count(*) n FROM subscription_operations WHERE id='delete-race'").get().n,0);
+ }finally{e.sqlite.close();}});

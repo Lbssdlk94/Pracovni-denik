@@ -29,6 +29,14 @@ export function createJobDiaryClient({all,change,send,request,getSession,isPrevi
   if(navigator.onLine){try{await send(id);}catch(e){if(e.status&&e.status<500)throw e;}}
   return load(jobId,false);
  }
+ async function remove(jobId,entryId,version){
+  checkWrite();await valid();if(!navigator.onLine)throw Error('Pro smazání zápisu se připojte k internetu.');const user=getSession().user,who=user.id+'|'+user.role;if(isPreview()||!['owner','administrator'].includes(user.role))throw Error('Zápisy může mazat pouze vlastník nebo administrátor.');
+  const records=await all();if(records.some(r=>r.id===diaryRecordKey(user.id,jobId,entryId)&&r.pending))throw Error('Nejdříve vyřešte neodeslané změny tohoto zápisu.');
+  await request(base(jobId)+'/'+encodeURIComponent(entryId),{method:'DELETE',headers:{'content-type':'application/json'},body:JSON.stringify({version,operationId:crypto.randomUUID(),confirm:'DELETE_JOB_DIARY_ENTRY'})});
+  if(who!==getSession()?.user.id+'|'+getSession()?.user.role||await isLocked())throw Error('Přihlášení se změnilo.');
+  await change(diaryRecordKey(user.id,jobId),old=>old?.snapshot?{...old,snapshot:{...old.snapshot,entries:old.snapshot.entries.filter(e=>e.id!==entryId)}}:old);
+  window.dispatchEvent(new CustomEvent('job-diary-updated',{detail:{jobId}}));return load(jobId,false);
+ }
  async function acknowledge(record,result){
   await change(key(record.jobId),old=>old?.snapshot?{...old,snapshot:{...old.snapshot,job:result.job,entries:[...old.snapshot.entries.filter(e=>e.id!==result.entry.id),result.entry].sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id))},expiresAt:Date.now()+86400000}:old);
   await change(record.id,current=>current?.mutationId===record.mutationId?null:current);
@@ -41,5 +49,5 @@ export function createJobDiaryClient({all,change,send,request,getSession,isPrevi
   const mutationId=crypto.randomUUID();await change(id,old=>({...old,snapshot:{...old.snapshot,entry:fresh.entry},payload:{...old.payload,version:fresh.entry?.version||0,operationId:mutationId},mutationId,blocked:false,conflict:false,error:''}));await send(id);return load(jobId,true);
  }
  async function retry(jobId,entryId){checkWrite();const id=key(jobId,entryId),record=(await all()).find(r=>r.id===id);if(record?.conflict)throw Error('Nejdříve porovnejte obě verze.');await change(id,old=>old?{...old,blocked:false}:old);await send(id);return load(jobId,true);}
- return {load,save,acknowledge,resolve,retry};
+ return {load,save,remove,acknowledge,resolve,retry};
 }
