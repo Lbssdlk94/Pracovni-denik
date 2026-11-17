@@ -13,3 +13,10 @@ test('A legacy unsent entry rejected for a missing photo can be repaired without
  const file=new File(['photo'],'Den.jpg',{type:'image/jpeg'});const result=await f.client.save('job',{id:legacy.id,version:legacy.version,date:legacy.date,work:legacy.work,photoIds:['added-photo']},[{id:'added-photo',file}]);
  const pending=f.records.find(r=>r.id===id);assert.equal(pending.entryId,'legacy');assert.equal(pending.payload.work,legacy.work);assert.notEqual(pending.mutationId,'old-operation');assert.equal(pending.blocked,false);assert.deepEqual(pending.payload.photoIds,['added-photo']);assert.equal(pending.photos.length,1);assert.equal(result.entries.filter(e=>e.id==='legacy').length,1);
  }finally{if(online)Object.defineProperty(globalThis,'navigator',online);}});
+
+test('Confirmed online deletion clears only the cached entry and preserves unrelated unsent work',async()=>{const f=fixture();try{
+ await f.client.load('job');f.online=false;await assert.rejects(f.client.remove('job','entry',1),/připojte/);f.online=true;
+ f.session.user.role='worker';await assert.rejects(f.client.remove('job','entry',1),/vlastník nebo administrátor/);f.session.user.role='owner';
+ f.records.push({id:'unrelated',kind:'jobDiary',jobId:'other',entryId:'pending',ownerId:'owner',pending:true,payload:{work:'Zachovat'},photos:[]});
+ const result=await f.client.remove('job','entry',1);assert.equal(result.entries.length,0);assert.equal((await f.client.load('job',false)).entries.length,0);assert.equal(f.records.find(r=>r.id==='unrelated').payload.work,'Zachovat');assert.equal(f.sent,0);
+ }finally{if(online)Object.defineProperty(globalThis,'navigator',online);}});

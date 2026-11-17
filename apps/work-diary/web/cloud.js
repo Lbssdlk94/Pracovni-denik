@@ -1,4 +1,4 @@
-import {createJobDiaryClient} from './job-diary-client.js?v=job-diary-v1';
+import {createJobDiaryClient} from './job-diary-client.js?v=detail-actions-v1';
 import {createJobListCache,JOB_CACHE_KEY} from './job-list-cache.js?v=job-three-month-v1';
 import {rolePreviewSession,rolePreviewTargets} from './role-preview-model.js?v=role-preview-v1';
 import {createWorkspaceClient} from './workspace-client.js?v=job-diary-v1';
@@ -253,6 +253,7 @@ async function sendServiceWork(key){
 }
 const jobDiaryClient=createJobDiaryClient({all:allServiceWork,change:changeServiceWork,send:sendServiceWork,request,getSession:()=>identity,isPreview:()=>!!previewRole,isLocked:()=>getSetting('locked'),checkWrite:checkOfflineWrite,packPhotos:packLocalPhotos});
 export const jobDiary=(...args)=>jobDiaryClient.load(...args);
+export const removeJobDiary=(...args)=>jobDiaryClient.remove(...args);
 export const saveJobDiary=(...args)=>jobDiaryClient.save(...args);
 export const resolveJobDiary=(...args)=>jobDiaryClient.resolve(...args);
 export const retryJobDiary=(...args)=>jobDiaryClient.retry(...args);

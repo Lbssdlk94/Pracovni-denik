@@ -393,6 +393,13 @@
       "when": 1794941811677,
       "tag": "0055_app_job_photos",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "6",
+      "when": 1794947076515,
+      "tag": "0056_job_diary_deletion",
+      "breakpoints": true
     }
   ]
 }
