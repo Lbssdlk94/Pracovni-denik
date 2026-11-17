@@ -25,3 +25,10 @@
 Kanonické API a databázová migrace jsou v Dr. Závlaze. Dr. Garden používá sdílené API; jeho lokální databáze zůstává zmrazená. Jeho aktualizace obsahuje pouze frontend a statické soubory; sestavený server mimo vložená statická aktiva byl ověřen jako bajtově nezměněný. Nepouštět starší lokální migrace do zmrazené Garden databáze.
 
 Úložiště aplikace přijímá jeden originál do 25 MiB, Drive zachovává původních 100 MiB. Nová hlavní galerie vyžaduje síť a výběr dosud neodeslaných souborů nepřežije zavření stránky; rozpracované offline zápisy a fotografie deníku/protokolů mají původní mechanismus. Skutečný iPhone, systémová klávesnice a Safari nebyly v tomto běhu dostupné; mobilní kontroly proběhly v Chromium a geometrické emulaci klávesnice. Větev dokončení předplatného přes protokol má návratový callback, ale nebyla samostatně ověřena klikáním tohoto konkrétního scénáře. Tato změna neaktualizuje nativní IPA.
+
+## Potvrzené vydání
+
+- Dr. Závlaha: v135, zdroj `815d94bb3605ff554bbc375f0bb19fea7935142b`, úspěšné produkční nasazení `appgdep_6afca57d685c81919658afbb274bc608`, https://zavlahovy-denik.purplecedar.chatgpt.site/.
+- Po vydání byla přes read-only databázový prohlížeč ověřena přítomnost všech pěti nových sloupců `service_photos`, včetně `gallery_upload` a `gallery_thumbnail_key`. Nešlo pouze o zkontrolování sestavené migrace.
+- Dr. Garden: v55, zdroj `00fc05d2f4655e64b83964db01057d96824d9290`, úspěšné produkční nasazení `appgdep_6afca5b2e3508191858f90c03d3b51e1`, https://dr-garden.purplecedar.chatgpt.site/.
+- GitHub návrh změny: https://github.com/Lbssdlk94/Pracovni-denik/pull/18 (samostatná navazující větev, bez automatického sloučení).
