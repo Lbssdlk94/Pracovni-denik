@@ -1,0 +1,18 @@
+import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
+import {StatusBadge,AvatarStack,OfflineBadge,VisitTime,visitTime,distinctWorkLabel} from '../web/field-components.js';
+const esc=v=>String(v).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+test('Field time presentation never infers work duration from arrival or legacy times',()=>{
+ const job={plannedStart:'08:00',estimatedMinutes:null,arrivalWindowStart:'07:40',arrivalWindowEnd:'07:50',startTime:'06:00',endTime:'16:00'};
+ assert.equal(visitTime(job).clock,'08:00');assert.equal(visitTime({...job,estimatedMinutes:120}).clock,'08:00–10:00');assert.equal(visitTime({arrivalWindowStart:'08:00',arrivalWindowEnd:'09:00'}).kind,'Domluvený příjezd');
+ assert.equal(visitTime({startTime:'08:00',endTime:'10:00',legacyTimeMeaning:'unknown'}).kind,'Původní čas · k upřesnění');assert.equal(visitTime({}).clock,'Bez času');
+ const html=VisitTime(job,esc,{detail:true});assert.match(html,/Příjezd 07:40–07:50/);assert.ok(!html.includes('délka neurčena'));assert.equal(job.estimatedMinutes,null);
+});
+test('State badges always contain text and outline icons, also for incomplete work',()=>{for(const [status,label]of [['planned','Naplánováno'],['on_way','Na cestě'],['in_progress','Probíhá'],['done','Hotovo'],['incomplete','Nedokončeno']]){const html=StatusBadge({status},esc);assert.ok(html.includes(label));assert.match(html,/<svg/);}assert.match(StatusBadge({status:'<script>'},esc),/&lt;script&gt;/);});
+test('Compact names and duplicate title removal preserve full names and do not match loosely',()=>{
+ const html=AvatarStack({assignedTos:['a','b'],assignedName:'Old reference'},esc,[{id:'a',name:'Luboš Sadílek'},{id:'b',name:'Zdeněk Částka'}]);assert.match(html,/Luboš S\./);assert.match(html,/Zdeněk Č\./);assert.match(html,/Luboš Sadílek, Zdeněk Částka/);
+ assert.equal(distinctWorkLabel('Realizace Pan Petřík','Pan Petřík'),'Realizace');assert.equal(distinctWorkLabel('Pan Petřík','Pan Petřík'),'');assert.equal(distinctWorkLabel('Petříkovy postřikovače','Petřík'),'Petříkovy postřikovače');
+ assert.ok(!AvatarStack({assignedName:'<img src=x>'},esc).includes('<img'));
+});
+test('Offline badge describes cached data without changing cache records',()=>{const cache={at:Date.UTC(2026,10,17,19,24)};assert.match(OfflineBadge(cache,false,esc),/Offline/);assert.match(OfflineBadge(cache,true,esc),/Uložená kopie zakázek/);assert.equal(OfflineBadge(null,true,esc),'');assert.deepEqual(cache,{at:Date.UTC(2026,10,17,19,24)});});
+const luminance=hex=>{const rgb=hex.match(/[a-f\d]{2}/gi).map(v=>parseInt(v,16)/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;};
+test('Field text/status token pairs meet 4.5:1 contrast, including planned and on-way states',()=>{const tokens=Object.fromEntries([...readFileSync('web/design-tokens.css','utf8').matchAll(/--([\w-]+):\s*(#[a-f\d]{6})/gi)].map(m=>[m[1],m[2]]));for(const [front,back]of [['pd-text','pd-background'],['pd-muted','pd-background'],['pd-muted','pd-surface'],['pd-forest','pd-surface'],['pd-planned','pd-planned-soft'],['pd-on-way','pd-on-way-soft'],['pd-done','pd-done-soft']]){const a=luminance(tokens[front]),b=luminance(tokens[back]);assert.ok((Math.max(a,b)+.05)/(Math.min(a,b)+.05)>=4.5,front+' / '+back);}});

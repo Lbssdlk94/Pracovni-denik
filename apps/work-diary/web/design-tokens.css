@@ -1,25 +1,33 @@
+@font-face{font-family:'Inter';src:url('./inter-variable.woff2') format('woff2');font-weight:100 900;font-style:normal;font-display:swap}
 /* Pracovní deník · identity B. Shared by all existing company installations.
    System fonts intentionally work offline and use SF on Apple devices. */
 :root {
   color-scheme: light;
-  --pd-background: #F7F8F6;
+  --pd-background: #F7F7F5;
   --pd-surface: #FFFFFF;
-  --pd-forest: #193F3B;
+  --pd-forest: #173F3A;
   --pd-forest-hover: #12332F;
   --pd-sage: #9DB7A7;
-  --pd-sage-soft: #EBF1ED;
+  --pd-sage-soft: #E8F0EC;
   --pd-sage-line: #C6D5CC;
-  --pd-gray: #DCE2DF;
+  --pd-gray: #E1E7E4;
+  --pd-border-strong:#D5DDD9;
+  --pd-planned:#7A4B0B;
+  --pd-planned-soft:#FDEBD3;
+  --pd-on-way:#174D70;
+  --pd-on-way-soft:#DFEDF7;
+  --pd-done:#205B3C;
+  --pd-done-soft:#E3F1E7;
   --pd-text: #1D2523;
-  --pd-muted: #596963;
+  --pd-muted: #4F5F5A;
   --pd-danger: #963D32;
   --pd-danger-soft: #FFF0EC;
   --pd-warning: #78551C;
   --pd-warning-soft: #FFF5DF;
   --pd-information: #285C7B;
   --pd-information-soft: #EBF3F8;
-  --pd-radius-control: 16px;
-  --pd-radius-card: 24px;
+  --pd-radius-control: 14px;
+  --pd-radius-card: 20px;
   --pd-radius-dialog: 28px;
   --pd-radius-pill: 999px;
   --pd-space-1: 4px;
@@ -31,7 +39,7 @@
   --pd-shadow-card: 0 4px 16px rgb(25 63 59 / 3%);
   --pd-shadow-raised: 0 8px 28px rgb(25 63 59 / 9%);
   --pd-shadow-dialog: 0 24px 80px rgb(15 39 35 / 20%);
-  --pd-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --pd-font: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   /* Compatibility aliases for existing functional components. */
   --paper: var(--pd-background);
   --white: var(--pd-surface);
