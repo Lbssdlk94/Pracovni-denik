@@ -35,3 +35,10 @@ Nový prezentační modul `web/field-components.js` obsahuje `StatusBadge`, `Ava
 ## Omezení
 
 Skutečný iPhone ani Safari nebyly dostupné; mobilní kontroly a klávesnice byly emulovány v Chromium. Dlouhé názvy zůstávají čitelné a mohou zvětšit karty; tvrzení o návštěvě nad přehybem je ověřeno pro běžný obsah testovací zakázky. Tmavý režim byl jako volitelný odložen. Změna je webová, nikoli aktualizace nativní SwiftUI/Watch IPA. Provozní zakázky nebyly testy přepisovány. Žádné databázové migrace nejsou součástí vydání.
+
+## Potvrzené nasazení
+
+- Dr. Závlaha v137: zdroj `23ce647778fecd35c74f7b40ab826920bbda2f4f`, úspěšné nasazení `appgdep_6afcb2906b208191acc0852fe8f31ad4`, https://zavlahovy-denik.purplecedar.chatgpt.site/.
+- Dr. Garden v57: zdroj `0adb0b3b5fdc675c4e2d1980eb6382d1c6b82ec2`, úspěšné nasazení `appgdep_6afcb2cae40481919e4f4d61dfd28374`, https://dr-garden.purplecedar.chatgpt.site/.
+- Vydání obsahuje manifest a výsledný `dist`, bez databázových migrací. Oddělený návrh změn na GitHubu: https://github.com/Lbssdlk94/Pracovni-denik/pull/20 (bez automatického sloučení).
+- Mobilní náhledy na testovacích datech: `/workspace/artifacts/field-ui-2026-11-17/day-390.png`, `/workspace/artifacts/field-ui-2026-11-17/detail-390.png` a odpovídající varianty `360`.
