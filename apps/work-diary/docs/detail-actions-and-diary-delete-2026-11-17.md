@@ -25,3 +25,10 @@ Kanonické API a migrace jsou v Dr. Závlaze. Dr. Garden používá stejné API;
 - Stejný nový prohlížečový postup prošel i proti výslednému artefaktu Dr. Závlahy. Obě sestavení prošla kontrolou izolované autentizace, instalace a zakázek. Produkční zakázky nebyly použity k testovacím zápisům nebo smazání.
 
 Skutečný iPhone/Safari nebyl dostupný; šířky i klávesnice jsou emulované. Toto vydání mění web/PWA a společné API, nikoliv nativní SwiftUI aplikaci.
+
+## Potvrzené nasazení
+
+- Dr. Závlaha v138: zdroj `bb9c4107527d5b0c6fb33c49ff6aadbd717ca63e`, úspěšné nasazení `appgdep_6afcbb307d1881918615de08940e8c0a`, https://zavlahovy-denik.purplecedar.chatgpt.site/.
+- Po nasazení byla přes read-only databázový prohlížeč ověřena přítomnost `deleted_at` a `deleted_by` ve skutečné tabulce `job_diary_entries`. Žádný provozní zápis nebyl při této kontrole měněn.
+- Dr. Garden v58: zdroj `bac1cc39e4bc2bd1f70f8d65d6fb0873937ec35e`, úspěšné nasazení `appgdep_6afcbb69ddd08191a9ddbf31376321aa`, https://dr-garden.purplecedar.chatgpt.site/.
+- GitHub PR: https://github.com/Lbssdlk94/Pracovni-denik/pull/21, samostatná navazující větev bez automatického sloučení.
