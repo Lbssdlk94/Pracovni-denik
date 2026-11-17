@@ -23,9 +23,9 @@
 #jobs .job-card-compact{container-type:inline-size}
 #jobs .job-card-compact .actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:stretch}
 #jobs .job-card-compact .actions>.btn{min-width:0;min-height:44px;width:100%;grid-column:auto;justify-self:stretch;white-space:normal}
-#jobs .job-card-compact .actions>.btn:last-child:nth-child(odd){grid-column:1/-1}
+#jobs .job-card-compact .actions>.btn:nth-child(odd of .btn:not([hidden])):nth-last-child(1 of .btn:not([hidden])){grid-column:1/-1}
 @media(min-width:761px){
  @container(min-width:480px){
-  #jobs .job-card-compact .actions:has(>.btn:nth-child(4)){grid-template-columns:repeat(4,minmax(0,1fr))}
+  #jobs .job-card-compact .actions:has(>.btn:nth-child(4 of .btn:not([hidden]))){grid-template-columns:repeat(4,minmax(0,1fr))}
  }
 }

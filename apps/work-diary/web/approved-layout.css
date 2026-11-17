@@ -280,9 +280,23 @@ dialog#modal.job-detail-dialog .modal-head{margin-bottom:22px}
 .btn:active{filter:brightness(.9);box-shadow:inset 0 0 0 2px #193f3b40}.btn[aria-busy=true]{background:#DFEAE4;color:#193F3B;box-shadow:inset 0 0 0 2px #193F3B;cursor:progress;opacity:1}
 
 #job-photos-panel[hidden],.job-detail-tabs[hidden]{display:none}#job-photos-back{margin-bottom:14px}.job-detail-contact{margin:8px 0 12px;padding-top:0;border-top:0}.job-detail-contact>summary{min-height:44px}
-@media(max-width:760px){.job-detail-actions #job-open-service{grid-column:1/-1}.job-detail-actions [data-job-navigate]{grid-column:1}.job-detail-actions [data-job-depart]{grid-column:2}.job-detail-actions [data-job-status]{grid-column:1}.job-detail-actions #job-jump-photos{grid-column:2}}
+/* Permission/module checks may omit any action: DOM order also controls visual order. */
+.job-detail-actions>.btn{grid-column:auto;grid-row:auto;order:0}
+@media(max-width:760px){
+ .job-detail-actions #job-open-service{grid-column:1/-1}
+ .job-detail-actions>.btn:nth-child(odd of .btn:not([hidden]):not(#job-open-service)):nth-last-child(1 of .btn:not([hidden])){grid-column:1/-1}
+ #jobs .job-card-compact .actions>.btn{grid-column:auto}
+ #jobs .job-card-compact .actions>.btn:nth-child(odd of .btn:not([hidden])):nth-last-child(1 of .btn:not([hidden])){grid-column:1/-1}
+}
+/* Empty or entirely permission-hidden groups must not leave their own margin/gap. */
+:is(.actions,.modal-actions,.editor-actions,.subscription-actions,.job-detail-actions):empty,
+:is(.actions,.modal-actions,.editor-actions,.subscription-actions,.job-detail-actions):has(>[hidden]):not(:has(>:not([hidden]))){display:none}
 
 .jobs-title-actions{display:flex;align-items:center;gap:8px;flex:none!important}#jobs-search-toggle{display:none;position:relative}#jobs-search-toggle .jobs-search-indicator{position:absolute;right:-3px;top:-3px;background:#193F3B;color:#fff;border:2px solid #fff;border-radius:50%;font-size:10px;min-width:18px;height:18px;display:grid;place-items:center}
 @media(max-width:760px){#jobs-search-toggle{display:inline-flex;min-width:44px;width:44px;height:44px;min-height:44px;padding:10px;flex:none}#jobs-search-toggle[aria-expanded=true],#jobs-search-toggle.has-query{background:#193F3B;color:#fff}#jobs.search-collapsed .jobs-searchbar{display:none}.jobs-title-actions #jobs-new{margin:0}}
 
 button.tap-feedback,.btn.tap-feedback{filter:brightness(.9);box-shadow:inset 0 0 0 2px #193f3b55}
+
+/* Attribute-based permission hiding wins even over component display overrides. */
+.sidebar .nav>[hidden],[hidden]{display:none!important}
+.material-item-row:not(:has(>.material-item-actions:not([hidden]))){grid-template-columns:minmax(0,1fr) auto}
