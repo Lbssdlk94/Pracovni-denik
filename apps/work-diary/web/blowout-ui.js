@@ -1,4 +1,4 @@
-import {preparePhoto} from './export.js?v=workspace-roles-v1';
+import {preparePhoto} from './export.js?v=photo-compression-v1';
 const TOPICS=[['compressor','Připojení kompresoru'],['pump','Vypnutí čerpadla'],['water','Uzavření vody'],['supply','Vyfouknutí přívodu']];
 export function createBlowoutUI({db,esc,showModal,modal,canEdit,canAddPhotos=()=>true,isOnline,onSaved,toast}){
  const removeStep=(steps,step)=>[...steps.filter(s=>s.id!==step.id),...(TOPICS.some(([id])=>id===step.id)?[{id:step.id,title:TOPICS.find(([id])=>id===step.id)[1],notes:'',photos:[],hidden:true}]:[])];

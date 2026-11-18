@@ -31,7 +31,7 @@ export function createJobDiaryUI({db,esc,getSession,toast}){
     const path=p.url,local=p.file;let source;if(local){source=URL.createObjectURL(local);urls.push(source);}else if(typeof path==='string'&&path.startsWith('/api/jobs/'+encodeURIComponent(job.id)+'/'))source=path;else continue;
     const a=document.createElement('a');a.className='diary-photo-tile';a.href=source;a.target='_blank';a.rel='noopener';a.setAttribute('aria-label','Otevřít fotografii: '+(p.name||'Fotografie'));
     a.innerHTML='<span class="diary-photo-placeholder">'+interfaceIcon('photo')+'</span><span class="diary-photo-name">'+esc(p.name||local?.name||'Fotografie')+'</span><small>Otevřít originál ↗</small>';
-    const img=document.createElement('img');img.hidden=true;img.decoding='async';img.alt=p.name||local?.name||'Fotografie realizace';img.width=320;img.height=240;a.prepend(img);target.append(a);previews.watch(img,source);
+    const img=document.createElement('img');img.hidden=true;img.decoding='async';img.alt=p.name||local?.name||'Fotografie realizace';img.width=320;img.height=240;a.prepend(img);target.append(a);previews.watch(img,!local&&typeof p.previewUrl==='string'&&p.previewUrl.startsWith('/api/jobs/'+encodeURIComponent(job.id)+'/')?p.previewUrl:source);
    }
   }));
   root.querySelectorAll('[data-diary-retry]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{data=await db.retryJobDiary(job.id,b.dataset.diaryRetry);paint();}catch(e){error(e);b.disabled=false;}});

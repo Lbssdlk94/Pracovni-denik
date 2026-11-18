@@ -15,6 +15,13 @@
       "when": 1792598908588,
       "tag": "0001_company_feature_overrides",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1795026009693,
+      "tag": "0002_r2_storage_control",
+      "breakpoints": true
     }
   ]
 }

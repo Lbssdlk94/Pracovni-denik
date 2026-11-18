@@ -1,7 +1,7 @@
 import {readFromServer} from './io.js?v=workspace-roles-v1';
 import {featureEnabled} from './features.js?v=fleet-photo-v1';
 import {fleetDeadline} from './fleet-model.js?v=workspace-controls-v1';
-import {preparePhoto} from './export.js?v=workspace-roles-v1';
+import {preparePhoto} from './export.js?v=photo-compression-v1';
 export function createVehiclesUI({db,esc,getSession,toast,showModal,modal}){
  let data=null,detail=null,drivers=[],selected='',epoch=0,loading=false,includeArchived=false,detailsOpen=false;const urls=new Set();
  const feature=key=>featureEnabled(key,getSession()?.features),manage=()=>!!getSession()?.permissions.manage,write=()=>!!getSession()?.permissions.write,money=v=>new Intl.NumberFormat('cs-CZ',{style:'currency',currency:'CZK'}).format(v/100),date=v=>v?v.split('-').reverse().join('. '):'—',today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),uid=()=>crypto.randomUUID();

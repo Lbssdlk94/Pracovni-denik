@@ -1,3 +1,6 @@
+import {handleJobFiles} from './job-files.js';
+import {createObjectStorage} from './object-storage.js';
+import {handlePhotoOptimization} from './photo-optimization.js';
 import {validateRolePreviewRequest,denyRolePreviewMutation} from './role-preview.js';
 import {passwordOnly,handleLocalPublicAuth,handleLocalSelf,handleLocalAccounts} from './local-auth.js';
 import {handleWorkspaceTransfer} from './workspace-transfer.js';
@@ -178,7 +181,7 @@ export async function api(request,env,ctx){
  const result=new Response(response.body,response);result.headers.append('server-timing','app;dur='+duration);result.headers.set('x-request-id',requestId);return result;
 }
 async function workspaceAPI(request,env,ctx){
- try{denyRolePreviewMutation(request,fail);}catch(error){if(error instanceof HttpError)return json({error:error.message,...error.extra},error.status);throw error;}
+ try{denyRolePreviewMutation(request,fail);}catch(error){if(/^(?:r2_|storage_)/.test(error?.code||'')&&[400,403,409,413,503].includes(error.status))return json({error:error.message,code:error.code},error.status);if(error instanceof HttpError)return json({error:error.message,...error.extra},error.status);throw error;}
  if(new URL(request.url).pathname==='/api/connection-health'&&request.method==='GET'){
   const started=performance.now();
   try{await env.DB.prepare('SELECT 1 AS ready').first();const databaseMs=Math.round((performance.now()-started)*10)/10;return new Response(JSON.stringify({ok:true,databaseMs}),{headers:{'content-type':'application/json','cache-control':'no-store','server-timing':'db;dur='+databaseMs}});}
@@ -187,10 +190,10 @@ async function workspaceAPI(request,env,ctx){
  await workspaceTransferEnsureControl(env);
  if(new URL(request.url).pathname.startsWith('/api/workspace-transfer/')){
   try{if(!['GET','HEAD'].includes(request.method))mutationAllowed(request);return await handleWorkspaceTransfer(request,env,{json,fail,body});}
-  catch(error){if(error instanceof HttpError)return json({error:error.message,...error.extra},error.status);console.error('Workspace transfer failed',error?.name,error?.message);return json({error:'Řízený převod nebyl uložen. Ověřte stav a plán.',code:'workspace_transfer_failed'},409);}
+  catch(error){if(/^(?:r2_|storage_)/.test(error?.code||'')&&[400,403,409,413,503].includes(error.status))return json({error:error.message,code:error.code},error.status);if(error instanceof HttpError)return json({error:error.message,...error.extra},error.status);console.error('Workspace transfer failed',error?.name,error?.message);return json({error:'Řízený převod nebyl uložen. Ověřte stav a plán.',code:'workspace_transfer_failed'},409);}
  }
  const scopedEnv={...env,_workspaceWaitUntil:task=>ctx.waitUntil(task),_workspaceStartStamp:await workspaceTransferStamp(env)};
- scopedEnv.DB=workspaceFencedDatabase(env.DB,scopedEnv._workspaceStartStamp);
+ scopedEnv.DB=workspaceFencedDatabase(env.DB,scopedEnv._workspaceStartStamp);scopedEnv.BUCKET=createObjectStorage(scopedEnv);scopedEnv._objectStorageWrapped=true;
  const response=await workspaceRawApi(request,scopedEnv,ctx);
  try{return await workspaceFilterResponse(response,request,scopedEnv);}catch{return json({error:'Přehled se nepodařilo bezpečně načíst. Zkuste jej obnovit.'},503);}
 }
@@ -223,7 +226,7 @@ async function workspaceRawApi(request,env,ctx){
     if(['/api/workspace/identity-invite','/api/workspace/link-identity'].includes(path))fail(403,'Propojení přes osobní přístupový odkaz bylo zrušeno.',{code:'access_link_disabled'});
     const m=await nativeDriveMember(request,env,{one,fail})||await memberFor(request,env);Object.assign(env,await workspaceRequestContext(env,request,m));
     if(m._mustChange&&!['/api/auth/account','/api/auth/password'].includes(path))fail(403,'Před prvním použitím si změňte dočasné heslo.',{code:'password_change_required'});
-    validateRolePreviewRequest(request,m,fail);
+    validateRolePreviewRequest(request,m,fail);env._storageActor=m.user_id;
     await workspaceResourceAccess(request,env,m,fail);env._workspaceScope=m._workspace||null;
     if(['/api/auth/account','/api/auth/password','/api/auth/policy'].includes(path))return await handleLocalSelf(request,env,m,{body,json,fail});
     const platformPolicy=await tenantPlatformGate(request,env,{fail});
@@ -231,6 +234,8 @@ async function workspaceRawApi(request,env,ctx){
     if(!['GET','HEAD'].includes(method)&&!path.startsWith('/api/system-backups')&&await one(env.DB,"SELECT id FROM system_backups WHERE state='restoring' LIMIT 1"))fail(503,'Probíhá obnova prázdné instalace. Zkuste to po jejím dokončení.',{code:'restore_in_progress'});
     if(path.startsWith('/api/privacy/'))return await handlePrivacy(request,env,m,{json,fail,body,validId});
     if(path==='/api/system-backups'||path.startsWith('/api/system-backups/'))return await handleSystemBackups(request,env,m,{json,fail,body,validId,boundedBytes});
+    if(/^\/api\/jobs\/[-\w]{1,100}\/files(?:\/|$)/.test(path)){const {features}=await featureSettingsOnce();if(!features.jobs)fail(403,'Zakázky jsou vypnuté.');if(!['GET','HEAD','DELETE'].includes(method)&&!features.photoUploads)fail(403,'Nahrávání příloh je vypnuté.');return await handleJobFiles(request,env,ctx,m,{body,boundedBytes,json,fail,cleanText,validId});}
+    if(path==='/api/photo-optimization'||path.startsWith('/api/photo-optimization/')){const {features}=await featureSettingsOnce();if(!features.jobs)fail(403,'Zakázky jsou vypnuté.');return await handlePhotoOptimization(request,env,ctx,m,{fail,json,body,boundedBytes});}
     if(path==='/api/operations/health'&&method==='GET'){checkManage(m);return json(await operationsHealth(env));}
     if(path==='/api/installation')return await handleInstallation(request,env,m,{json,fail,body,cleanText});
     if(path==='/api/local-accounts'||path.startsWith('/api/local-accounts/')){const {features}=await featureSettingsOnce();if(!features.teamManagement)fail(403,'Správa týmu je vypnutá.');return await handleLocalAccounts(request,env,m,{body,json,fail,maxUsers:platformPolicy?.maxUsers});}
@@ -414,5 +419,5 @@ async function workspaceRawApi(request,env,ctx){
     }
     fail(404,'Požadavek nebyl nalezen.');
   }catch(error){if(new URL(request.url).pathname.startsWith('/api/auth/')||new URL(request.url).pathname.startsWith('/api/local-accounts')){if(String(error?.message).includes('UNIQUE constraint'))return json({error:'Účet nebo přihlašovací jméno se mezitím změnilo. Obnovte údaje.'},409);if(error?.status===503)return json({error:'Přihlašování je vytížené. Zkuste to za chvíli.'},503);}
- if(String(error?.message).includes('workspace_member_capacity'))return json({error:'Limit členů nebo pozvánek je v jednom z pracovních oborů vyčerpaný. Upravte příslušnost nebo licenci.',code:'workspace_member_capacity'},409);if(String(error?.message).includes('workspace_'))return json({error:'Změna neodpovídá aktuálnímu oboru nebo oprávnění. Obnovte údaje.',code:'workspace_conflict'},409);if(error instanceof HttpError)return json({error:error.message,...error.extra},error.status);console.error('Team API error',error?.name,error?.message);return json({error:'Týmové úložiště není dostupné. Zkuste to za chvíli.'},503);}
+ if(String(error?.message).includes('workspace_member_capacity'))return json({error:'Limit členů nebo pozvánek je v jednom z pracovních oborů vyčerpaný. Upravte příslušnost nebo licenci.',code:'workspace_member_capacity'},409);if(String(error?.message).includes('workspace_'))return json({error:'Změna neodpovídá aktuálnímu oboru nebo oprávnění. Obnovte údaje.',code:'workspace_conflict'},409);if(/^(?:r2_|storage_)/.test(error?.code||'')&&[400,403,409,413,503].includes(error.status))return json({error:error.message,code:error.code},error.status);if(error instanceof HttpError)return json({error:error.message,...error.extra},error.status);console.error('Team API error',error?.name,error?.message);return json({error:'Týmové úložiště není dostupné. Zkuste to za chvíli.'},503);}
 }

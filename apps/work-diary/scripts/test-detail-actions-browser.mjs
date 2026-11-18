@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';import {createServer} from 'node:http';import {readFileSync,mkdirSync} from 'node:fs';import {createRequire} from 'node:module';import {Miniflare} from 'miniflare';
 const require=createRequire(import.meta.url);let chromium;try{({chromium}=require('playwright'));}catch{({chromium}=createRequire('/opt/codex/runtimes/codex-primary-runtime/dependencies/node/node_modules/package.json')('playwright'));}
 const baked=JSON.parse(readFileSync('dist/server/index.js','utf8').match(/const EXPECTED_INSTALLATION_ID=(null|"[^"]+");/)?.[1]||'null'),installation=baked||'inst-diary-isolated-test',user={id:'diary-owner',email:'owner@diary.test'},headers={'oai-authenticated-user-id':user.id,'oai-authenticated-user-email':user.email,'x-workspace-client-version':'shared-directory-v1','x-zavlahy-request':'1'};
-let mf,server,browser,failWrites=false;const errors=[],requests=[];const cloud='/cloud.js?v=fast-read-v1';
+let mf,server,browser,failWrites=false;const errors=[],requests=[];const cloud='/cloud.js?v=r2-storage-v1';
 try{
  mf=new Miniflare({modules:true,scriptPath:'dist/server/index.js',compatibilityDate:'2026-08-06',d1Databases:{DB:'diary-isolated'},r2Buckets:['BUCKET'],bindings:{TEAM_OWNER_EMAIL:user.email,INSTALLATION_ID:installation,DRIVE_TOKEN_ENCRYPTION_KEY:Buffer.alloc(32,19).toString('base64url')}});
  const db=await mf.getD1Database('DB');for(const e of JSON.parse(readFileSync('drizzle/meta/_journal.json')).entries)for(const sql of readFileSync('drizzle/'+e.tag+'.sql','utf8').split('--> statement-breakpoint'))if(sql.trim())await db.prepare(sql).run();await db.prepare("UPDATE installation_state SET instance_id=? WHERE singleton='primary'").bind(installation).run();

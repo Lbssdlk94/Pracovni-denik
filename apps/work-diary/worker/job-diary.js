@@ -14,7 +14,7 @@ export async function handleJobDiary(request,env,m,h){
   const ids=[...new Set(rows.flatMap(row=>JSON.parse(row.photo_ids)))];if(!ids.length)return;
   const drive=h.features.googleDrive!==false&&h.features.drivePhotos!==false;
   const photos=await subAll(env.DB,"SELECT id,name,mime_type,size,'service' AS source FROM service_photos WHERE job_id=? AND status='ready' AND id IN (SELECT value FROM json_each(?))"+(drive?" UNION ALL SELECT id,original_name AS name,mime_type,size,'drive' AS source FROM job_photos WHERE job_id=? AND status='complete' AND id IN (SELECT value FROM json_each(?))":""),jobId,JSON.stringify(ids),...(drive?[jobId,JSON.stringify(ids)]:[]));
-  for(const photo of photos)if(!photoIndex.has(photo.id))photoIndex.set(photo.id,{id:photo.id,name:photo.name,mimeType:photo.mime_type,size:photo.size,url:'/api/jobs/'+jobId+(photo.source==='service'?'/service/photos/'+photo.id:'/photos/'+photo.id+'/content')});
+  for(const photo of photos)if(!photoIndex.has(photo.id))photoIndex.set(photo.id,{id:photo.id,name:photo.name,mimeType:photo.mime_type,size:photo.size,previewUrl:photo.source==='service'?'/api/jobs/'+jobId+'/service/photos/'+photo.id+'?thumbnail=1':'/api/jobs/'+jobId+'/photos/'+photo.id+'/thumbnail',url:'/api/jobs/'+jobId+(photo.source==='service'?'/service/photos/'+photo.id:'/photos/'+photo.id+'/content')});
  }
  async function dto(row){
   const ids=JSON.parse(row.photo_ids),photos=ids.map(id=>photoIndex.get(id)).filter(Boolean);
