@@ -247,6 +247,10 @@ final class APIStore: ObservableObject {
             } catch { self.error = error.localizedDescription }
         }
     }
+    func currentJob(_ fallback:APIValue)->APIValue{
+        guard let cached=vault?.state.cache["/api/jobs/"+fallback.id]?["job"],cached.id==fallback.id,cached["version"].int>=fallback["version"].int else{return fallback}
+        return fallback.merged(cached.object)
+    }
     func applyAcknowledgement(path:String,result:APIValue){
         var acknowledged=result
         if !result["job"].id.isEmpty,!result["report"].isNull{acknowledged["job"]["protocolStatus"]=result["report"]["documentState"].string=="ready" ? .s("ready") : .s("draft")}

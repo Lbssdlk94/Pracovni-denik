@@ -40,8 +40,10 @@ final class APIFieldWorkflowTests:XCTestCase {
         _ = try await store.write("/api/jobs/fixture-next/departure",method:"POST",body:.object(["version":job["version"],"arrivalDate":.s(store.today),"arrivalTime":.s("09:35")]))
         job=(try await store.get("/api/jobs/fixture-next"))["job"]
         XCTAssertEqual(job["status"],.s("on_way"));XCTAssertEqual(APIJobWorkflow.primary(job,travelEnabled:true),.start)
+        let detailSnapshot=job
         for state in ["in_progress","done"] {
             _ = try await store.write("/api/jobs/fixture-next/status",method:"PATCH",body:.object(["version":job["version"],"status":.s(state)]))
+            XCTAssertEqual(store.currentJob(detailSnapshot)["status"],.s(state),"Acknowledged changes must update detail before its next GET")
             job=(try await store.get("/api/jobs/fixture-next"))["job"];XCTAssertEqual(job["status"],.s(state))
         }
         XCTAssertNil(APIJobWorkflow.primary(job,travelEnabled:true))

@@ -103,7 +103,7 @@ struct APIEntityDetail: View {
     @State private var deleteConfirm = false
     @State private var repairConfirm=false
     @State private var action: APIDomainAction?
-    private var record: APIValue { value.isNull ? initial : value }
+    private var record: APIValue { let current=value.isNull ? initial : value;return resource.entity == .jobs ? store.currentJob(current) : current }
     var body: some View {
         ScrollView {
             VStack(alignment:.leading,spacing:18) {

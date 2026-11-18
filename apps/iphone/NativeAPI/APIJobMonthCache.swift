@@ -69,7 +69,7 @@ enum APIJobMonthCache {
 @MainActor
 extension APIStore {
     func resetJobMonthWork(){jobMonthEpoch+=1;jobMonthTask?.cancel();jobMonthTask=nil;jobMonthPreparation?.cancel();jobMonthPreparation=nil;jobMonthsReady=false;jobMonthsAuthorized=false}
-    func beginJobMonthChange(){jobMonthEpoch+=1;jobMonthTask?.cancel();jobMonthTask=nil}
+    func beginJobMonthChange(){jobMonthEpoch+=1;jobMonthTask?.cancel();jobMonthTask=nil;jobMonthPreparation?.cancel();jobMonthPreparation=nil}
     func purgeJobMonthCopies(){
         guard let local=vault else{return}
         local.state.jobMonths=nil
@@ -83,10 +83,11 @@ extension APIStore {
         return APIJobMonthCache.result(path:path,state:state,today:today,offline:!online)
     }
     func prepareJobMonths() async {
+        guard !Task.isCancelled else{return}
         if jobMonthsReady{return};if let task=jobMonthPreparation{await task.value;return}
         let ticket=jobMonthEpoch,binding=scope
         let task=Task{@MainActor in
-            guard let local=self.vault,self.authenticated,self.enabled("jobs"),self.enabled("offline")else{return}
+            guard !Task.isCancelled,let local=self.vault,self.authenticated,self.enabled("jobs"),self.enabled("offline")else{return}
             // Generic job lists from older versions have no per-record access fence.
             for key in Array(local.state.cache.keys) where APIJobMonthCache.isList(key){local.state.cache.removeValue(forKey:key)}
             var state=local.state.jobMonths ?? APIJobMonthState();let window=Set(APIJobMonthCache.months(containing:self.today));state.months=state.months.filter{window.contains($0.key)}
@@ -97,12 +98,15 @@ extension APIStore {
             do{
                 var allowed=Set<String>(),versions:[String:Int]=[:],stamp=""
                 for start in stride(from:0,to:ids.count,by:1000){
+                    guard !Task.isCancelled,ticket==self.jobMonthEpoch,binding==self.scope else{return}
                     var input:APIValue = .object(["records":.array([]),"gardens":.array([]),"services":.array([]),"defects":.array([]),"serviceWork":.array(ids[start..<min(start+1000,ids.count)].map{.s($0)})]);if !stamp.isEmpty{input["expectedStamp"] = .s(stamp)}
                     let requested=Set(ids[start..<min(start+1000,ids.count)])
                     let manifest=try await self.transport.request("/api/workspace/manifest",method:"POST",body:input)
+                    guard !Task.isCancelled,ticket==self.jobMonthEpoch,binding==self.scope else{return}
                     guard manifest["completeForRequestedIds"].bool,manifest["requestedCounts"]["serviceWork"].int==min(1000,ids.count-start),!manifest["stamp"].string.isEmpty,stamp.isEmpty || stamp==manifest["stamp"].string,manifest["workspace"]["authorizationVersion"]==self.me["workspace"]["authorizationVersion"],manifest["workspace"]["role"].string==self.actualRole,manifest["workspace"]["workspaceId"]==self.me["workspace"]["workspaceId"],manifest["workspace"]["disciplines"]==self.me["workspace"]["disciplines"],Set(manifest["allowed"]["serviceWork"].array.map(\.string)).isSubset(of:requested) else{throw APIError.local("Oprávnění uložených zakázek nebylo potvrzeno.")}
                     stamp=manifest["stamp"].string;allowed.formUnion(manifest["allowed"]["serviceWork"].array.map(\.string));for(id,value)in manifest["jobVersions"].object{versions[id]=value.int}
                 }
+                guard !Task.isCancelled,ticket==self.jobMonthEpoch,binding==self.scope else{return}
                 let fence:APIValue = .object(["records":.array([]),"gardens":.array([]),"services":.array([]),"defects":.array([]),"serviceWork":.array([]),"expectedStamp":.s(stamp)])
                 let final=try await self.transport.request("/api/workspace/manifest",method:"POST",body:fence)
                 guard final["stamp"].string==stamp,final["completeForRequestedIds"].bool,final["requestedCounts"]["serviceWork"].int==0 else{throw APIError.local("Přiřazení zakázek se změnilo.")}
@@ -121,6 +125,7 @@ extension APIStore {
     }
     func scheduleJobMonths(){guard authenticated,enabled("jobs"),enabled("offline"),online,!isRolePreview,jobMonthTask==nil else{return};jobMonthTask=Task{@MainActor in await self.downloadJobMonths()}}
     func downloadJobMonths() async {
+        guard !Task.isCancelled else{return}
         await prepareJobMonths();let ticket=jobMonthEpoch,binding=scope
         defer{if ticket==jobMonthEpoch{jobMonthTask=nil}}
         guard authenticated,online,enabled("jobs"),enabled("offline"),!Task.isCancelled,let local=vault else{return}

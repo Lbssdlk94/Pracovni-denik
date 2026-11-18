@@ -46,7 +46,9 @@ final class NativeAPIUITests:XCTestCase {
         primary.tap();XCTAssertTrue(app.navigationBars["Změnit stav"].waitForExistence(timeout:10))
         app.buttons["Potvrdit změnu"].tap()
         XCTAssertTrue(app.buttons["Servisní protokol"].waitForExistence(timeout:10))
-        XCTAssertFalse(app.buttons["job-primary-action"].exists)
+        let completed=NSPredicate(format:"exists == false")
+        expectation(for:completed,evaluatedWith:app.buttons["job-primary-action"])
+        waitForExpectations(timeout:10)
         XCTAssertTrue(app.tabBars.buttons["Zákazníci"].exists)
         XCTAssertEqual(app.webViews.count,0);capture("detail-po-dokonceni-api",app)
     }
