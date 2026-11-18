@@ -39,4 +39,28 @@ final class NativeAPIUITests:XCTestCase {
         app.buttons["Zpět k mojí roli"].firstMatch.tap();XCTAssertTrue(app.staticTexts["native-overview-title"].waitForExistence(timeout:10));XCTAssertFalse(app.staticTexts["Náhled: Čtenář"].exists)
     }
 
+    func testPrimaryCompletionStaysInDetailAndKeepsBottomNavigation(){
+        let app=launch();app.tabBars.buttons["Zakázky"].tap()
+        let job=app.buttons["native-job-fixture-progress"];XCTAssertTrue(job.waitForExistence(timeout:10));job.tap()
+        let primary=app.buttons["job-primary-action"];XCTAssertTrue(primary.waitForExistence(timeout:10));XCTAssertEqual(primary.label,"Hotovo")
+        primary.tap();XCTAssertTrue(app.navigationBars["Změnit stav"].waitForExistence(timeout:10))
+        XCTAssertEqual(app.buttons["Potvrdit změnu"].value as? String,"Hotovo",app.debugDescription)
+        app.buttons["Potvrdit změnu"].tap()
+        XCTAssertTrue(app.buttons["Servisní protokol"].waitForExistence(timeout:10))
+        let completed=NSPredicate(format:"exists == false")
+        expectation(for:completed,evaluatedWith:app.buttons["job-primary-action"])
+        waitForExpectations(timeout:10)
+        XCTAssertTrue(app.tabBars.buttons["Zákazníci"].exists)
+        XCTAssertEqual(app.webViews.count,0);capture("detail-po-dokonceni-api",app)
+    }
+    func testGalleryRemainsAvailableWithDriveDisabled(){
+        let app=launch();app.tabBars.buttons["Zakázky"].tap()
+        let job=app.buttons["native-job-fixture-progress"];XCTAssertTrue(job.waitForExistence(timeout:10));job.tap()
+        let gallery=app.buttons["Fotodokumentace"];if !gallery.isHittable{app.swipeUp()}
+        XCTAssertTrue(gallery.waitForExistence(timeout:10));gallery.tap()
+        XCTAssertTrue(app.buttons["Vybrat fotografii"].waitForExistence(timeout:10))
+        XCTAssertTrue(app.tabBars.buttons["Přehled"].exists)
+        XCTAssertEqual(app.webViews.count,0);capture("fotodokumentace-bez-disku-api",app)
+    }
+
 }

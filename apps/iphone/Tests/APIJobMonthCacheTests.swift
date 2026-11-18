@@ -80,4 +80,13 @@ final class APIJobMonthCacheTests:XCTestCase {
         let stored=try FileManager.default.contentsOfDirectory(at:directory,includingPropertiesForKeys:nil).first!
         XCTAssertFalse(String(decoding:try Data(contentsOf:stored),as:UTF8.self).contains("PRIVATE"))
     }
+    @MainActor func testCancelledDownloaderDoesNotStartAnotherManifestFence()async throws{
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start();await store.downloadJobMonths()
+        store.resetJobMonthWork()
+        let before=APIFixtureProtocol.requests.filter{$0.url?.path=="/api/workspace/manifest"}.count
+        let task=Task{@MainActor in await store.downloadJobMonths()};task.cancel();await task.value
+        XCTAssertEqual(APIFixtureProtocol.requests.filter{$0.url?.path=="/api/workspace/manifest"}.count,before)
+        XCTAssertFalse(store.jobMonthsAuthorized)
+    }
+
 }

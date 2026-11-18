@@ -19,6 +19,8 @@ struct APIAuthenticatedImage:View {
     @ObservedObject var store:APIStore
     let path:String
     var version:APIValue = .null
+    var maxPixels=1600
+    var fallbackPath=""
     @State private var thumbnail:UIImage?
     @State private var problem:String?
     var body:some View {
@@ -26,7 +28,16 @@ struct APIAuthenticatedImage:View {
             if let thumbnail{Image(uiImage:thumbnail).resizable().scaledToFit().clipShape(RoundedRectangle(cornerRadius:18))}
             else if let problem{Text(problem).font(.footnote).foregroundStyle(.secondary)}
             else{ProgressView("Načítám fotografii…")}
-        }.task(id:store.scope+path+version.string){let scope=store.scope;thumbnail=nil;do{let r=try await store.file(path,version:version);guard scope==store.scope else{return};thumbnail=APIImage.thumbnail(r.data);problem=nil}catch{thumbnail=nil;problem=error.localizedDescription}}
+        }.task(id:store.scope+path+version.string){
+            let scope=store.scope;thumbnail=nil;problem=nil
+            do{
+                let r:APIBytes
+                do{r=try await store.file(path,version:version)}catch let error as APIError where error.status==404 && !fallbackPath.isEmpty && fallbackPath != path{r=try await store.file(fallbackPath,version:version)}
+                guard scope==store.scope else{return}
+                guard let image=APIImage.thumbnail(r.data,maxPixels:maxPixels)else{throw APIError.local("Náhled fotografie nelze otevřít.")}
+                thumbnail=image
+            }catch{if scope==store.scope{thumbnail=nil;problem=error.localizedDescription}}
+        }
     }
 }
 struct APIQuickLook:UIViewControllerRepresentable {
@@ -46,7 +57,26 @@ struct APICamera:UIViewControllerRepresentable {
 }
 enum APIImage {
     static func thumbnail(_ data:Data,maxPixels:Int=1600)->UIImage?{guard let source=CGImageSourceCreateWithData(data as CFData,nil),let image=CGImageSourceCreateThumbnailAtIndex(source,0,[kCGImageSourceCreateThumbnailFromImageAlways:true,kCGImageSourceCreateThumbnailWithTransform:true,kCGImageSourceThumbnailMaxPixelSize:maxPixels] as CFDictionary)else{return nil};return UIImage(cgImage:image)}
-    static func jpeg(_ image:UIImage)->Data? { let scale=min(1,2048/max(image.size.width,image.size.height));let size=CGSize(width:max(1,image.size.width*scale),height:max(1,image.size.height*scale));return UIGraphicsImageRenderer(size:size).image{_ in image.draw(in:CGRect(origin:.zero,size:size))}.jpegData(compressionQuality:0.85) }
+    static func jpeg(_ image:UIImage)->Data? {
+        let pixels=CGSize(width:image.size.width*image.scale,height:image.size.height*image.scale)
+        guard pixels.width.isFinite,pixels.height.isFinite,pixels.width>0,pixels.height>0 else{return nil}
+        let scale=min(1,2048/max(pixels.width,pixels.height))
+        let size=CGSize(width:max(1,pixels.width*scale),height:max(1,pixels.height*scale))
+        let format=UIGraphicsImageRendererFormat();format.scale=1;format.opaque=true
+        let reduced=UIGraphicsImageRenderer(size:size,format:format).image{context in UIColor.white.setFill();context.fill(CGRect(origin:.zero,size:size));image.draw(in:CGRect(origin:.zero,size:size))}
+        var encoded:Data?
+        for quality in [0.82,0.74,0.66]{encoded=reduced.jpegData(compressionQuality:quality);if let encoded,encoded.count<=800*1024{return encoded}}
+        return encoded
+    }
+    static func prepared(_ data:Data,type:String)throws -> (data:Data,type:String,extensionName:String){
+        guard data.count<=100*1024*1024,let image=thumbnail(data,maxPixels:2048)else{throw APIError.local("Fotografii nelze otevřít nebo je příliš velká.")}
+        if type=="image/png",let cg=image.cgImage,[CGImageAlphaInfo.first,.last,.premultipliedFirst,.premultipliedLast].contains(cg.alphaInfo),let png=image.pngData(){
+            return (png.count<data.count ? png : data,"image/png","png")
+        }
+        if type=="image/jpeg",data.count<350*1024,let source=CGImageSourceCreateWithData(data as CFData,nil),let properties=CGImageSourceCopyPropertiesAtIndex(source,0,nil) as? [CFString:Any],let width=properties[kCGImagePropertyPixelWidth] as? Int,let height=properties[kCGImagePropertyPixelHeight] as? Int,max(width,height)<=2048{return (data,type,"jpg")}
+        guard let jpeg=jpeg(image)else{throw APIError.local("Fotografii nelze zmenšit.")}
+        return (jpeg,"image/jpeg","jpg")
+    }
     static func temporary(_ data:Data,name:String)->URL {let directory=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString,isDirectory:true);try? FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true);let url=directory.appendingPathComponent(name.replacingOccurrences(of:"/",with:"_"));try? data.write(to:url,options:[.atomic,.completeFileProtectionUntilFirstUserAuthentication]);return url}
 }
 struct APIFilesView:View {
@@ -58,49 +88,67 @@ struct APIFilesView:View {
     var attached:((String)->Void)? = nil
     var selection:Binding<APIValue>? = nil
     var selectionLabel="Zahrnout do protokolu"
-    @State private var picked:PhotosPickerItem?
+    @State private var picked:[PhotosPickerItem]=[]
     @State private var camera=false
     @State private var importing=false
     @State private var files:[APIValue]=[]
     @State private var problem:String?
-    @State private var preview:APIFile?
     @State private var busy=false
     @State private var category="during"
     @State private var note=""
     @State private var photoAction:APIDomainAction?
     @State private var removePhoto:APIValue = .null
     @State private var confirmRemoval=false
-    var allowed:Bool { store.writer && store.enabled("photoUploads") && (mode != .service || store.enabled("protocolPhotos")) && (mode != .receipts || store.enabled("fleetReceipts") && (store.manager || record["createdBy"].string==store.userID)) && (mode != .job || store.enabled("drivePhotos") && store.enabled("googleDrive")) }
+    var allowed:Bool { store.writer && !store.isRolePreview && !record["cancelled"].bool && store.enabled("photoUploads") && (mode != .service || store.enabled("protocolPhotos")) && (mode != .receipts || store.enabled("fleetReceipts") && (store.manager || record["createdBy"].string==store.userID)) && (mode != .job || store.enabled("drivePhotos")) }
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
             if mode != .vehicle && mode != .plan {
-                ForEach(Array(files.enumerated()),id:\.offset){_,file in VStack(alignment:.leading){Button(file["name"].string.isEmpty ? file["fileName"].string : file["name"].string){Task{await open(file)}}.frame(minHeight:44);if let selection{Toggle(selectionLabel,isOn:Binding(get:{selection.wrappedValue.array.contains(.s(file.id))},set:{on in var ids=selection.wrappedValue.array;ids.removeAll{$0 == .s(file.id)};if on{ids.append(.s(file.id))};selection.wrappedValue = .array(ids)}))};if mode == .job{if !file["note"].string.isEmpty{Text(file["note"].string).font(.footnote)};if store.writer{Button("Upravit poznámku"){photoAction=APIDomainAction(title:"Poznámka k fotografii",path:path+"/"+file.id,method:"PATCH",fields:[.field("note","Poznámka",.notes)],value:.object(["version":file["version"],"note":file["note"]]))}};if store.manager{Button("Přesunout do koše na Disku",role:.destructive){removePhoto=file;confirmRemoval=true}}}}}
+                APIPhotoGrid(store:store,photos:files.map{file in
+                    let content=APIPhotoPaths.content(path:path,file:file,jobGallery:mode == .job)
+                    return file.merged(["name":.s(file["name"].string.isEmpty ? file["fileName"].string : file["name"].string),"url":.s(mode == .receipts ? path+"/"+file.id : content),"previewUrl":.s(mode == .job ? path+"/"+file.id+"/thumbnail" : content)])
+                })
+                ForEach(files,id:\.id){file in
+                    if let selection{Toggle(selectionLabel+" · "+(file["name"].string.isEmpty ? file.id : file["name"].string),isOn:Binding(get:{selection.wrappedValue.array.contains(.s(file.id))},set:{on in var ids=selection.wrappedValue.array;ids.removeAll{$0 == .s(file.id)};if on{ids.append(.s(file.id))};selection.wrappedValue = .array(ids)}))}
+                    if mode == .job{
+                        if !file["note"].string.isEmpty{Text(file["note"].string).font(.footnote)}
+                        Menu("Možnosti fotografie"){
+                            if store.writer && !store.isRolePreview{Button("Upravit poznámku"){photoAction=APIDomainAction(title:"Poznámka k fotografii",path:path+"/"+file.id,method:"PATCH",fields:[.field("note","Poznámka",.notes)],value:.object(["version":file["version"],"note":file["note"]]))}}
+                            if store.manager && !store.isRolePreview{Button(file["storage"].string=="app" ? "Odebrat z fotodokumentace" : "Přesunout do koše na Disku",role:.destructive){removePhoto=file;confirmRemoval=true}}
+                        }.frame(minHeight:44)
+                    }
+                }
             }
             if allowed {
                 if mode == .job{Picker("Kategorie fotografií",selection:$category){Text("Před prací").tag("before");Text("Průběh").tag("during");Text("Hotová práce").tag("after")};TextField("Poznámka k nové fotografii",text:$note,axis:.vertical)}
-                PhotosPicker(selection:$picked,matching:.images){Label("Vybrat fotografii",systemImage:"photo")}.frame(minHeight:44)
+                PhotosPicker(selection:$picked,maxSelectionCount:40,matching:.images){Label("Vybrat fotografii",systemImage:"photo")}.frame(minHeight:44)
                 if UIImagePickerController.isSourceTypeAvailable(.camera){Button{camera=true}label:{Label("Vyfotit",systemImage:"camera")}.frame(minHeight:44)}
                 if mode == .plan {Button("Nahrát PDF nebo obrázek plánu"){importing=true}.frame(minHeight:44)}
             }
             if busy{ProgressView("Nahrávám…")}
             if let problem{Text(problem).foregroundStyle(DiaryStyle.warning).font(.callout)}
-        }.disabled(busy).onChange(of:picked){_,item in Task{do{if let bytes=try await item?.loadTransferable(type:Data.self){let mime=item?.supportedContentTypes.first(where:{$0.conforms(to:.image)})?.preferredMIMEType ?? "image/jpeg";if (mode == .service || mode == .job) && ["image/jpeg","image/png","image/heic","image/heif"].contains(mime){await upload(bytes,type:mime,name:"Fotografie."+(UTType(mimeType:mime)?.preferredFilenameExtension ?? "jpg"))}else if let image=UIImage(data:bytes),let jpg=APIImage.jpeg(image){await upload(jpg,type:"image/jpeg",name:"Fotografie.jpg")}else{throw APIError.local("Fotografii nelze otevřít.")}}}catch{problem=error.localizedDescription};picked=nil}}
+        }.disabled(busy).onChange(of:picked){_,items in Task{
+            let scope=store.scope
+            for item in items{
+                do{guard let bytes=try await item.loadTransferable(type:Data.self)else{continue};guard scope==store.scope else{break};let mime=item.supportedContentTypes.first(where:{$0.conforms(to:.image)})?.preferredMIMEType ?? "image/jpeg";let photo=try APIImage.prepared(bytes,type:mime);await upload(photo.data,type:photo.type,name:"Fotografie."+photo.extensionName)}catch{problem=error.localizedDescription}
+            }
+            picked=[]
+        }}
             .sheet(isPresented:$camera){APICamera{bytes in Task{await upload(bytes,type:"image/jpeg",name:"Fotografie.jpg")}}}
-            .sheet(item:$preview,onDismiss:{}){file in APIQuickLook(url:file.url).onDisappear{try? FileManager.default.removeItem(at:file.url.deletingLastPathComponent())}}
             .fileImporter(isPresented:$importing,allowedContentTypes:[.pdf,.image]){result in Task{do{let url=try result.get();let access=url.startAccessingSecurityScopedResource();defer{if access{url.stopAccessingSecurityScopedResource()}};let data=try Data(contentsOf:url);if url.pathExtension.lowercased()=="pdf"{await upload(data,type:"application/pdf",name:url.lastPathComponent)}else if let image=UIImage(data:data),let jpeg=APIImage.jpeg(image){await upload(jpeg,type:"image/jpeg",name:url.deletingPathExtension().lastPathComponent+".jpg")}else{throw APIError.local("Plán není podporovaný obrázek ani PDF.")}}catch{problem=error.localizedDescription}}}
             .sheet(item:$photoAction){APIActionEditor(store:store,action:$0)}
-            .confirmationDialog("Přesunout tuto fotografii do koše Google Disku?",isPresented:$confirmRemoval,titleVisibility:.visible){Button("Přesunout do koše",role:.destructive){Task{do{_ = try await store.write(path+"/"+removePhoto.id,method:"DELETE",body:.object(["version":removePhoto["version"],"confirm":.s("TRASH_GOOGLE_DRIVE_PHOTO")]));await load()}catch{problem=error.localizedDescription}}};Button("Zrušit",role:.cancel){}}
-            .task(id:store.revision){await load()}
+            .confirmationDialog(removePhoto["storage"].string=="app" ? "Odebrat fotografii z fotodokumentace? V protokolu a deníku zůstane zachovaná." : "Přesunout tuto fotografii do koše Google Disku?",isPresented:$confirmRemoval,titleVisibility:.visible){Button("Potvrdit odstranění",role:.destructive){Task{do{_ = try await store.write(path+"/"+removePhoto.id,method:"DELETE",body:.object(["version":removePhoto["version"],"confirm":.s(APIPhotoPaths.removalConfirmation(removePhoto))]));await load()}catch{problem=error.localizedDescription}}};Button("Zrušit",role:.cancel){}}
+            .task(id:store.scope+store.revision.uuidString){await load()}
     }
     func load() async {
+        let scope=store.scope
         do {
             switch mode {
-            case .service:let s=try await store.get(path);files=s["photos"].array
-            case .receipts:let pieces=path.split(separator:"/");guard pieces.count>=5 else{return};let data=try await store.get("/api/vehicles/"+pieces[2]);files=data["receipts"].array.filter{$0["entryId"].string==String(pieces[4])}
-            case .job:let s=try await store.get(path);files=s["photos"].array
+            case .service,.job:let s=try await store.get(path);guard scope==store.scope else{return};files=s["photos"].array
+            case .receipts:let pieces=path.split(separator:"/");guard pieces.count>=5 else{return};let data=try await store.get("/api/vehicles/"+pieces[2]);guard scope==store.scope else{return};files=data["receipts"].array.filter{$0["entryId"].string==String(pieces[4])}
             default:break
             }
-        }catch{problem=error.localizedDescription}
+            problem=nil
+        }catch{if scope==store.scope{problem=error.localizedDescription}}
     }
     func upload(_ data:Data,type:String,name:String) async {
         guard allowed else{return};busy=true;defer{busy=false}
@@ -117,11 +165,7 @@ struct APIFilesView:View {
             problem=nil;await load()
         }catch{problem=error.localizedDescription}
     }
-    func open(_ file:APIValue) async {
-        do { let url=mode == .service ? path+"/photos/"+file.id : mode == .job ? path+"/"+file.id+"/content" : path+"/"+file.id
-            let bytes=try await store.file(url);preview=APIFile(url:APIImage.temporary(bytes.data,name:file["name"].string.isEmpty ? "Fotografie.jpg" : file["name"].string))
-        }catch{problem=error.localizedDescription}
-    }
+
 }
 struct APISignature:View {
     @Binding var encoded:String

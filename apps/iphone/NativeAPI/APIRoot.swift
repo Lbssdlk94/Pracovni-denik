@@ -79,7 +79,8 @@ struct APIOverview:View {
     @State private var jobs:[APIValue]=[]
     @State private var next:APIValue = .null
     @State private var problem:String?
-    var body:some View{ScrollView{VStack(alignment:.leading,spacing:18){HStack(spacing:16){Image("DiaryMark").resizable().frame(width:62,height:62).clipShape(RoundedRectangle(cornerRadius:18));VStack(alignment:.leading,spacing:4){Text("Pracovní deník").font(.largeTitle.bold()).accessibilityIdentifier("native-overview-title");Text("Vše pro dnešní práci.").foregroundStyle(.secondary)}}.padding(.vertical,12)
+    var body:some View{ScrollView{VStack(alignment:.leading,spacing:18){
+        Text("Přehled").font(.title2.bold()).accessibilityIdentifier("native-overview-title")
         if store.enabled("attendance"){DiaryTile(title:"Docházka",subtitle:"Příchod, odchod a pracovní dny",symbol:"clock"){store.tab=2}}
         if store.enabled("jobs")&&store.enabled("jobDay"){DiaryTile(title:"Dnešní návštěvy",subtitle:"\(jobs.count) aktivních",symbol:"calendar"){store.tab=1}}
         if store.enabled("jobs"){DiaryTile(title:"Zakázky",subtitle:"Přehled a plánování práce",symbol:"list.clipboard"){store.tab=1}}

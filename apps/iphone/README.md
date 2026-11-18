@@ -1,10 +1,12 @@
 # Pracovní deník pro iPhone a Apple Watch
 
-Verze **0.8.0 (9)** nahrazuje skrytý webový engine samostatným klientem SwiftUI. Telefon používá `URLSession` a současné REST API. Formuláře, validace, PDF, místní koncepty a synchronizační fronta jsou implementované ve Swiftu. Watch zůstává ve SwiftUI a komunikuje s telefonem přes WatchConnectivity. Server a společná databáze se nepřepisují do Swiftu.
+Nativní základ **0.8.0 (9)** nahrazuje skrytý webový engine samostatným klientem SwiftUI. Telefon používá `URLSession` a současné REST API. Formuláře, validace, PDF, místní koncepty a synchronizační fronta jsou implementované ve Swiftu. Watch zůstává ve SwiftUI a komunikuje s telefonem přes WatchConnectivity. Server a společná databáze se nepřepisují do Swiftu.
+
+Připravená aktualizace **0.8.1 (10)** sjednocuje postupové tlačítko zakázky, hlavní akce nad spodní navigací, nahrávání do úložiště aplikace bez Disku, miniatury, kompresi fotografií a mazání denních zápisů vlastníkem/administrátorem. [Změny a skutečný stav ověření](../../docs/IPHONE-FIELD-UPDATE-2026-11-18.md). Sestavení Xcode a testy prošly; dostupná IPA vyžaduje vlastní podpis.
 
 Role a moduly klient načítá při novém spuštění procesu a po výslovném přihlášení, změně firmy, oboru nebo hesla. Návrat z pozadí, obnovení pracovních dat, Apple Watch, uložení ani odeslání fronty už nepřidávají požadavek `/api/me`. Každý skutečný požadavek nadále autorizuje server. Chyba připojení nesmaže koncepty; odpověď 401 ukončí neplatnou relaci a ponechá neodeslanou práci zabezpečenou. [Změna a regresní testy](../../docs/IPHONE-SESSION-STARTUP-2026-11-07.md).
 
-**Stav vydání:** poslední úspěšné sestavení je commit `f82cf005e89faade44f29ee4f2b5e38aafcbb7f0`, [běh 42264874748](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/42264874748): 36 jednotkových + 7 UI testů, iPhone IPA, vložená Watch aplikace a oba simulátory. Poslední doplnění v `cf32f54` a `e8bd416` zatím Xcode neověřil. GitHub odmítl spustit [běh 42267712850](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/42267712850) kvůli platbám / limitu útraty účtu. PR #4 zůstává rozpracovaný; toto není oznámení hotového finálního vydání.
+**Stav vydání:** **0.8.1 (10)** úspěšně sestavena ze zdroje `518a76548db2820fc2bd9d2047e52795a272e39e`, [běh 44385049004](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/44385049004), Xcode / SDK 27.1. Prošlo 70 unit + 12 UI testů, release device build, kontrola čistě nativního bundle, vložené Watch aplikace i její simulátor. [Stáhnout IPA, logy a náhledy](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/44385049004/artifacts/14467321342) (GitHub artefakt do 2. 12. 2026). Balíček je nepodepsaný a vyžaduje vlastní podepsání; TestFlight/App Store nejsou publikované. Změny: [PR #25](https://github.com/Lbssdlk94/Pracovni-denik/pull/25).
 
 [Architektura, funkce, přechod, testy a omezení](../../docs/IPHONE-NATIVE-API-2026-11-06.md).
 
