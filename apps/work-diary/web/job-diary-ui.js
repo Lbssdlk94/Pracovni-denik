@@ -1,8 +1,8 @@
 import {pragueToday,jobDayLabel} from './job-schedule.js?v=workspace-roles-v1';
 import {interfaceIcon} from './interface-icons.js?v=approved-b-v2';
 export function createJobDiaryUI({db,esc,getSession,toast}){
- let job=null,root=null,data=null,epoch=0,dirty=false,busy=false,editor=null,photos=[],timer=null;const mediaUrls=new Map();
- const releasePhotos=id=>{for(const [key,urls]of mediaUrls)if(id===undefined||key===id){urls.forEach(url=>URL.revokeObjectURL(url));mediaUrls.delete(key);}};
+ let job=null,root=null,data=null,epoch=0,dirty=false,busy=false,editor=null,photos=[],timer=null;const mediaUrls=new Map(),previewQueues=new Map();
+ const releasePhotos=id=>{for(const [key,queue]of previewQueues)if(id===undefined||key===id){queue.dispose();previewQueues.delete(key);}for(const [key,urls]of mediaUrls)if(id===undefined||key===id){urls.forEach(url=>URL.revokeObjectURL(url));mediaUrls.delete(key);}};
  const draftKey=()=> 'job-diary:'+job.id;
  const writer=()=>getSession()?.permissions.write&&!job?.cancelled&&!data?.job?.cancelled;
  const photoWriter=()=>writer()&&getSession()?.features.photoUploads!==false&&getSession()?.features.protocolPhotos!==false;
@@ -26,14 +26,12 @@ export function createJobDiaryUI({db,esc,getSession,toast}){
   root.querySelectorAll('[data-diary-edit]').forEach(b=>b.onclick=()=>edit(data.entries.find(e=>e.id===b.dataset.diaryEdit)));
   root.querySelectorAll('[data-diary-entry]').forEach(el=>el.addEventListener('toggle',()=>{
    const target=el.querySelector('[data-diary-photos]'),id=el.dataset.diaryEntry;if(!el.open){releasePhotos(id);target.replaceChildren();return;}if(target.childElementCount)return;
-   const entry=data.entries.find(e=>e.id===id),urls=[];mediaUrls.set(id,urls);
-   for(const [index,p]of (entry.photos||[]).entries()){
+   const entry=data.entries.find(e=>e.id===id),urls=[],previews=createDiaryPreviewQueue();mediaUrls.set(id,urls);previewQueues.set(id,previews);
+   for(const p of entry.photos||[]){
     const path=p.url,local=p.file;let source;if(local){source=URL.createObjectURL(local);urls.push(source);}else if(typeof path==='string'&&path.startsWith('/api/jobs/'+encodeURIComponent(job.id)+'/'))source=path;else continue;
     const a=document.createElement('a');a.className='diary-photo-tile';a.href=source;a.target='_blank';a.rel='noopener';a.setAttribute('aria-label','Otevřít fotografii: '+(p.name||'Fotografie'));
-    const type=local?.type||p.mimeType||'',size=local?.size??p.size,preview=index<3&&size>0&&size<=2*1024*1024&&['image/jpeg','image/png'].includes(type);
     a.innerHTML='<span class="diary-photo-placeholder">'+interfaceIcon('photo')+'</span><span class="diary-photo-name">'+esc(p.name||local?.name||'Fotografie')+'</span><small>Otevřít originál ↗</small>';
-    if(preview){const img=document.createElement('img');img.loading='lazy';img.decoding='async';img.alt=p.name||'Fotografie realizace';img.src=source;a.prepend(img);img.onload=()=>a.classList.add('has-preview');img.onerror=()=>img.remove();}
-    target.append(a);
+    const img=document.createElement('img');img.hidden=true;img.decoding='async';img.alt=p.name||local?.name||'Fotografie realizace';img.width=320;img.height=240;a.prepend(img);target.append(a);previews.watch(img,source);
    }
   }));
   root.querySelectorAll('[data-diary-retry]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{data=await db.retryJobDiary(job.id,b.dataset.diaryRetry);paint();}catch(e){error(e);b.disabled=false;}});
@@ -52,4 +50,28 @@ export function createJobDiaryUI({db,esc,getSession,toast}){
  }catch(e){error(e);}}
  window.addEventListener('job-diary-updated',e=>{const ticket=epoch;if(job?.id===e.detail?.jobId&&root?.isConnected&&!dirty&&!busy)db.jobDiary(job.id,false).then(next=>{if(ticket===epoch&&root?.isConnected&&!dirty&&!busy){data=next;paint();}}).catch(()=>{});});
  return {markup,bind,clear,hasChanges};
+}
+
+// Fetch only visible tiles, at most two originals at once. Nothing enters a public cache.
+function createDiaryPreviewQueue(){
+ const pending=[],active=new Set(),sources=new WeakMap();let disposed=false;
+ function pump(){
+  while(!disposed&&active.size<2&&pending.length){
+   const img=pending.shift();if(!img.isConnected)continue;active.add(img);
+   const finish=success=>{
+    active.delete(img);img.onload=null;img.onerror=null;
+    if(!disposed&&img.isConnected){
+     if(success){img.hidden=false;img.parentElement.classList.add('has-preview');}
+     else{const tile=img.parentElement;img.remove();const label=tile.querySelector('.diary-photo-placeholder');if(label){label.textContent='Náhled nelze zobrazit';label.setAttribute('role','status');}}
+    }
+    pump();
+   };
+   img.onload=()=>finish(true);img.onerror=()=>finish(false);img.src=sources.get(img);
+  }
+ }
+ const observer=typeof IntersectionObserver==='function'?new IntersectionObserver(entries=>{for(const entry of entries)if(entry.isIntersecting){observer.unobserve(entry.target);const img=entry.target.querySelector('img');if(img){pending.push(img);pump();}}},{rootMargin:'120px 0px'}):null;
+ return {
+  watch(img,source){if(disposed)return;sources.set(img,source);if(observer)observer.observe(img.parentElement);else{pending.push(img);pump();}},
+  dispose(){disposed=true;observer?.disconnect();pending.length=0;for(const img of active){img.onload=null;img.onerror=null;img.removeAttribute('src');}active.clear();}
+ };
 }
