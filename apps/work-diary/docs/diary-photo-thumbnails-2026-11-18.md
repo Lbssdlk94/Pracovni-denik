@@ -17,3 +17,11 @@ Ověření:
 - Backend je v obou sestaveních mimo vložená statická aktiva bajtově nezměněný. Schéma ani provozní záznamy se neupravují; publikují se frontendové archivy bez kořenových migrací.
 
 Omezení: jde o zobrazení původních fotografií v malé dlaždici, nikoli serverové generování zmenšených souborů. Při prvním náhledu se čte originál; pro velké fotografie proto záleží na připojení. HEIC/HEIF zobrazí náhled jen v prohlížeči, který jej umí dekódovat. Skutečný iPhone/Safari nebyl k dispozici; nativní SwiftUI aplikace se v této úpravě nemění. Všechny testovací zápisy a soubory byly izolované od provozních dat.
+
+## Nasazení
+
+Nativní Sites nástroje 18. 11. 2026 potvrdily obě publikace jako `succeeded`, se zachováním přístupového nastavení. Archivy mají pouze hosting manifest, Worker a kopii manifestu, bez kořenových migrací.
+
+- Dr. Závlaha: https://zavlahovy-denik.purplecedar.chatgpt.site, verze **141**, zdroj `233245d1124ec46f1c15ceeaddbb9e036ee0b742`, deployment `appgdep_6afdb6042f4881918cba694f0ac34a38`.
+- Dr. Garden: https://dr-garden.purplecedar.chatgpt.site, verze **61**, zdroj `17ff5df15d600f59a7dc34800817598fc808c9be`, deployment `appgdep_6afdb62393208191a26b293b0dcee104`.
+- GitHub: https://github.com/Lbssdlk94/Pracovni-denik/pull/24, implementace `c3ca121`, větev `fix/diary-photo-thumbnails-2026-11-18` navazuje na #23.
