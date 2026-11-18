@@ -44,3 +44,11 @@ Reprodukce: `node scripts/test-speed-browser.mjs [cesta-k-workeru]`. Pro baselin
 - Pro obě firemní sestavení je backend mimo vložená statická aktiva bajtově shodný s nasazenou předchozí verzí. Žádná změna schématu ani migrace. Aktualizace obsahuje jen frontendový release, ne kořenový balíček migrací; zmrazená databáze Dr. Garden se neupravuje.
 
 Všechny zápisové testy používají izolovaná data. Skutečné zákazníky a zakázky testy nemění. Fyzický iPhone/Safari a nativní SwiftUI aplikace nebyly v tomto úkolu testované ani upravované. Výsledná odezva závisí na zařízení a síti; načítání protokolu, fotek a prvotní autorizace stále vyžaduje příslušná data ze serveru.
+
+## Nasazení
+
+Obě publikace byly potvrzené nativním Sites nástrojem jako `succeeded` dne 18. 11. 2026. Stávající přístupové nastavení zůstalo zachované. Archivy obsahují jen tři soubory (hosting manifest, sestavený Worker a kopii manifestu), bez kořenových migrací.
+
+- Dr. Závlaha: https://zavlahovy-denik.purplecedar.chatgpt.site, verze **139**, zdroj `266985e5096810c02222f85d552df9ff7e157f98`, deployment `appgdep_6afd3d5da4048191a61743601973e481`.
+- Dr. Garden: https://dr-garden.purplecedar.chatgpt.site, verze **59**, zdroj `2bb22cc4488b4551c1faee42900952f6171af5fb`, deployment `appgdep_6afd3d792ecc8191bff0a97e09377193`.
+- GitHub: https://github.com/Lbssdlk94/Pracovni-denik/pull/22, větev `perf/fast-job-detail-2026-11-17`, implementace `5218d9680b62053099929a9a190de663938a5942`. PR je rozpracovaný a navazuje na #21; hlavní větev nebyla přepsaná.
