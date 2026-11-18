@@ -13,6 +13,10 @@ enum APIJobPrimaryAction: String {
         switch self { case .departure: return nil; case .start: return "in_progress"; case .complete: return "done" }
     }
 }
+struct APIJobStatusRequest:Identifiable {
+    let id=UUID()
+    let targetStatus:String?
+}
 enum APIJobWorkflow {
     static func primary(_ job: APIValue, travelEnabled: Bool) -> APIJobPrimaryAction? {
         guard !job["cancelled"].bool else { return nil }

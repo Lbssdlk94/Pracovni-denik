@@ -1,6 +1,8 @@
 name: iPhone and Apple Watch build and IPA
 on:
   push:
+    # Feature branches build through pull_request; avoid two identical runs cancelling each other.
+    branches: [main]
     paths:
       - 'apps/iphone/**'
       - '.github/workflows/iphone.yml'

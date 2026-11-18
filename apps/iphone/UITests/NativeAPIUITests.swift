@@ -44,6 +44,7 @@ final class NativeAPIUITests:XCTestCase {
         let job=app.buttons["native-job-fixture-progress"];XCTAssertTrue(job.waitForExistence(timeout:10));job.tap()
         let primary=app.buttons["job-primary-action"];XCTAssertTrue(primary.waitForExistence(timeout:10));XCTAssertEqual(primary.label,"Hotovo")
         primary.tap();XCTAssertTrue(app.navigationBars["Změnit stav"].waitForExistence(timeout:10))
+        XCTAssertEqual(app.buttons["Potvrdit změnu"].value as? String,"Hotovo",app.debugDescription)
         app.buttons["Potvrdit změnu"].tap()
         XCTAssertTrue(app.buttons["Servisní protokol"].waitForExistence(timeout:10))
         let completed=NSPredicate(format:"exists == false")

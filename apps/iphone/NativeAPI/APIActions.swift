@@ -105,7 +105,7 @@ struct APIJobStatusEditor:View {
                 if reason=="Vlastní důvod"{TextField("Vlastní důvod",text:$custom,axis:.vertical)}
             }
             if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}
-            Button("Potvrdit změnu"){Task{await save()}}.disabled(busy)
+            Button("Potvrdit změnu"){Task{await save()}}.disabled(busy).accessibilityValue(APIFormat.status(selected))
         }.navigationTitle("Změnit stav").toolbar{ToolbarItem(placement:.cancellationAction){Button("Zavřít"){dismiss()}.disabled(busy)}}}.editLease(store).interactiveDismissDisabled(busy)
             .sheet(isPresented:$report){APIProtocolEditor(store:store,jobID:job.id,completing:true)}
     }

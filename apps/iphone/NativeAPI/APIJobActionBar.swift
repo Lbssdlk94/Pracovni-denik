@@ -4,9 +4,8 @@ struct APIJobActionBar: View {
     @ObservedObject var store: APIStore
     let job: APIValue
     @State private var departure = false
-    @State private var status = false
+    @State private var statusRequest:APIJobStatusRequest?
     @State private var report = false
-    @State private var targetStatus: String?
     private var mayWork: Bool { APIJobWorkflow.canWork(job, userID:store.userID, writer:store.writer, manager:store.manager) && !store.isRolePreview }
     private var primary: APIJobPrimaryAction? { APIJobWorkflow.primary(job, travelEnabled:store.enabled("jobTravel")) }
     var body: some View {
@@ -17,14 +16,14 @@ struct APIJobActionBar: View {
         .font(.subheadline.weight(.semibold)).padding(12)
         .frame(maxWidth:.infinity).background(.regularMaterial)
         .sheet(isPresented:$departure) { APIDepartureEditor(store:store,job:job) }
-        .sheet(isPresented:$status) { APIJobStatusEditor(store:store,job:job,initialStatus:targetStatus) }
+        .sheet(item:$statusRequest) { request in APIJobStatusEditor(store:store,job:job,initialStatus:request.targetStatus) }
         .sheet(isPresented:$report) { APIProtocolEditor(store:store,jobID:job.id) }
     }
     @ViewBuilder private var actions: some View {
         if mayWork, let primary {
             Button {
                 if primary == .departure { departure=true }
-                else { targetStatus=primary.targetStatus;status=true }
+                else { statusRequest=APIJobStatusRequest(targetStatus:primary.targetStatus) }
             } label: {
                 Label(primary.title,systemImage:primary.symbol).frame(maxWidth:.infinity,minHeight:48)
             }.buttonStyle(.borderedProminent).accessibilityIdentifier("job-primary-action").accessibilityLabel(primary.title)
@@ -35,7 +34,7 @@ struct APIJobActionBar: View {
             }.buttonStyle(.bordered).accessibilityLabel("Servisní protokol")
         }
         if mayWork {
-            Button { targetStatus=nil;status=true } label: {
+            Button { statusRequest=APIJobStatusRequest(targetStatus:nil) } label: {
                 Image(systemName:"checkmark").frame(minWidth:44,minHeight:48)
             }.buttonStyle(.bordered).accessibilityLabel("Změnit stav")
         }
