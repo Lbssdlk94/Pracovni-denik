@@ -1,5 +1,6 @@
+import {createScopedReadCache} from './scoped-read-cache.js?v=fast-read-v1';
 import {createJobDiaryClient} from './job-diary-client.js?v=detail-actions-v1';
-import {createJobListCache,JOB_CACHE_KEY} from './job-list-cache.js?v=job-three-month-v1';
+import {createJobListCache,JOB_CACHE_KEY,jobCacheScope} from './job-list-cache.js?v=job-three-month-v1';
 import {rolePreviewSession,rolePreviewTargets} from './role-preview-model.js?v=role-preview-v1';
 import {createWorkspaceClient} from './workspace-client.js?v=job-diary-v1';
 import {workspaceSameAccount} from './workspace-sync-model.js?v=job-diary-v1';
@@ -32,22 +33,25 @@ function requireLiveRole(){if(previewRole)throw Object.assign(Error('V náhledu 
 export async function saveFeatures(features,version){const data=await request('/api/features',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({features,version})});identity={...identity,...data};await setting('session',identity);return data;}
 function checkOfflineWrite(){requireLiveRole();if(workspaceBlocked)throw workspaceResetError();if(identity?.license&&(!identity.license.active||identity.license.expiresAt<=Date.now()))throw new Error('Licence vyžaduje ověření po připojení k internetu. Rozepsané změny zůstávají zachované.');if(!featureEnabled('offline',identity?.features)&&!navigator.onLine)throw new Error('Ukládání bez internetu je v nastavení týmu vypnuté. Připojte se k internetu.');}
 const jobListCache=createJobListCache({read:()=>getSetting(JOB_CACHE_KEY),change:update=>store('settings','readwrite',target=>{const value=target.get(JOB_CACHE_KEY);value.onsuccess=()=>target.put(update(value.result),JOB_CACHE_KEY);return value;}),send:(path,options)=>serverRequest(path,options),getSession:()=>session(),online:()=>navigator.onLine,notify:detail=>window.dispatchEvent(new CustomEvent(detail.denied?'job-cache-denied':'job-cache-updated',{detail}))});
+const readCache=createScopedReadCache({send:serverRequest,scope:()=>workspaceBlocked||!navigator.onLine||!identity?.user||identity.license&&(!identity.license.active||identity.license.expiresAt<=Date.now())?null:jobCacheScope(session())});
+export const peekCachedJob=id=>readCache.peek('/api/jobs/'+encodeURIComponent(id))?.job||null;
 export const peekCachedJobs=path=>workspaceBlocked?Promise.resolve(null):jobListCache.peek(path);
 export const warmJobMonths=()=>workspaceBlocked?Promise.resolve():jobListCache.warm();
 export async function request(path,options={}){
  if(workspaceBlocked)throw workspaceResetError();
  const route=path.split('?')[0],method=(options.method||'GET').toUpperCase();
  const changesJobs=method!=='GET'&&method!=='HEAD'&&/^\/api\/(?:jobs|customers|gardens|subscriptions|tariffs|members|features|local-accounts|workspace\/members)(?:\/|$)/.test(route);
+ if(changesJobs)readCache.invalidate();
  if(changesJobs)jobListCache.beginChange();
  if(route==='/api/jobs'&&method==='GET')return jobListCache.request(path,options);
- try{const result=await serverRequest(path,options);if(changesJobs)await jobListCache.changed(result,route,method);return result;}catch(error){if((error.status===401||error.status===403&&(route==='/api/me'||route.startsWith('/api/jobs'))||error.status===404&&/^\/api\/jobs\//.test(route))&&!workspaceReconciling){await jobListCache.invalidate();if(route.startsWith('/api/jobs/'))window.dispatchEvent(new CustomEvent('job-cache-denied',{detail:{error}}));}throw error;}
+ try{const result=await readCache.request(path,options);if(changesJobs)await jobListCache.changed(result,route,method);return result;}catch(error){if((error.status===401||error.status===403&&(route==='/api/me'||route.startsWith('/api/jobs'))||error.status===404&&/^\/api\/jobs\//.test(route))&&!workspaceReconciling){await jobListCache.invalidate();if(route.startsWith('/api/jobs/'))window.dispatchEvent(new CustomEvent('job-cache-denied',{detail:{error}}));}throw error;}
 }
 async function serverRequest(path,options={}){
   if(workspaceBlocked)throw workspaceResetError();
   if(previewRole&&options.method&&!['GET','HEAD'].includes(options.method)&&path!=='/api/workspace/manifest')requireLiveRole();
   if(identity?.workspace?.selectedDiscipline&&['/api/jobs','/api/customers','/api/gardens','/api/defects'].includes(path.split('?')[0])){const selected=new URL(path,location.origin);if(!selected.searchParams.has('discipline'))selected.searchParams.set('discipline',identity.workspace.selectedDiscipline);path=selected.pathname+selected.search;}
   const epoch=workspaceEpoch,headers=new Headers(options.headers);if(previewRole)headers.set('x-work-diary-preview-role',previewRole);headers.set('x-workspace-client-version','shared-directory-v1');if(identity?.workspace?.selectedDiscipline&&!headers.has('x-work-discipline'))headers.set('x-work-discipline',identity.workspace.selectedDiscipline);if(options.method&&options.method!=='GET')headers.set('x-zavlahy-request','1');
-  const {timeoutMs,jobCacheRefresh,...fetchOptions}=options;
+  const {timeoutMs,jobCacheRefresh,forceNetwork,...fetchOptions}=options;
   const started=performance.now();let failure;
   try{return await readFromServer(path,{...fetchOptions,headers,credentials:'same-origin',cache:'no-store'},async response=>{
     if(!response.ok){const data=await response.json().catch(()=>({error:'Přihlášení vypršelo. Přihlaste se jménem a heslem.'}));const error=new Error(data.error||'Operace se nepodařila.');error.status=response.status;error.code=data.code;error.preview=data.preview;error.email=data.email;throw error;}
@@ -73,7 +77,7 @@ export async function connect({refresh=false}={}){
  const task=(async()=>{try{const selected=await getSetting('workspace-selected-discipline');const current=await request('/api/me',{headers:['all','irrigation','garden'].includes(selected)?{'x-work-discipline':selected}:{}});if(generation!==identityGeneration)throw workspaceResetError();return await acceptIdentity(current);}catch(error){if(generation!==identityGeneration)throw workspaceResetError();if([401,403].includes(error.status)&&error.code!=='pending_account'){const previous=await getSetting('session');if(previous?.user){workspaceReconciling=true;try{await workspaceClient.revoke(previous);}catch(recoveryError){workspaceBlocked=true;workspaceEpoch++;window.dispatchEvent(new CustomEvent('workspace-access-freeze'));throw Object.assign(new Error('Přístup byl odvolán. Neodeslanou práci se zatím nepodařilo zabezpečit: '+recoveryError.message+' Připojte se a zkuste otevřít aplikaci znovu; místní zápisy nebyly smazány.'),{status:403,code:'workspace_recovery_failed'});}finally{workspaceReconciling=false;}}}throw error;}})();identityFlight=task;
  try{await task;return session();}finally{if(identityFlight===task)identityFlight=null;}
 }
-function invalidateIdentity(){previewRole=null;identityGeneration++;identityFlight=null;identity=null;}
+function invalidateIdentity(){readCache.invalidate();previewRole=null;identityGeneration++;identityFlight=null;identity=null;}
 // Login/logout in another tab is an explicit account transition, not a timer.
 // Reuse the existing cross-tab reset so old UI cannot keep using a new cookie.
 function announceSessionChange(){try{localStorage.setItem('work-diary-workspace-reset',String(Date.now())+':'+crypto.randomUUID());}catch{}}
@@ -233,7 +237,16 @@ export async function serviceWork(jobId,refresh=navigator.onLine){
  if(refresh&&navigator.onLine){try{const snapshot=await request('/api/jobs/'+encodeURIComponent(jobId)+'/service');if(identity?.user.id!==actor||identity?.user.role!==role)return null;return await changeServiceWork(key,old=>old?.snapshot?.job.version>snapshot.job.version?old:({...old,id:key,jobId,ownerId:actor,accessRole:role,snapshot,expiresAt:Date.now()+86400000,updatedAt:Date.now()}));}catch(e){if([401,403,404].includes(e.status)){await changeServiceWork(key,old=>old?.pending?{...old,snapshot:null,blocked:true,error:e.message}:null);throw e;}const saved=(await cachedServiceWork()).find(e=>e.jobId===jobId);if(!saved?.snapshot)throw e;return saved;}}
  const saved=(await cachedServiceWork()).find(e=>e.jobId===jobId);if(!saved?.snapshot&&!saved?.pending)throw new Error('Tato návštěva ještě není uložená pro offline práci, nebo její ověření vypršelo. Otevřete ji s internetem.');return saved;
 }
-export async function prefetchServiceWork(jobs){if(!navigator.onLine||!identity||!featureEnabled('jobs',identity.features)||!featureEnabled('offline',identity.features))return;for(const job of jobs.filter(j=>(!j.servicePeriodId||featureEnabled('subscriptions',identity.features))&&j.serviceApproval==='confirmed'&&(j.assignedTo===identity.user.id||j.assignedTos?.includes(identity.user.id))&&j.status!=='done').slice(0,8)){try{await serviceWork(job.id,true);}catch(e){if([401,403].includes(e.status))break;}}}
+const servicePrefetchFlights=new Map();
+export async function prefetchServiceWork(jobs){
+ if(!navigator.onLine||!identity||previewRole||!featureEnabled('jobs',identity.features)||!featureEnabled('offline',identity.features))return;
+ const who=jobCacheScope(session());
+ for(const job of jobs.filter(j=>(!j.servicePeriodId||featureEnabled('subscriptions',identity.features))&&j.serviceApproval==='confirmed'&&(j.assignedTo===identity.user.id||j.assignedTos?.includes(identity.user.id))&&j.status!=='done').slice(0,8)){
+  if(who!==jobCacheScope(session()))return;const old=await store('serviceWork','readonly',s=>s.get(workKey(job.id)));if(old?.snapshot&&old.accessRole===identity.user.role&&old.snapshot.job.version===job.version&&Date.now()-old.updatedAt<60000)continue;
+  const key=who+'|'+job.id+'|'+job.version;if(servicePrefetchFlights.has(key))continue;
+  const task=serviceWork(job.id,true);servicePrefetchFlights.set(key,task);try{await task;}catch(e){if([401,403].includes(e.status))break;}finally{if(servicePrefetchFlights.get(key)===task)servicePrefetchFlights.delete(key);}
+ }
+}
 export async function saveServiceWork(jobId,value,photos=[]){
  checkOfflineWrite();if(!identity?.permissions.write)throw new Error('Pro zápis protokolu potřebujete oprávnění pracovníka.');const key=workKey(jobId),actor=identity.user.id,role=identity.user.role;photos=await packLocalPhotos(photos);if(identity?.user.id!==actor||identity?.user.role!==role)throw Error('Přihlášení se změnilo.');
  await changeServiceWork(key,old=>{if(!old?.snapshot)throw new Error('Nejdříve načtěte návštěvu s internetem.');const ids=value.report?.photoIds||[],kept=(old.photos||[]).filter(p=>ids.includes(p.id)),payload={...value,version:old.pending?old.payload.version:value.version,operationId:crypto.randomUUID()};return {...old,payload,photos:[...kept,...photos.filter(p=>!kept.some(k=>k.id===p.id))],pending:true,mutationId:payload.operationId,error:'',blocked:false,conflict:false,updatedAt:Date.now(),ownerId:actor};});
