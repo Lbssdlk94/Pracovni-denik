@@ -11,3 +11,12 @@ export function travelSmsLink(number,text,device=globalThis.navigator){
 export function travelArrivalLabel(job){
  return job.status==='on_way'&&job.arrivalTime?'Předpokládaný příjezd '+job.arrivalTime+' · '+(job.arrivalDate||'').split('-').reverse().join('. '):'';
 }
+
+// Suggest the next explicit action; never change a job without confirmation.
+export function jobProgressAction(job,{canWrite=false,travelEnabled=true}={}){
+ if(!canWrite||job.serviceApproval!=='confirmed')return null;
+ if(job.status==='planned'&&travelEnabled)return {kind:'departure',label:'Jsem na cestě',icon:'navigate'};
+ if(job.status==='on_way')return {kind:'status',status:'in_progress',label:'Probíhá',icon:'clock'};
+ if(job.status==='in_progress')return {kind:'status',status:'done',label:'Hotovo',icon:'check'};
+ return null;
+}

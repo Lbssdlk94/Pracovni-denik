@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {api} from '../worker/api.js';
 import {environment,people,request} from './fixtures.mjs';
 import {subToday,subAddDays} from '../web/subscription-model.js';
-import {travelMessage,travelSmsLink} from '../web/job-travel.js';
+import {travelMessage,travelSmsLink,jobProgressAction} from '../web/job-travel.js';
 const ctx={waitUntil:p=>p.catch(()=>{})},call=(e,path,p=people.owner,method='GET',body)=>api(request(path,p,method,body),e,ctx);
 async function good(r){assert.equal(r.status,200,await r.clone().text());return r.json();}
 async function setup(){const e=environment();await good(await call(e,'/api/me'));for(const role of ['worker','reader','admin']){await good(await call(e,'/api/invitations',people.owner,'POST',{email:people[role].email,role}));await good(await call(e,'/api/me',people[role]));}await good(await call(e,'/api/jobs/travel',people.owner,'PUT',{version:0,title:'Servis zahrady',address:'Zahradní 1',assignedTo:people.worker.id,assignedTos:[people.worker.id,people.reader.id],status:'planned'}));return e;}
@@ -34,4 +34,17 @@ test('SMS drafts encode exact arrival, validate a single number and support iPho
  assert.equal(travelSmsLink('+420 777 123 456',message,{userAgent:'iPhone'}),'sms:+420777123456&body='+encodeURIComponent(message));
  assert.equal(travelSmsLink('777123456',message,{userAgent:'Android'}),'sms:777123456?body='+encodeURIComponent(message));
  for(const number of ['javascript:alert(1)','+420777123456,+420888123456','123',''])assert.equal(travelSmsLink(number,message),null);
+});
+
+test('Primary action follows saved work state without automatically advancing it',()=>{
+ const job={serviceApproval:'confirmed',status:'planned'},opts={canWrite:true};
+ assert.deepEqual(jobProgressAction(job,opts),{kind:'departure',label:'Jsem na cestě',icon:'navigate'});
+ assert.equal(job.status,'planned');
+ assert.deepEqual(jobProgressAction({...job,status:'on_way'},opts),{kind:'status',status:'in_progress',label:'Probíhá',icon:'clock'});
+ assert.deepEqual(jobProgressAction({...job,status:'in_progress'},opts),{kind:'status',status:'done',label:'Hotovo',icon:'check'});
+ for(const status of ['done','incomplete','unknown'])assert.equal(jobProgressAction({...job,status},opts),null);
+ for(const status of ['planned','on_way','in_progress']){assert.equal(jobProgressAction({...job,status},{canWrite:false}),null);assert.equal(jobProgressAction({...job,status,serviceApproval:'pending'},opts),null);}
+ assert.equal(jobProgressAction(job,{...opts,travelEnabled:false}),null);
+ assert.equal(jobProgressAction({...job,status:'in_progress'},{...opts,travelEnabled:false}).status,'done');
+ assert.equal(jobProgressAction({...job,status:'in_progress',servicePeriodId:'subscription'},opts).status,'done');
 });
