@@ -57,16 +57,32 @@ final class APIFixtureProtocol:URLProtocol {
         let parts=path.split(separator:"/").map(String.init)
         if parts.count>=3 && parts[1]=="jobs",let base=fixture["jobs"].array.first(where:{$0.id==parts[2]}){let key="/api/jobs/"+parts[2];var job=records[key] ?? base
             if parts.count==3{if method=="PUT"{let b=body();guard b["version"]==job["version"]else{return json(.object(["error":.s("Konflikt verze")]),409)};job=job.merged(b.object);job["version"] = .n(job["version"].int+1);records[key]=job};return json(.object(["job":job]))}
+            if parts[3]=="departure",method=="POST"{
+                let b=body();guard b["version"]==job["version"]else{return json(.object(["error":.s("Konflikt verze")]),409)}
+                guard b["arrivalTime"].string.range(of:"^([01][0-9]|2[0-3]):[0-5][0-9]$",options:.regularExpression) != nil else{return json(.object(["error":.s("Přesný čas je povinný")]),400)}
+                job=job.merged(["status":.s("on_way"),"arrivalTime":b["arrivalTime"],"arrivalDate":b["arrivalDate"],"version":.n(job["version"].int+1)]);records[key]=job;return json(.object(["job":job]))
+            }
+            if parts[3]=="photos"{
+                if parts.count==4{return json(records[path] ?? .object(["photos":.array([]),"uploadStorage":.s("app"),"canUpload":.bool(true)]))}
+                if parts.count==6,method=="PUT"{records[path] = .object(["ready":.bool(true)]);return json(.object(["ok":.bool(true)]))}
+                if parts.count==5,method=="PATCH"{records[path]=body();return json(.object(["ok":.bool(true)]))}
+            }
             if parts[3]=="diary"{
                 let prefix=key+"/diary/"
                 if parts.count==4{return json(.object(["job":job,"entries":.array(records.filter{$0.key.hasPrefix(prefix)}.values.sorted{$0["date"].string>$1["date"].string}),"nextCursor":.null]))}
                 let entryKey=prefix+parts[4],old=records[entryKey] ?? .null
+                if method=="DELETE"{
+                    let b=body();guard ["owner","administrator"].contains(me["user"]["role"].string)else{return json(.object(["error":.s("Zakázáno")]),403)}
+                    guard b["confirm"].string=="DELETE_JOB_DIARY_ENTRY",!old.isNull else{return json(.object(["error":.s("Potvrďte smazání")]),400)}
+                    guard b["version"]==old["version"]else{return json(.object(["error":.s("Zápis se změnil")]),409)}
+                    records.removeValue(forKey:entryKey);return json(.object(["ok":.bool(true)]))
+                }
                 if method=="PUT"{
                     let b=body()
                     if old["operationId"]==b["operationId"],!old.isNull{return json(.object(["job":job,"entry":old,"replayed":.bool(true)]))}
                     guard b["version"].int==old["version"].int else{return json(.object(["error":.s("Zápis se změnil"),"code":.s("diary_conflict")]),409)}
                     guard !b["photoIds"].array.isEmpty else{return json(.object(["error":.s("K dennímu zápisu přidejte alespoň jednu fotografii."),"code":.s("diary_photo_required")]),400)}
-                    records[entryKey]=b.merged(["id":.s(parts[4]),"version":.n(old["version"].int+1),"authorName":.s("Luboš – ukázka"),"createdBy":.s("fixture-owner"),"canEdit":.bool(true),"photos":.array([])])
+                    records[entryKey]=b.merged(["id":.s(parts[4]),"version":.n(old["version"].int+1),"authorName":.s("Luboš – ukázka"),"createdBy":.s("fixture-owner"),"canEdit":.bool(true),"canDelete":.bool(["owner","administrator"].contains(me["user"]["role"].string)),"photos":.array([])])
                 }
                 guard let row=records[entryKey]else{return json(.object(["error":.s("Zápis neexistuje")]),404)}
                 return json(.object(["job":job,"entry":row]))
@@ -80,7 +96,7 @@ final class APIFixtureProtocol:URLProtocol {
         if parts.count==4 && parts[1]=="gardens" && parts[3]=="services"{return json(.object(["services":.array([])]))}
         return json(.object(["error":.s("Testovací server nemá tuto cestu: "+path)]),501)
     }
-    static func fixtureData()->APIValue{var raw=(try? JSONDecoder().decode(APIValue.self,from:Data(contentsOf:Bundle.main.url(forResource:"NativeFixture",withExtension:"json")!))) ?? .null;let f=DateFormatter();f.timeZone=TimeZone(identifier:"Europe/Prague");f.dateFormat="yyyy-MM-dd";let today=f.string(from:Date());raw["jobs"] = .array(raw["jobs"].array.map{$0.merged(["dueDate":.s(today),"gardenId":.s("garden-1"),"customerId":.s("customer-1"),"assignedTos":.array([.s("fixture-owner")]),"serviceApproval":.s("confirmed")])});var features=raw["context"]["features"].object;for k in ["offline","materials","vehicles","fleetFuel","fleetDriverSelection","fleetConsumption","fleetExpenses","photoUploads","protocolPhotos","gardenHistory","service","plans","shafts","blowout","jobHandoffs"]{features[k] = .bool(true)};raw["context"]["features"] = .object(features);raw["context"]["workspace"]["workspaceId"] = .s("fixture-workspace");raw["context"]["workspace"]["role"]=raw["context"]["user"]["role"];return raw}
+    static func fixtureData()->APIValue{var raw=(try? JSONDecoder().decode(APIValue.self,from:Data(contentsOf:Bundle.main.url(forResource:"NativeFixture",withExtension:"json")!))) ?? .null;let f=DateFormatter();f.timeZone=TimeZone(identifier:"Europe/Prague");f.dateFormat="yyyy-MM-dd";let today=f.string(from:Date());raw["jobs"] = .array(raw["jobs"].array.map{$0.merged(["dueDate":.s(today),"gardenId":.s("garden-1"),"customerId":.s("customer-1"),"assignedTos":.array([.s("fixture-owner")]),"serviceApproval":.s("confirmed")])});var features=raw["context"]["features"].object;for k in ["offline","materials","vehicles","fleetFuel","fleetDriverSelection","fleetConsumption","fleetExpenses","photoUploads","protocolPhotos","drivePhotos","jobTravel","gardenHistory","service","plans","shafts","blowout","jobHandoffs"]{features[k] = .bool(true)};raw["context"]["features"] = .object(features);raw["context"]["workspace"]["workspaceId"] = .s("fixture-workspace");raw["context"]["workspace"]["role"]=raw["context"]["user"]["role"];return raw}
     static var customers:[APIValue]{[.object(["id":.s("customer-1"),"name":.s("Jan Kortus – ukázka"),"version":.n(1),"email":.s("test@example.invalid"),"phones":.array([.object(["id":.s("phone-1"),"number":.s("+420123456789"),"label":.s("Mobil")])]),"addresses":.array([.object(["id":.s("address-1"),"label":.s("Zahrada maminky"),"address":.s("Lipová 1488"),"city":.s("Blatná")])])])]}
     static var gardens:[APIValue]{[.object(["id":.s("garden-1"),"name":.s("Zahrada maminky"),"address":.s("Lipová 1488, Blatná"),"customerId":.s("customer-1"),"version":.n(1),"addressDetails":.object(["customerAddressId":.s("address-1"),"city":.s("Blatná")])]),.object(["id":.s("garden-2"),"name":.s("Zahrada u domu"),"address":.s("Nádražní 12, Písek"),"customerId":.s("customer-1"),"version":.n(1)])]}
     static var material:APIValue{.object(["id":.s("material-1"),"name":.s("Rotační tryska"),"sku":.s("RN 12"),"unit":.s("ks"),"currency":.s("CZK"),"priceMinor":.n(24500),"version":.n(1),"categoryId":.s("category-1"),"active":.bool(true)])}

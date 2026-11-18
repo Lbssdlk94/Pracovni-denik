@@ -140,6 +140,7 @@ struct APIEntityDetail: View {
             }.padding(18)
         }.background(DiaryStyle.background).navigationTitle(record.title).navigationBarTitleDisplayMode(.inline)
             .toolbar { if resource.editable(store) && !resource.fields.isEmpty && (resource.entity != .entries || store.manager || record["createdBy"].string==store.userID) { ToolbarItem(placement:.topBarTrailing){Button("Upravit"){store.route=APIRoute(resource:resource,value:record)}} } }
+            .safeAreaInset(edge:.bottom,spacing:0){if resource.entity == .jobs && !unavailable{APIJobActionBar(store:store,job:record)}}
             .task(id:store.scope+store.revision.uuidString){await load()}.refreshable{await store.resume();await load()}
             .sheet(item:$action) { APIActionEditor(store:store,action:$0) }
             .confirmationDialog("Opravná zakázka již existuje. Přesto založit další?",isPresented:$repairConfirm,titleVisibility:.visible){Button("Připravit další opravnou zakázku"){Task{await planRepair()}};Button("Zrušit",role:.cancel){}}

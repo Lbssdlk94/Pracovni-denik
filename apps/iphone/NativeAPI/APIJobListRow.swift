@@ -6,17 +6,18 @@ struct APIJobListRow:View {
     @State private var status=false
     @State private var departure=false
     @State private var report=false
-    var mayWork:Bool{store.writer && (store.manager || job["assignedTos"].array.contains(.s(store.userID)) || job["assignedTo"].string==store.userID)}
+    @State private var targetStatus:String?
+    var mayWork:Bool{APIJobWorkflow.canWork(job,userID:store.userID,writer:store.writer,manager:store.manager) && !store.isRolePreview}
     var body:some View{VStack(alignment:.leading,spacing:12){
         NavigationLink{detail}label:{APIRecordRow(entity:.jobs,value:job)}.accessibilityIdentifier("native-job-"+job.id)
         LazyVGrid(columns:[GridItem(.flexible()),GridItem(.flexible())],spacing:8){
             if let url=APIFormat.navigation(job["address"].string){Link(destination:url){action("Navigovat","location")}}else{NavigationLink{detail}label:{action("Místo návštěvy","mappin")}}
-            if mayWork{Button{status=true}label:{action("Změnit stav","arrow.triangle.2.circlepath")}}
-            if mayWork && store.enabled("jobTravel") && !["done","incomplete"].contains(job["status"].string){Button{departure=true}label:{action("Jsem na cestě","car")}}
+            if mayWork{Button{targetStatus=nil;status=true}label:{action("Změnit stav","arrow.triangle.2.circlepath")}}
+            if mayWork,let primary=APIJobWorkflow.primary(job,travelEnabled:store.enabled("jobTravel")){Button{if primary == .departure{departure=true}else{targetStatus=primary.targetStatus;status=true}}label:{action(primary.title,primary.symbol)}}
             else if mayWork{Button{report=true}label:{action("Servisní protokol","doc.text")}}
             NavigationLink{detail}label:{action("Podrobnosti","chevron.right")}
         }.buttonStyle(.bordered)
-    }.padding(.vertical,6).sheet(isPresented:$status){APIJobStatusEditor(store:store,job:job)}.sheet(isPresented:$departure){APIDepartureEditor(store:store,job:job)}.sheet(isPresented:$report){APIProtocolEditor(store:store,jobID:job.id)}}
+    }.padding(.vertical,6).sheet(isPresented:$status){APIJobStatusEditor(store:store,job:job,initialStatus:targetStatus)}.sheet(isPresented:$departure){APIDepartureEditor(store:store,job:job)}.sheet(isPresented:$report){APIProtocolEditor(store:store,jobID:job.id)}}
     private var detail:some View{APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:job)}
     private func action(_ title:String,_ symbol:String)->some View{Label(title,systemImage:symbol).font(.subheadline).frame(maxWidth:.infinity,minHeight:44).fixedSize(horizontal:false,vertical:true)}
 }

@@ -1,6 +1,8 @@
 # Pracovní deník pro iPhone a Apple Watch
 
-Verze **0.8.0 (9)** nahrazuje skrytý webový engine samostatným klientem SwiftUI. Telefon používá `URLSession` a současné REST API. Formuláře, validace, PDF, místní koncepty a synchronizační fronta jsou implementované ve Swiftu. Watch zůstává ve SwiftUI a komunikuje s telefonem přes WatchConnectivity. Server a společná databáze se nepřepisují do Swiftu.
+Nativní základ **0.8.0 (9)** nahrazuje skrytý webový engine samostatným klientem SwiftUI. Telefon používá `URLSession` a současné REST API. Formuláře, validace, PDF, místní koncepty a synchronizační fronta jsou implementované ve Swiftu. Watch zůstává ve SwiftUI a komunikuje s telefonem přes WatchConnectivity. Server a společná databáze se nepřepisují do Swiftu.
+
+Připravená aktualizace **0.8.1 (10)** sjednocuje postupové tlačítko zakázky, hlavní akce nad spodní navigací, nahrávání do úložiště aplikace bez Disku, miniatury, kompresi fotografií a mazání denních zápisů vlastníkem/administrátorem. [Změny a skutečný stav ověření](../../docs/IPHONE-FIELD-UPDATE-2026-11-18.md). Dokud neprojde aktuální sestavení Xcode, nejde o vydanou IPA.
 
 Role a moduly klient načítá při novém spuštění procesu a po výslovném přihlášení, změně firmy, oboru nebo hesla. Návrat z pozadí, obnovení pracovních dat, Apple Watch, uložení ani odeslání fronty už nepřidávají požadavek `/api/me`. Každý skutečný požadavek nadále autorizuje server. Chyba připojení nesmaže koncepty; odpověď 401 ukončí neplatnou relaci a ponechá neodeslanou práci zabezpečenou. [Změna a regresní testy](../../docs/IPHONE-SESSION-STARTUP-2026-11-07.md).
 

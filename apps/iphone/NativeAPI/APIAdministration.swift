@@ -26,19 +26,36 @@ struct APIRecordLinksView:View {
 enum APIJobPhotoUpload {
     @MainActor static func upload(store:APIStore,path:String,data:Data,type:String,name:String,id:String,category:String="during",note:String="")async throws{
         try store.requireLiveRole()
+        let scope=store.scope
+        guard store.authenticated,store.writer else{throw APIError.local("Nejdříve se přihlaste účtem s oprávněním zápisu.")}
         let metadata:APIValue = .object(["id":.s(id),"category":.s(category),"note":.s(note),"originalName":.s(name),"mimeType":.s(type),"size":.n(data.count),"sha256":.s(SHA256.hash(data:data).map{String(format:"%02x",$0)}.joined())])
-        guard store.enabled("googleDrive"),store.enabled("drivePhotos"),store.enabled("photoUploads")else{throw APIError.local("Nahrávání fotografií není povolené.")}
-        if let vault=store.vault,store.enabled("offline"),vault.offlineAllowed(){try vault.enqueue(APIMutation(id:id,path:path,method:"DRIVE_PHOTO",body:metadata,bytes:data,contentType:type,headers:[:],scope:store.scope,dependsOn:[],draftKey:nil));store.updateOutbox();if store.online{await store.sync()}}
+        guard store.enabled("drivePhotos"),store.enabled("photoUploads")else{throw APIError.local("Nahrávání fotografií není povolené.")}
+        if let vault=store.vault,store.enabled("offline"),vault.offlineAllowed(){try vault.enqueue(APIMutation(id:id,path:path,method:"DRIVE_PHOTO",body:metadata,bytes:data,contentType:type,headers:[:],scope:store.scope,dependsOn:[],draftKey:nil));store.updateOutbox();if store.online{await store.sync()};guard store.scope==scope,store.authenticated else{throw APIError.local("Účet se změnil. Fotografie zůstává v původním účtu.")};if let pending=store.outbox.first(where:{$0.id==id}),pending.state != "pending"{throw APIError(status:409,code:pending.state,message:pending.error)}}
         else{try await send(store:store,path:path,data:data,metadata:metadata)}
     }
     @MainActor static func send(store:APIStore,path:String,data:Data,metadata:APIValue)async throws{
-        var progress=try await store.transport.request(path,method:"POST",body:metadata)
+        let transport=store.transport,scope=store.scope
+        func current()throws{guard store.authenticated,store.scope==scope,store.transport===transport else{throw APIError.local("Účet nebo oprávnění se změnily. Fotografie zůstává v původním účtu.")};try store.requireLiveRole()}
+        try current()
+        let gallery=try await transport.request(path);try current()
+        if gallery["uploadStorage"].string=="app"{
+            guard data.count<=25*1024*1024 else{throw APIError.local("Fotografie přesahuje limit úložiště aplikace.")}
+            _ = try await transport.bytes(path+"/"+metadata.id+"/content?storage=app",method:"PUT",data:data,type:metadata["mimeType"].string,headers:["x-file-name":metadata["originalName"].string.addingPercentEncoding(withAllowedCharacters:.urlPathAllowed) ?? "Fotografie.jpg"])
+            try current()
+            _ = try await transport.request(path+"/"+metadata.id,method:"PATCH",body:.object(["version":.n(1),"category":metadata["category"],"note":metadata["note"]]));try current()
+            if let image=APIImage.thumbnail(data,maxPixels:480),let thumbnail=image.jpegData(compressionQuality:0.72),thumbnail.count<=256*1024{
+                _ = try await transport.bytes(path+"/"+metadata.id+"/thumbnail",method:"PUT",data:thumbnail,type:"image/jpeg");try current()
+            }
+            return
+        }
+        guard store.enabled("googleDrive")else{throw APIError.local("Server nenabízí úložiště aplikace a Google Disk je vypnutý. Fotografie zůstává v neodeslaných změnách.")}
+        var progress=try await transport.request(path,method:"POST",body:metadata);try current()
         while !progress["complete"].bool{
-            try Task.checkCancellation();let offset=progress["offset"].int
+            try Task.checkCancellation();try current();let offset=progress["offset"].int
             guard offset>=0,offset<data.count else{throw APIError.local("Server vrátil neplatný stav nahrávání.")}
             let size=progress["chunkSize"].int>0 ? min(2*1024*1024,progress["chunkSize"].int) : 2*1024*1024
             let chunk=data.subdata(in:offset..<min(data.count,offset+size));let hash=SHA256.hash(data:chunk).map{String(format:"%02x",$0)}.joined()
-            let response=try await store.transport.bytes(path+"/"+metadata.id+"/content?offset=\(offset)",method:"PUT",data:chunk,type:"application/octet-stream",headers:["x-chunk-sha256":hash]);progress=try JSONDecoder().decode(APIValue.self,from:response.data)
+            let response=try await transport.bytes(path+"/"+metadata.id+"/content?offset=\(offset)",method:"PUT",data:chunk,type:"application/octet-stream",headers:["x-chunk-sha256":hash]);try current();progress=try JSONDecoder().decode(APIValue.self,from:response.data)
             guard progress["complete"].bool || progress["offset"].int>offset else{throw APIError.local("Nahrávání se zastavilo. Záznam zůstane pro bezpečné opakování.")}
         }
     }

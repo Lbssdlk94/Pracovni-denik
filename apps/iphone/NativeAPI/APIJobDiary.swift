@@ -15,33 +15,56 @@ struct APIJobDiary:View {
     @State private var editing:APIValue?
     @State private var editorOpen=false
     @State private var nextCursor=""
+    @State private var requestID=UUID()
+    @State private var removing:APIValue = .null
+    @State private var confirmRemoval=false
+    @State private var deleting=false
+    @State private var deleteOperation=UUID().uuidString
     var path:String{"/api/jobs/"+job.id+"/diary"}
     var entries:[APIValue]{
-        var rows=snapshot["entries"].array
-        for op in store.outbox where op.path.hasPrefix(path+"/"){
-            guard let body=op.body else{continue};let id=String(op.path.split(separator:"/").last ?? "")
-            rows.removeAll{$0.id==id};rows.append(body.merged(["id":.s(id),"pending":.bool(true),"syncState":.s(op.state),"authorName":.s(store.me["user"]["name"].string),"canEdit":.bool(false)]))
+        let pending=store.outbox.filter{$0.method=="PUT" && $0.path.hasPrefix(path+"/")}.compactMap{op -> APIValue? in
+            guard let body=op.body else{return nil}
+            let id=String(op.path.split(separator:"/").last ?? "")
+            return body.merged(["id":.s(id),"pending":.bool(true),"syncState":.s(op.state),"authorName":.s(store.me["user"]["name"].string),"canEdit":.bool(false)])
         }
-        return rows.sorted{($0["date"].string,$0.id)>($1["date"].string,$1.id)}
+        return APIJobWorkflow.diaryEntries(snapshot["entries"].array,pending:pending)
     }
+    var days:[String]{Array(Set(entries.map{$0["date"].string})).sorted(by:>)}
     var body:some View{List{
-        Section{Text(job["title"].string).font(.headline);Text("Denní postup prací. Zápis nemění stav zakázky ani servisní protokol.").font(.footnote).foregroundStyle(.secondary)
-            if store.writer && !job["cancelled"].bool{Button{editing=nil;editorOpen=true}label:{Label("Přidat dnešní zápis",systemImage:"plus")}.frame(minHeight:44)}
+        Section{
+            Text("Denní postup prací. Zápis nemění stav zakázky ani servisní protokol.").font(.footnote).foregroundStyle(.secondary)
+            if APIJobWorkflow.canWork(job,userID:store.userID,writer:store.writer,manager:store.manager),!store.isRolePreview{Button{editing=nil;editorOpen=true}label:{Label("Přidat dnešní zápis",systemImage:"plus")}.frame(minHeight:48)}
         }
-        ForEach(entries,id:\.id){entry in DisclosureGroup{
-            Text(entry["work"].string)
-            ForEach(["material","notes","nextStep"],id:\.self){key in if !entry[key].string.isEmpty{Text(key=="material" ? "Materiál" : key=="notes" ? "Komplikace a poznámka" : "Další krok").font(.caption.bold());Text(entry[key].string)}}
-            ForEach(entry["photos"].array,id:\.id){photo in APIAuthenticatedImage(store:store,path:photo["url"].string)}
-            if entry["canEdit"].bool && store.writer{Button("Upravit zápis"){editing=entry;editorOpen=true}.frame(minHeight:44)}
-            if entry["pending"].bool{Text("Čeká na odeslání · "+entry["syncState"].string).foregroundStyle(DiaryStyle.warning);Text("Případný konflikt vyřešíte ve Více → Synchronizace.").font(.footnote)}
-        }label:{VStack(alignment:.leading,spacing:5){Text(entry["date"].string+" · "+entry["authorName"].string).font(.headline);Text(entry["work"].string).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)}}}
+        ForEach(days,id:\.self){day in
+            Section(DiaryDate.localized(day)){
+                ForEach(entries.filter{$0["date"].string==day},id:\.id){entry in
+                    DisclosureGroup{
+                        Text(entry["work"].string).textSelection(.enabled)
+                        ForEach(["material","notes","nextStep"],id:\.self){key in if !entry[key].string.isEmpty{Text(key=="material" ? "Materiál" : key=="notes" ? "Komplikace a poznámka" : "Další krok").font(.caption.bold());Text(entry[key].string)}}
+                        if !entry["photos"].array.isEmpty{APIPhotoGrid(store:store,photos:entry["photos"].array)}
+                        if entry["canEdit"].bool && store.writer && !store.isRolePreview{Button("Upravit zápis"){editing=entry;editorOpen=true}.frame(minHeight:44)}
+                        if APIJobWorkflow.canDeleteDiary(entry,role:store.role,preview:store.isRolePreview){Button("Smazat zápis",role:.destructive){removing=entry;deleteOperation=UUID().uuidString;confirmRemoval=true}.frame(minHeight:44).disabled(deleting)}
+                        if entry["pending"].bool{Text("Čeká na odeslání · "+entry["syncState"].string).foregroundStyle(DiaryStyle.warning);Text("Případný konflikt vyřešíte ve Více → Synchronizace.").font(.footnote)}
+                    }label:{VStack(alignment:.leading,spacing:5){HStack{Text(entry["authorName"].string).font(.headline);Spacer();if !entry["photoIds"].array.isEmpty{Label(String(entry["photoIds"].array.count),systemImage:"camera").font(.caption)}};Text(entry["work"].string).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)}}
+                }
+            }
+        }
         if entries.isEmpty && !snapshot.isNull{Text("Zatím žádný denní zápis.").foregroundStyle(.secondary)}
         if !nextCursor.isEmpty{Button("Starší zápisy"){Task{await load(more:true)}}}
         if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}
-    }.navigationTitle("Deník realizace").navigationBarTitleDisplayMode(.inline).task(id:store.revision){await load()}.refreshable{await store.resume();await load()}
+    }.navigationTitle("Deník realizace").navigationBarTitleDisplayMode(.inline).task(id:store.scope+store.revision.uuidString){await load()}.refreshable{await store.resume();await load()}
         .sheet(isPresented:$editorOpen){APIJobDiaryEditor(store:store,job:job,initial:editing ?? .null)}
+        .confirmationDialog("Smazat denní zápis? Fotografie a servisní protokol zůstanou zachované.",isPresented:$confirmRemoval,titleVisibility:.visible){Button("Smazat zápis",role:.destructive){Task{await remove()}};Button("Zrušit",role:.cancel){}}
     }
-    func load(more:Bool=false)async{do{var c=URLComponents(string:path)!;if more{c.queryItems=[URLQueryItem(name:"cursor",value:nextCursor)]};let result=try await store.get(c.string!);if more{snapshot["entries"] = .array(snapshot["entries"].array+result["entries"].array.filter{row in !snapshot["entries"].array.contains{$0.id==row.id}})}else{snapshot=result};nextCursor=result["nextCursor"].string;problem=nil}catch{problem=error.localizedDescription}}
+    func remove()async{
+        guard !deleting,APIJobWorkflow.canDeleteDiary(removing,role:store.role,preview:store.isRolePreview) else{return}
+        deleting=true;defer{deleting=false}
+        do{_ = try await store.write(path+"/"+removing.id,method:"DELETE",body:APIJobWorkflow.diaryDeleteBody(removing,operationID:deleteOperation));snapshot["entries"] = .array(snapshot["entries"].array.filter{$0.id != removing.id});await load()}catch{problem=error.localizedDescription}
+    }
+    func load(more:Bool=false)async{
+        let scope=store.scope,ticket=UUID();requestID=ticket
+        do{var c=URLComponents(string:path)!;if more{c.queryItems=[URLQueryItem(name:"cursor",value:nextCursor)]};let result=try await store.get(c.string!);guard scope==store.scope,requestID==ticket else{return};if more{snapshot["entries"] = .array(APIJobWorkflow.diaryEntries(snapshot["entries"].array,pending:result["entries"].array))}else{snapshot=result};nextCursor=result["nextCursor"].string;problem=nil}catch{if scope==store.scope,requestID==ticket{problem=error.localizedDescription}}
+    }
 }
 struct APIJobDiaryEditor:View {
     @ObservedObject var store:APIStore
