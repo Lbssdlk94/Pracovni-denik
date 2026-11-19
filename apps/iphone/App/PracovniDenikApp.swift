@@ -14,7 +14,15 @@ struct PracovniDenikApp:App {
         #endif
         _store=StateObject(wrappedValue:APIStore(fixture:fixture))
     }
-    var body:some Scene{WindowGroup{APIRoot(store:store).diaryBubble()}}
+    var body:some Scene{WindowGroup{
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--native-job-detail-preview") {
+            APIJobDetailPreviewHost(kind:ProcessInfo.processInfo.arguments.contains("--preview-travel") ? "travel" : ProcessInfo.processInfo.arguments.contains("--preview-paused") ? "break" : "work",appearance:ProcessInfo.processInfo.arguments.contains("--preview-dark") ? .dark : .light,largeText:ProcessInfo.processInfo.arguments.contains("--preview-large-text"),offline:ProcessInfo.processInfo.arguments.contains("--preview-offline"))
+        }else{APIRoot(store:store).diaryBubble()}
+        #else
+        APIRoot(store:store).diaryBubble()
+        #endif
+    }}
 }
 struct FileShare:UIViewControllerRepresentable {
     let url:URL

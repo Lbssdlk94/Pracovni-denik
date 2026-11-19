@@ -3,43 +3,51 @@ import SwiftUI
 struct APIJobActionBar: View {
     @ObservedObject var store: APIStore
     let job: APIValue
+    var snapshot:APIValue = .null
     @State private var departure = false
     @State private var statusRequest:APIJobStatusRequest?
     @State private var report = false
-    @State private var time=false
-    private var mayWork: Bool { APIJobWorkflow.canWork(job, userID:store.userID, writer:store.writer, manager:store.manager) && !store.isRolePreview }
-    private var primary: APIJobPrimaryAction? { APIJobWorkflow.primary(job, travelEnabled:store.enabled("jobTravel")) }
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) { actions }
-            VStack(spacing: 8) { actions }
-        }
-        .font(.subheadline.weight(.semibold)).padding(12)
-        .frame(maxWidth:.infinity).background(.regularMaterial)
-        .sheet(isPresented:$departure) { APIDepartureEditor(store:store,job:job) }
-        .sheet(item:$statusRequest) { request in APIJobStatusEditor(store:store,job:job,initialStatus:request.targetStatus) }
-        .sheet(isPresented:$time){NavigationStack{APIJobTimeView(store:store,job:job,initialAction:"stop")}}
-        .sheet(isPresented:$report) { APIProtocolEditor(store:store,jobID:job.id) }
+    @State private var timeAction:APIWorkTimeAction?
+    @Environment(\.dynamicTypeSize) private var typeSize
+    private var projected:APIValue{APIWorkTimeLogic.project(snapshot,store:store)}
+    private var mayWork:Bool{APIJobWorkflow.canWork(job,userID:store.userID,writer:store.writer,manager:store.manager) && !store.isRolePreview}
+    private var personal:APIJobDetailAction? {
+        guard store.enabled("attendance") else{return nil}
+        return APIJobDetailAction.resolve(job:job,states:projected["states"].array,userID:store.userID,travelEnabled:store.enabled("jobTravel"))
     }
-    @ViewBuilder private var actions: some View {
-        if mayWork, let primary {
+    private var canRecord:Bool {
+        mayWork && snapshot["canWrite"].bool && projected["states"].array.contains{$0["userId"].string==store.userID && $0["assigned"].bool}
+    }
+    var body: some View {
+        Group {
+            if typeSize.isAccessibilitySize{VStack(spacing:8){actions}}
+            else{HStack(spacing:8){actions}}
+        }
+        .padding(8).frame(maxWidth:600).diaryGlass()
+        .padding(.horizontal,12).padding(.top,8).padding(.bottom,6)
+        .frame(maxWidth:.infinity)
+        .sheet(isPresented:$departure){APIDepartureEditor(store:store,job:job)}
+        .sheet(item:$statusRequest){request in APIJobStatusEditor(store:store,job:job,initialStatus:request.targetStatus)}
+        .sheet(item:$timeAction){request in APIWorkTimeActionEditor(store:store,job:job,snapshot:snapshot,kind:request.kind,selected:[store.userID])}
+        .sheet(isPresented:$report){APIProtocolEditor(store:store,jobID:job.id)}
+    }
+    @ViewBuilder private var actions:some View {
+        if let personal,(canRecord || personal == .report) {
             Button {
-                if primary == .stopWork{time=true}
-                else if primary == .departure { departure=true }
-                else { statusRequest=APIJobStatusRequest(targetStatus:primary.targetStatus) }
-            } label: {
-                Label(primary.title,systemImage:primary.symbol).frame(maxWidth:.infinity)
-            }.diaryBubble(.primary).accessibilityIdentifier("job-primary-action").accessibilityLabel(primary.title)
+                if let kind=personal.timeKind{timeAction=APIWorkTimeAction(kind:kind)}else{report=true}
+            }label:{Label(personal.title,systemImage:personal.symbol).frame(maxWidth:.infinity).fixedSize(horizontal:false,vertical:true)}
+                .diaryBubble(.primary).accessibilityIdentifier("job-primary-action").accessibilityLabel(personal.title)
+        }else if !store.enabled("attendance"),mayWork,let legacy=APIJobWorkflow.primary(job,travelEnabled:store.enabled("jobTravel")) {
+            // Installations without attendance keep their established global-status workflow.
+            Button {
+                if legacy == .departure{departure=true}else{statusRequest=APIJobStatusRequest(targetStatus:legacy.targetStatus)}
+            }label:{Label(legacy == .complete ? "Dokončit zakázku" : legacy.title,systemImage:legacy.symbol).frame(maxWidth:.infinity)}
+                .diaryBubble(.primary).accessibilityIdentifier("job-primary-action")
+        }else if store.enabled("attendance"),mayWork,snapshot.isNull {
+            Label("Pracovní stav se načítá",systemImage:"clock").font(.footnote).foregroundStyle(.secondary).frame(maxWidth:.infinity,minHeight:44)
         }
-        if store.enabled("jobs") {
-            Button { report=true } label: {
-                Label("Protokol",systemImage:"doc.text").frame(maxWidth:.infinity)
-            }.diaryBubble().accessibilityLabel("Servisní protokol")
-        }
-        if mayWork {
-            Button { statusRequest=APIJobStatusRequest(targetStatus:nil) } label: {
-                Image(systemName:"checkmark")
-            }.diaryBubble(.icon).accessibilityLabel("Změnit stav")
+        if store.enabled("jobs"),personal != .report {
+            Button{report=true}label:{Image(systemName:"doc.text").frame(minWidth:28,minHeight:28)}.diaryBubble(.icon).accessibilityLabel("Servisní protokol")
         }
     }
 }

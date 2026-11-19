@@ -75,11 +75,19 @@ final class APIFixtureProtocol:URLProtocol {
                 if parts.count==5,parts[4]=="actions",method=="POST"{
                     let b=body(),operationKey="time-operation:"+b["operationId"].string
                     if records[operationKey] != nil{return json(time.merged(["replayed":.bool(true)]))}
-                    var state=time["states"].array[0],intervals=time["intervals"].array
-                    guard b["workers"].array.first?["version"]==state["version"]else{return json(.object(["error":.s("Čas se změnil"),"code":.s("job_time_conflict")]),409)}
-                    if !state["active"].isNull{intervals=intervals.map{row in row.id==state["active"].id ? row.merged(["endAt":b["at"]]) : row}}
-                    if b["action"].string=="stop"{state["active"] = .null}else{let row=APIValue.object(["id":.s(b["operationId"].string+"_0"),"jobId":.s(parts[2]),"userId":userID,"userName":name,"kind":b["action"],"startAt":b["at"],"endAt":.null,"version":.n(1),"approval":.s("pending")]);intervals.append(row);state["active"]=row}
-                    state["version"] = .n(state["version"].int+1);time["states"] = .array([state]);time["intervals"] = .array(intervals);records[timeKey]=time;records[operationKey] = .bool(true)
+                    let workers=b["workers"].array
+                    var states=time["states"].array,intervals=time["intervals"].array
+                    guard !workers.isEmpty,workers.allSatisfy({worker in states.contains{$0["userId"]==worker["userId"] && $0["version"]==worker["version"]}}) else{return json(.object(["error":.s("Čas se změnil"),"code":.s("job_time_conflict")]),409)}
+                    for worker in workers {
+                        let index=states.firstIndex{$0["userId"]==worker["userId"]}!
+                        var state=states[index]
+                        if !state["active"].isNull{intervals=intervals.map{row in row.id==state["active"].id ? row.merged(["endAt":b["at"]]) : row}}
+                        if b["action"].string=="stop"{state["active"] = .null}else{
+                            let row=APIValue.object(["id":.s(b["operationId"].string+"_"+String(index)),"jobId":.s(parts[2]),"userId":state["userId"],"userName":state["name"],"kind":b["action"],"startAt":b["at"],"endAt":.null,"version":.n(1),"approval":.s("pending")]);intervals.append(row);state["active"]=row
+                        }
+                        state["version"] = .n(state["version"].int+1);states[index]=state
+                    }
+                    time["states"] = .array(states);time["intervals"] = .array(intervals);records[timeKey]=time;records[operationKey] = .bool(true)
                 }
                 return json(time)
             }

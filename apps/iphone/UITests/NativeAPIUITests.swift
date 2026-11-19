@@ -4,12 +4,12 @@ final class NativeAPIUITests:XCTestCase {
     func launch()->XCUIApplication{let app=XCUIApplication();app.launchArguments=["--native-api-testing"];app.launch();XCTAssertTrue(app.staticTexts["native-overview-title"].waitForExistence(timeout:15));XCTAssertEqual(app.webViews.count,0,"Native client must never embed a web application");return app}
     func capture(_ name:String,_ app:XCUIApplication){let image=XCTAttachment(screenshot:app.screenshot());image.name=name;image.lifetime = .keepAlways;add(image)}
     func testOverviewAndPersistentFiveTabs(){let app=launch();for tab in ["Přehled","Zakázky","Docházka","Zákazníci","Více"]{XCTAssertTrue(app.tabBars.buttons[tab].exists)};capture("prehled-api",app)}
-    func testJobTimeIsNativeAndKeepsFiveTabs(){
+    func testJobTimeIsNativeAndKeepsDetailFocus(){
         let app=launch();app.tabBars.buttons["Zakázky"].tap();let job=app.buttons["native-job-fixture-progress"];XCTAssertTrue(job.waitForExistence(timeout:10));job.tap()
         let time=app.buttons["Pracovní doba"];if !time.isHittable{app.swipeUp()};XCTAssertTrue(time.waitForExistence(timeout:10));time.tap()
-        XCTAssertTrue(app.staticTexts["Člověkohodiny · doprava a přestávky jsou zvlášť."].waitForExistence(timeout:10));XCTAssertTrue(app.tabBars.buttons["Zákazníci"].exists);XCTAssertEqual(app.webViews.count,0);capture("pracovni-doba-api",app)
+        XCTAssertTrue(app.staticTexts["Člověkohodiny · doprava a přestávky jsou zvlášť."].waitForExistence(timeout:10));XCTAssertFalse(app.tabBars.buttons["Zákazníci"].exists);XCTAssertEqual(app.webViews.count,0);capture("pracovni-doba-api",app)
     }
-    func testJobsAndNativeDetail(){let app=launch();app.tabBars.buttons["Zakázky"].tap();let job=app.buttons["native-job-fixture-progress"];XCTAssertTrue(job.waitForExistence(timeout:10));job.tap();XCTAssertTrue(app.buttons["Servisní protokol"].waitForExistence(timeout:10));XCTAssertTrue(app.tabBars.buttons["Přehled"].exists);XCTAssertEqual(app.webViews.count,0);capture("detail-api",app)}
+    func testJobsAndNativeDetail(){let app=launch();app.tabBars.buttons["Zakázky"].tap();let job=app.buttons["native-job-fixture-progress"];XCTAssertTrue(job.waitForExistence(timeout:10));job.tap();XCTAssertTrue(app.buttons["Servisní protokol"].waitForExistence(timeout:10));XCTAssertFalse(app.tabBars.buttons["Přehled"].exists);XCTAssertEqual(app.webViews.count,0);capture("detail-api",app)}
     func testCompletionEstimateUsesNativeSheetAndStaysInJobDetail(){
         continueAfterFailure=false
         let app=launch();app.tabBars.buttons["Zakázky"].tap();let job=app.buttons["native-job-fixture-progress"];XCTAssertTrue(job.waitForExistence(timeout:10));job.tap()
@@ -28,13 +28,13 @@ final class NativeAPIUITests:XCTestCase {
         XCTAssertTrue(app.navigationBars["Dokončení zakázky"].waitForExistence(timeout:10),app.debugDescription)
         let slider=app.sliders["Odhad dokončení v procentech"];XCTAssertTrue(slider.waitForExistence(timeout:10));slider.adjust(toNormalizedSliderPosition:0.3)
         capture("odhad-dokonceni-api",app);app.buttons["Uložit odhad"].tap()
-        XCTAssertTrue(app.buttons["Upravit odhad"].waitForExistence(timeout:10));XCTAssertTrue(app.tabBars.buttons["Zákazníci"].exists);XCTAssertTrue(app.buttons["Servisní protokol"].exists);XCTAssertEqual(app.webViews.count,0)
+        XCTAssertTrue(app.buttons["Upravit odhad"].waitForExistence(timeout:10));XCTAssertFalse(app.tabBars.buttons["Zákazníci"].exists);XCTAssertTrue(app.buttons["Servisní protokol"].exists);XCTAssertEqual(app.webViews.count,0)
         capture("detail-s-odhadem-api",app)
     }
     func testCustomerContactAndTwoGardens(){let app=launch();app.tabBars.buttons["Zákazníci"].tap();let row=app.staticTexts["Jan Kortus – ukázka"].firstMatch;XCTAssertTrue(row.waitForExistence(timeout:10));capture("zakaznici-api",app);row.tap();XCTAssertTrue(app.staticTexts["Zahrady"].waitForExistence(timeout:10));XCTAssertEqual(app.webViews.count,0);capture("zakaznik-detail-api",app)}
     func testMoreAndSettingsProgressiveDisclosure(){let app=launch();app.tabBars.buttons["Více"].tap();XCTAssertTrue(app.buttons["Nastavení"].waitForExistence(timeout:10));capture("vice-api",app);app.buttons["Nastavení"].tap();XCTAssertTrue(app.staticTexts["Moje přihlášení"].waitForExistence(timeout:10));XCTAssertEqual(app.webViews.count,0);capture("nastaveni-api",app)}
     func testNewJobCanCloseWithoutCreatingRecord(){let app=launch();app.tabBars.buttons["Zakázky"].tap();let add=app.buttons["Nová zakázka"];XCTAssertTrue(add.waitForExistence(timeout:10));add.tap();XCTAssertTrue(app.buttons["Zavřít"].waitForExistence(timeout:10));app.buttons["Zavřít"].tap();app.buttons["Zahodit koncept"].tap();XCTAssertTrue(app.buttons["Nová zakázka"].waitForExistence(timeout:10));XCTAssertEqual(app.webViews.count,0)}
-    func testProtocolFormIsNativeAndKeepsTabNavigationUnderSheet(){let app=launch();app.tabBars.buttons["Zakázky"].tap();let job=app.buttons["native-job-fixture-progress"];XCTAssertTrue(job.waitForExistence(timeout:10));job.tap();app.buttons["Servisní protokol"].tap();let work=app.textViews["Provedené práce"];XCTAssertTrue(work.waitForExistence(timeout:10));work.tap();work.typeText("Kontrola a seřízení systému.");XCTAssertEqual(app.webViews.count,0);capture("protokol-api",app);app.buttons["Zavřít"].tap();XCTAssertTrue(app.tabBars.buttons["Zakázky"].waitForExistence(timeout:10))}
+    func testProtocolFormIsNativeAndReturnsToFocusedDetail(){let app=launch();app.tabBars.buttons["Zakázky"].tap();let job=app.buttons["native-job-fixture-progress"];XCTAssertTrue(job.waitForExistence(timeout:10));job.tap();app.buttons["Servisní protokol"].tap();let work=app.textViews["Provedené práce"];XCTAssertTrue(work.waitForExistence(timeout:10));work.tap();work.typeText("Kontrola a seřízení systému.");XCTAssertEqual(app.webViews.count,0);capture("protokol-api",app);app.buttons["Zavřít"].tap();XCTAssertTrue(app.buttons["Servisní protokol"].waitForExistence(timeout:10));XCTAssertFalse(app.tabBars.buttons["Zakázky"].exists)}
     func testAttendanceDaysAndMoreNativeModules(){let app=launch();app.tabBars.buttons["Docházka"].tap();XCTAssertTrue(app.staticTexts["Pracovní dny"].waitForExistence(timeout:10));capture("dochazka-api",app);app.tabBars.buttons["Více"].tap();let agenda=app.buttons["Firemní agenda"];XCTAssertTrue(agenda.waitForExistence(timeout:10));agenda.tap();app.buttons["Materiál"].tap();XCTAssertTrue(app.staticTexts["Rotační tryska"].waitForExistence(timeout:10));XCTAssertEqual(app.webViews.count,0);capture("material-api",app)}
 
     func testQuickDepartureRequiresExactTimeAndCanBeCancelled(){
@@ -65,27 +65,22 @@ final class NativeAPIUITests:XCTestCase {
         app.buttons["Zpět k mojí roli"].firstMatch.tap();XCTAssertTrue(app.staticTexts["native-overview-title"].waitForExistence(timeout:10));XCTAssertFalse(app.staticTexts["Náhled: Čtenář"].exists)
     }
 
-    func testPrimaryCompletionStaysInDetailAndKeepsBottomNavigation(){
+    func testPersonalDepartureOpensInsideDetailWithoutCompletingJob(){
         let app=launch();app.tabBars.buttons["Zakázky"].tap()
         let job=app.buttons["native-job-fixture-progress"];XCTAssertTrue(job.waitForExistence(timeout:10));job.tap()
-        let primary=app.buttons["job-primary-action"];XCTAssertTrue(primary.waitForExistence(timeout:10));XCTAssertEqual(primary.label,"Hotovo")
-        primary.tap();XCTAssertTrue(app.navigationBars["Změnit stav"].waitForExistence(timeout:10))
-        XCTAssertEqual(app.buttons["Potvrdit změnu"].value as? String,"Hotovo",app.debugDescription)
-        app.buttons["Potvrdit změnu"].tap()
-        XCTAssertTrue(app.buttons["Servisní protokol"].waitForExistence(timeout:10))
-        let completed=NSPredicate(format:"exists == false")
-        expectation(for:completed,evaluatedWith:app.buttons["job-primary-action"])
-        waitForExpectations(timeout:10)
-        XCTAssertTrue(app.tabBars.buttons["Zákazníci"].exists)
-        XCTAssertEqual(app.webViews.count,0);capture("detail-po-dokonceni-api",app)
+        let primary=app.buttons["job-primary-action"];XCTAssertTrue(primary.waitForExistence(timeout:10));XCTAssertEqual(primary.label,"Vyrazit na zakázku")
+        primary.tap();XCTAssertTrue(app.navigationBars["Výjezd"].waitForExistence(timeout:10))
+        app.buttons["Zavřít"].tap()
+        XCTAssertTrue(app.buttons["job-primary-action"].waitForExistence(timeout:10));XCTAssertFalse(app.tabBars.buttons["Zákazníci"].exists)
+        XCTAssertEqual(app.webViews.count,0);capture("detail-osobni-vyjezd-api",app)
     }
     func testGalleryRemainsAvailableWithDriveDisabled(){
         let app=launch();app.tabBars.buttons["Zakázky"].tap()
         let job=app.buttons["native-job-fixture-progress"];XCTAssertTrue(job.waitForExistence(timeout:10));job.tap()
-        let gallery=app.buttons["Fotodokumentace"];if !gallery.isHittable{app.swipeUp()}
+        let gallery=app.buttons["job-quick-photos"];if !gallery.isHittable{app.swipeUp()}
         XCTAssertTrue(gallery.waitForExistence(timeout:10));gallery.tap()
         XCTAssertTrue(app.buttons["Vybrat fotografii"].waitForExistence(timeout:10))
-        XCTAssertTrue(app.tabBars.buttons["Přehled"].exists)
+        XCTAssertFalse(app.tabBars.buttons["Přehled"].exists)
         XCTAssertEqual(app.webViews.count,0);capture("fotodokumentace-bez-disku-api",app)
     }
 

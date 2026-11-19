@@ -31,59 +31,6 @@ struct APIActionEditor:View {
     }
     func save()async{saving=true;defer{saving=false};do{for f in action.fields where f.required && value[f.id].string.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty{throw APIError.local("Doplňte: "+f.title)};_=try await store.write(action.path,method:action.method,body:value,offline:action.offline,operationID:value["operationId"].string.isEmpty ? nil : value["operationId"].string);dismiss()}catch{problem=error.localizedDescription}}
 }
-struct APIJobDetailContent:View {
-    @ObservedObject var store:APIStore
-    let job:APIValue
-    @Binding var action:APIDomainAction?
-    @State private var handoff:APIValue = .null
-    var assigned:Bool{job["assignedTos"].array.map(\.string).contains(store.userID)||job["assignedTo"].string==store.userID}
-    var body:some View {
-        VStack(alignment:.leading,spacing:18){
-            DiarySection(title:"Návštěva",symbol:"calendar"){
-                Text(job["customerName"].string.isEmpty ? job["title"].string : job["customerName"].string).font(.title2.bold())
-                if job["title"].string != job["customerName"].string {Text(job["title"].string).foregroundStyle(.secondary)}
-                DiaryBadge(text:APIFormat.status(job["status"].string),warning:job["status"].string=="incomplete")
-                Text([job["dueDate"].string,job["plannedStart"].string].filter{!$0.isEmpty}.joined(separator:" · "))
-                if !job["estimatedMinutes"].isNull{Text("Odhad práce: \(job["estimatedMinutes"].int) min").font(.subheadline)}
-                if !job["arrivalWindowStart"].string.isEmpty{Text("Domluvený příjezd: "+job["arrivalWindowStart"].string+"–"+job["arrivalWindowEnd"].string).font(.subheadline)}
-                if !job["startTime"].string.isEmpty{Text("Původní čas: "+job["startTime"].string+"–"+job["endTime"].string+(job["legacyTimeMeaning"].string=="unknown" ? " · k upřesnění" : "")).font(.footnote).foregroundStyle(.secondary)}
-                if !job["assignedName"].string.isEmpty{Label(job["assignedName"].string,systemImage:"person")}
-                if job["status"].string=="incomplete"{Text("Důvod: "+job["incompleteReason"].string).foregroundStyle(DiaryStyle.warning)}
-            }
-            APIJobCompletionCard(store:store,job:job)
-            if store.enabled("attendance"){NavigationLink{APIJobTimeView(store:store,job:job)}label:{Label("Pracovní doba",systemImage:"person.2.badge.gearshape").frame(minHeight:44)}.diaryCard()}
-            if job["jobType"].string=="installation"{NavigationLink{APIJobDiary(store:store,job:job)}label:{Label("Deník realizace",systemImage:"book.closed").frame(minHeight:44)}.diaryCard()}
-            if !job["address"].string.isEmpty{DiarySection(title:"Místo",symbol:"mappin"){Text(job["address"].string);if let url=APIFormat.navigation(job["address"].string){Link("Navigovat",destination:url).frame(minHeight:44)}}}
-            if store.enabled("jobHandoffs"){
-                DisclosureGroup("Předání kolegům"){
-                    ForEach(Array(handoff["handoffs"].array.enumerated()),id:\.offset){_,h in Text(h["name"].string+" · "+APIFormat.status(h["status"].string)).font(.callout);if !h["note"].string.isEmpty{Text(h["note"].string).font(.footnote)}}
-                    if assigned,let own=handoff["handoffs"].array.first(where:{$0["userId"].string==store.userID}){
-                        Button("Převzít zakázku"){action=makeHandoff(own,status:"accepted")}.frame(minHeight:44)
-                        Button("Potřebuje upřesnit"){action=makeHandoff(own,status:"clarification")}.frame(minHeight:44)
-                    }
-                }.diaryCard()
-            }
-            if job["jobType"].string=="installation" && (assigned || store.manager) && store.writer {
-                DisclosureGroup("Připravenost materiálu") {
-                    Text(["unchecked":"Nezkontrolováno","checked":"Materiál zkontrolován","ready":"Materiál připraven","missing":"Chybějící materiál"][job["materialStatus"].string] ?? "Nezkontrolováno")
-                    if !job["materialNote"].string.isEmpty{Text(job["materialNote"].string)}
-                    Button("Aktualizovat připravenost"){action=APIDomainAction(title:"Připravenost materiálu",path:"/api/jobs/"+job.id+"/service",method:"PUT",fields:[.choice("materialStatus","Stav materiálu","unchecked:Nezkontrolováno|checked:Materiál zkontrolován|ready:Materiál připraven|missing:Chybějící materiál"),.field("materialNote","Poznámka nebo chybějící materiál",.notes)],value:.object(["version":job["version"],"operationId":.s(UUID().uuidString),"materialStatus":job["materialStatus"],"materialNote":job["materialNote"]]))}.frame(minHeight:44)
-                }.diaryCard()
-            }
-            if let phone=job["customerContact"]["phones"].array.first?["number"].string,
-               !phone.isEmpty, let url=URL(string:"tel:"+phone.filter{"+0123456789".contains($0)}) {
-                Link(destination:url){Label("Zavolat zákazníkovi",systemImage:"phone").frame(maxWidth:.infinity,minHeight:48)}.diaryBubble()
-            }
-            if store.enabled("drivePhotos"){NavigationLink{ScrollView{APIFilesView(store:store,path:"/api/jobs/"+job.id+"/photos",mode:.job,record:job).padding(18)}.navigationTitle("Fotodokumentace")}label:{Label("Fotodokumentace",systemImage:"camera").frame(maxWidth:.infinity,minHeight:48)}.diaryBubble()}
-            if store.writer && store.enabled("defects") && !job["gardenId"].string.isEmpty {
-                Button("Přidat závadu"){let r=APIResource(entity:.defects,seed:.object(["gardenId":job["gardenId"],"sourceJobId":.s(job.id),"discipline":job["discipline"]]));store.route=APIRoute(resource:r,value:r.initial(store),isNew:true)}.frame(minHeight:44)
-            }
-            DisclosureGroup("Zadání a poznámky"){Text(job["description"].string).textSelection(.enabled);Text(job["gardenNotes"].string).textSelection(.enabled)}.diaryCard()
-            if !job["gardenId"].string.isEmpty{NavigationLink("Historie a závady zahrady"){APIEntityDetail(store:store,resource:APIResource(entity:.gardens),initial:.object(["id":job["gardenId"],"name":job["gardenName"]]))}}
-        }.task(id:store.revision){if store.enabled("jobHandoffs"){do{handoff=try await store.get("/api/jobs/"+job.id+"/handoffs")}catch{}}}
-    }
-    func makeHandoff(_ own:APIValue,status:String)->APIDomainAction{APIDomainAction(title:status=="accepted" ? "Převzít zakázku" : "Upřesnění zadání",path:"/api/jobs/"+job.id+"/handoffs",fields:status=="clarification" ? [.field("note","Co je potřeba upřesnit",.notes,true)] : [],value:.object(["operationId":.s(UUID().uuidString),"jobVersion":handoff["jobVersion"],"revision":handoff["revision"],"version":own["version"],"status":.s(status),"note":.s("")]))}
-}
 struct APIJobStatusEditor:View {
     @ObservedObject var store:APIStore
     let job:APIValue

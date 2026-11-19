@@ -37,14 +37,47 @@ struct APIJobCompletionCard:View {
     @State private var target=false
     var body:some View{
         let current=store.currentJob(job)
-        DiarySection(title:"Dokončení zakázky",symbol:"chart.bar.xaxis"){
-            APIJobCompletionSummary(job:current)
-            if store.writer && !store.isRolePreview{
-                Button("Upravit odhad"){editing=true}.diaryBubble()
-                if store.manager{Button("Nastavit hranici posunu"){target=true}.diaryBubble()}
-            }
-        }.sheet(isPresented:$editing){APIJobCompletionEditor(store:store,job:current,isTarget:false)}
+        APIJobCompletionCompactContent(job:current,canEdit:store.writer && !store.isRolePreview,canSetTarget:store.manager && !store.isRolePreview,edit:{editing=true},setTarget:{target=true})
+            .sheet(isPresented:$editing){APIJobCompletionEditor(store:store,job:current,isTarget:false)}
             .sheet(isPresented:$target){APIJobCompletionEditor(store:store,job:current,isTarget:true)}
+    }
+}
+
+struct APIJobCompletionCompactContent:View {
+    let job:APIValue
+    let canEdit:Bool
+    let canSetTarget:Bool
+    let edit:()->Void
+    let setTarget:()->Void
+    private var progress:APICompletionProgress{APICompletionProgress(job:job)}
+    private var tint:Color{progress.slow ? DiaryStyle.warning : DiaryStyle.accent}
+    var body:some View {
+        VStack(alignment:.leading,spacing:9){
+            HStack(alignment:.center,spacing:8){
+                Text("Dokončení zakázky").font(.subheadline.weight(.semibold))
+                Spacer(minLength:4)
+                Text(progress.percent.map{"\($0) %"} ?? "—").font(.title2.weight(.bold)).monospacedDigit().foregroundStyle(tint)
+                if canEdit{Button(action:edit){Image(systemName:"pencil")}.diaryBubble(.icon).accessibilityLabel("Upravit odhad")}
+            }
+            if let percent=progress.percent {
+                ProgressView(value:Double(percent),total:100).tint(tint).accessibilityLabel("Odhad dokončení").accessibilityValue("\(percent) procent")
+            }else{Text("Odhad zatím nezadaný").font(.caption).foregroundStyle(.secondary)}
+            HStack(alignment:.top,spacing:8){
+                VStack(alignment:.leading,spacing:3){
+                    if !job["completionUpdatedAt"].isNull {
+                        Text(APIFormat.date(job["completionUpdatedAt"])+(job["completionUpdatedName"].string.isEmpty ? "" : " · "+job["completionUpdatedName"].string)).font(.caption).foregroundStyle(.secondary)
+                    }
+                    if progress.delta != nil{Label(progress.label,systemImage:progress.slow ? "exclamationmark.circle" : "checkmark.circle").font(.caption).foregroundStyle(tint)}
+                    if !job["completionNote"].string.isEmpty{Text(job["completionNote"].string).font(.caption).foregroundStyle(.secondary).lineLimit(2)}
+                }
+                Spacer(minLength:0)
+                if canSetTarget {
+                    Menu{Button("Nastavit hranici posunu · \(progress.target) p. b.",action:setTarget)}label:{Image(systemName:"ellipsis").frame(minWidth:44,minHeight:44)}
+                        .buttonStyle(.plain).accessibilityLabel("Nastavení dokončení zakázky")
+                }
+            }
+        }.padding(14).background(DiaryStyle.surface,in:RoundedRectangle(cornerRadius:20))
+            .contextMenu{if canSetTarget{Button("Nastavit hranici posunu",action:setTarget)}}
     }
 }
 

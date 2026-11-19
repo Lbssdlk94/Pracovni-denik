@@ -100,6 +100,7 @@ struct APIEntityDetail: View {
     @State private var value: APIValue = .null
     @State private var detail: APIValue = .null
     @State private var defects: [APIValue] = []
+    @State private var defectsLoaded=false
     @State private var defectProblem:String?
     @State private var problem: String?
     @Environment(\.dismiss) private var dismiss
@@ -107,17 +108,22 @@ struct APIEntityDetail: View {
     @State private var deleteConfirm = false
     @State private var repairConfirm=false
     @State private var action: APIDomainAction?
+    @State private var workSnapshot:APIValue = .null
+    @State private var workScope=""
+    @State private var workProblem:String?
+    @State private var statusRequest:APIJobStatusRequest?
+    private var timeSnapshot:APIValue { workScope==store.scope && workSnapshot["job"].id==initial.id ? workSnapshot : .null }
     private var record: APIValue { let current=value.isNull ? initial : value;return resource.entity == .jobs ? store.currentJob(current) : current }
     var body: some View {
         ScrollView {
             VStack(alignment:.leading,spacing:18) {
                 if unavailable{Text("Záznam není dostupný pro tento účet.")}else{
-                if !defects.isEmpty {
+                if resource.entity != .jobs && !defects.isEmpty {
                     NavigationLink { APIResourceList(store:store,resource:APIResource(entity:.defects,seed:.object(["gardenId":record["gardenId"].isNull ? .s(record.id) : record["gardenId"]]))) } label:{Label("Pozor: \(defects.count) nevyřešené závady",systemImage:"exclamationmark.triangle.fill").font(.headline).foregroundStyle(DiaryStyle.warning).diaryCard()}
                 }
-                if !defects.isEmpty{DisclosureGroup("Otevřené závady"){ForEach(defects,id:\.id){d in NavigationLink{APIEntityDetail(store:store,resource:APIResource(entity:.defects),initial:d)}label:{APIDefectBadge(defect:d)}}}.diaryCard()}
-                if let defectProblem{DiaryStatusBanner(text:defectProblem,warning:true)}
-                if resource.entity == .jobs { APIJobDetailContent(store:store,job:record,action:$action) }
+                if resource.entity != .jobs && !defects.isEmpty{DisclosureGroup("Otevřené závady"){ForEach(defects,id:\.id){d in NavigationLink{APIEntityDetail(store:store,resource:APIResource(entity:.defects),initial:d)}label:{APIDefectBadge(defect:d)}}}.diaryCard()}
+                if resource.entity != .jobs,let defectProblem{DiaryStatusBanner(text:defectProblem,warning:true)}
+                if resource.entity == .jobs { APIJobDetailContent(store:store,job:record,timeSnapshot:timeSnapshot,timeProblem:workProblem,defects:defects,defectProblem:defectsLoaded ? nil : defectProblem ?? "Závady se načítají.",retryTime:{Task{await loadTime(refresh:true)}},remove:{deleteConfirm=true},action:$action) }
                 else if resource.entity == .customers { customer }
                 else if resource.entity == .gardens { garden }
                 else if resource.entity == .defects { defect }
@@ -137,18 +143,56 @@ struct APIEntityDetail: View {
                 }
                 if resource.entity == .tariffs && store.manager{Button("Duplikovat tarif"){var copy=record;copy["id"] = .s(UUID().uuidString);copy["version"] = .n(0);copy["definition"]["name"] = .s(record["definition"]["name"].string+" – kopie");store.route=APIRoute(resource:resource,value:copy,isNew:true)}}
                 if let problem { DiaryStatusBanner(text:problem,warning:true) }
-                DisclosureGroup("Doplňující údaje") { Text("ID: "+record.id).font(.caption).textSelection(.enabled);Text("Verze: "+record["version"].string).font(.caption) }.diaryCard()
-                if store.manager && [.jobs,.materials,.categories,.services,.vehicles,.subscriptions].contains(resource.entity) {
+                if resource.entity != .jobs { DisclosureGroup("Doplňující údaje") { Text("ID: "+record.id).font(.caption).textSelection(.enabled);Text("Verze: "+record["version"].string).font(.caption) }.diaryCard() }
+                if store.manager && [.materials,.categories,.services,.vehicles,.subscriptions].contains(resource.entity) {
                     DisclosureGroup("Správa záznamu") { Button("Smazat záznam",role:.destructive){deleteConfirm=true}.frame(minHeight:44) }.diaryCard()
                 }
             }.padding(18)
-        }.background(DiaryStyle.background).navigationTitle(record.title).navigationBarTitleDisplayMode(.inline)
-            .toolbar { if resource.editable(store) && !resource.fields.isEmpty && (resource.entity != .entries || store.manager || record["createdBy"].string==store.userID) { ToolbarItem(placement:.topBarTrailing){Button("Upravit"){store.route=APIRoute(resource:resource,value:record)}} } }
-            .safeAreaInset(edge:.bottom,spacing:0){if resource.entity == .jobs && !unavailable{APIJobActionBar(store:store,job:record)}}
-            .task(id:store.scope+store.revision.uuidString){await load()}.refreshable{await store.resume(refreshViews:false);await load()}
+        }.background(DiaryStyle.background).navigationTitle(resource.entity == .jobs ? "Detail zakázky" : record.title).navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                if resource.entity == .jobs && !unavailable {
+                    ToolbarItem(placement:.topBarTrailing){jobMenu}
+                } else if resource.editable(store) && !resource.fields.isEmpty && (resource.entity != .entries || store.manager || record["createdBy"].string==store.userID) {
+                    ToolbarItem(placement:.topBarTrailing){Button("Upravit"){store.route=APIRoute(resource:resource,value:record)}}
+                }
+            }
+            .toolbar(resource.entity == .jobs ? .hidden : .automatic,for:.tabBar)
+            .safeAreaInset(edge:.bottom,spacing:0){if resource.entity == .jobs && !unavailable{APIJobActionBar(store:store,job:record,snapshot:timeSnapshot)}}
+            .task(id:store.scope+initial.id+store.revision.uuidString){await load()}
+            .task(id:store.scope+initial.id+store.revision.uuidString){await loadTime()}
+            .refreshable{await store.resume(refreshViews:false);await load();await loadTime(refresh:true)}
+            .sheet(item:$statusRequest){request in APIJobStatusEditor(store:store,job:record,initialStatus:request.targetStatus)}
             .sheet(item:$action) { APIActionEditor(store:store,action:$0) }
             .confirmationDialog("Opravná zakázka již existuje. Přesto založit další?",isPresented:$repairConfirm,titleVisibility:.visible){Button("Připravit další opravnou zakázku"){Task{await planRepair()}};Button("Zrušit",role:.cancel){}}
-            .confirmationDialog("Opravdu smazat tento záznam?",isPresented:$deleteConfirm,titleVisibility:.visible){Button("Smazat",role:.destructive){Task{await remove()}};Button("Zrušit",role:.cancel){}}
+            .confirmationDialog("Opravdu smazat tento záznam?",isPresented:$deleteConfirm,titleVisibility:.visible){Button("Smazat",role:.destructive){Task{await remove()}};Button("Zrušit",role:.cancel){}} message:{if resource.entity == .jobs{Text("Zakázka zmizí všem přiřazeným kolegům. Fotografie na Google Disku zůstanou.")}}
+    }
+    private var jobMenu:some View {
+        Menu {
+            if resource.editable(store) && !store.isRolePreview {
+                Button("Upravit zakázku",systemImage:"pencil"){store.route=APIRoute(resource:resource,value:record)}
+            }
+            if APIJobWorkflow.canWork(record,userID:store.userID,writer:store.writer,manager:store.manager) && !store.isRolePreview {
+                Button("Změnit stav zakázky",systemImage:"checkmark.circle"){statusRequest=APIJobStatusRequest(targetStatus:nil)}
+            }
+            NavigationLink{APIJobSupplementary(job:record)}label:{Label("Doplňující údaje",systemImage:"info.circle")}
+            if store.manager && !store.isRolePreview {
+                NavigationLink{APIJobRecordManagement(remove:{deleteConfirm=true})}label:{Label("Správa záznamu",systemImage:"gearshape")}
+            }
+        }label:{Image(systemName:"ellipsis").frame(minWidth:44,minHeight:44)}.accessibilityLabel("Další akce zakázky").accessibilityIdentifier("job-detail-menu")
+    }
+    private func loadTime(refresh:Bool=false)async {
+        guard resource.entity == .jobs,store.enabled("attendance") else{return}
+        let scope=store.scope
+        if workScope != scope {workSnapshot = .null;workProblem=nil;workScope=scope}
+        do {
+            let result=try await store.get("/api/jobs/"+initial.id+"/time",refresh:refresh)
+            guard !Task.isCancelled,scope==store.scope else{return}
+            workSnapshot=result;workScope=scope;workProblem=nil
+        } catch {
+            guard !Task.isCancelled,scope==store.scope else{return}
+            workProblem=error.localizedDescription
+            if let error=error as? APIError,[401,403,404].contains(error.status){workSnapshot = .null}
+        }
     }
     private var customer: some View {
         VStack(spacing:18) {
@@ -214,9 +258,9 @@ struct APIEntityDetail: View {
                 let response=try await store.get(resource.listPath);guard scope==store.scope else{return};detail=response;value=response[resource.listKey].array.first(where:{$0.id==initial.id}) ?? initial
             }
             let garden=resource.entity == .gardens ? record.id : record["gardenId"].string
-            if !garden.isEmpty && store.enabled("defects") {do{let response=try await store.get("/api/defects?gardenId="+garden);guard scope==store.scope else{return};defects=response["defects"].array.filter{$0["status"].string != "resolved"};defectProblem=nil}catch{guard scope==store.scope else{return};defects=[];defectProblem="Závady se nepodařilo ověřit. "+error.localizedDescription}}
-            problem=nil
-        }catch{if let e=error as? APIError,[403,404].contains(e.status){unavailable=true;value = .null;detail = .null;defects=[]};problem=error.localizedDescription}
+            if !garden.isEmpty && store.enabled("defects") {do{let response=try await store.get("/api/defects?gardenId="+garden);guard scope==store.scope else{return};defects=response["defects"].array.filter{$0["status"].string != "resolved"};defectsLoaded=true;defectProblem=nil}catch{guard scope==store.scope else{return};defects=[];defectsLoaded=false;defectProblem="Závady se nepodařilo ověřit. "+error.localizedDescription}}
+            unavailable=false;problem=nil
+        }catch{guard !Task.isCancelled,scope==store.scope else{return};if let e=error as? APIError,[403,404].contains(e.status){unavailable=true;value = .null;detail = .null;defects=[];workSnapshot = .null};problem=error.localizedDescription}
     }
     func planRepair() async {
         do {
