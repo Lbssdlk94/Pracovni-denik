@@ -20,6 +20,14 @@ final class APIJobTimeTests:XCTestCase{
         let refreshed=try await store.get(path);XCTAssertEqual(refreshed["states"].array[0]["version"],.n(3));XCTAssertEqual(refreshed["intervals"].array.count,2)
         let count=APIFixtureProtocol.requestSnapshot().count;await store.sync();XCTAssertEqual(APIFixtureProtocol.requestSnapshot().count,count)
     }
+    func testMultiDaySummaryTotals62PersonHoursAndSeparatesTravel(){
+        let base=Date(timeIntervalSince1970:1794294000),hours=[[8,3,8],[8,8,8],[8,3,8]]
+        var rows:[APIValue]=[]
+        for(user,days)in hours.enumerated(){for(day,hours)in days.enumerated(){let start=base.addingTimeInterval(Double(day)*86400).timeIntervalSince1970*1000;rows.append(.object(["id":.s("\(user)-\(day)"),"userId":.s(String(user)),"userName":.s(String(user)),"kind":.s("work"),"startAt":.number(start),"endAt":.number(start+Double(hours)*3600000),"hourlyMinor":.n(50000)]))}}
+        let value=APIWorkTimeLogic.summary(rows,now:base.addingTimeInterval(4*86400),financial:true)
+        XCTAssertEqual(value["total"]["workMs"].double/3600000,62);XCTAssertEqual(value["total"]["travelMs"].int,0);XCTAssertEqual(value["total"]["workCostMinor"].int,3100000)
+        XCTAssertEqual(value["days"].array.count,3)
+    }
     @MainActor func testRolePreviewCannotQueueWorkTime()async throws{
         APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start();try store.setRolePreview("worker")
         do{_ = try await store.write("/api/jobs/fixture-progress/time/actions",method:"POST",body:.object([:]),offline:true,operationID:"denied");XCTFail("Preview cannot record hours")}catch{}

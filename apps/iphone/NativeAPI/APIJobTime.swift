@@ -5,16 +5,45 @@ enum APIWorkTimeLogic {
     static let actions=["work":"Zahájit práci","travel":"Výjezd","break":"Přestávka","other":"Ostatní činnost","stop":"Ukončit práci","move":"Přesunout"]
     static func duration(_ interval:APIValue,now:Date=Date())->Int64{max(0,Int64(min(interval["endAt"].isNull ? now.timeIntervalSince1970*1000 : interval["endAt"].double,now.timeIntervalSince1970*1000)-interval["startAt"].double))}
     static func hours(_ milliseconds:Int64)->String{let minutes=max(0,milliseconds)/60000;return "\(minutes/60) h \(minutes%60) min"}
-    @MainActor static func states(_ snapshot:APIValue,store:APIStore)->[APIValue]{
+    @MainActor static func project(_ snapshot:APIValue,store:APIStore)->APIValue{
+        var intervals=snapshot["intervals"].array
         var values=Dictionary(uniqueKeysWithValues:snapshot["states"].array.map{($0["userId"].string,$0)})
         for(path,data)in store.vault?.state.cache ?? [:] where path.hasSuffix("/time"){
             for state in data["states"].array where state["version"].int>(values[state["userId"].string]?["version"].int ?? -1){values[state["userId"].string]=state}
         }
         for operation in store.outbox.filter({$0.path.hasSuffix("/time/actions") && $0.state=="pending"}).sorted(by:{($0.body?["at"].double ?? 0)<($1.body?["at"].double ?? 0)}){
             guard let input=operation.body else{continue};let source=operation.path.split(separator:"/")[2],target=input["targetJobId"].string.isEmpty ? String(source) : input["targetJobId"].string,kind=input["action"].string=="move" ? "work" : input["action"].string
-            for(index,worker)in input["workers"].array.enumerated(){let id=worker["userId"].string;var state=values[id] ?? .object(["userId":.s(id),"name":.s(id),"version":worker["version"]]);guard state["version"]==worker["version"]else{continue};if kind=="stop"{state["active"] = .null}else if state["active"]["jobId"].string != target || state["active"]["kind"].string != kind{state["active"] = .object(["id":.s(input["operationId"].string+"_"+String(index)),"jobId":.s(target),"kind":.s(kind),"startAt":input["at"],"userId":.s(id),"userName":state["name"]])};state["version"] = .n(worker["version"].int+1);state["pending"] = .bool(true);values[id]=state}
+            for(index,worker)in input["workers"].array.enumerated(){let id=worker["userId"].string;var state=values[id] ?? .object(["userId":.s(id),"name":.s(id),"version":worker["version"]]);guard state["version"]==worker["version"]else{continue};let same=state["active"]["jobId"].string==target && state["active"]["kind"].string==kind
+                if !state["active"].isNull && !same,let position=intervals.firstIndex(where:{$0.id==state["active"].id}){intervals[position]["endAt"]=input["at"];intervals[position]["pending"] = .bool(true)}
+                if kind=="stop"{state["active"] = .null}else if state["active"]["jobId"].string != target || state["active"]["kind"].string != kind{state["active"] = .object(["id":.s(input["operationId"].string+"_"+String(index)),"jobId":.s(target),"kind":.s(kind),"startAt":input["at"],"userId":.s(id),"userName":state["name"]])};if !same && kind != "stop" && target==snapshot["job"].id{var row=state["active"];row["userName"]=state["name"];row["pending"] = .bool(true);row["approval"] = .s("pending");intervals.append(row)};state["version"] = .n(worker["version"].int+1);state["pending"] = .bool(true);values[id]=state}
         }
-        return snapshot["states"].array.map{($0.merged(values[$0["userId"].string]?.object ?? [:]))}
+        var result=snapshot
+        result["states"] = .array(snapshot["states"].array.map{($0.merged(values[$0["userId"].string]?.object ?? [:]))})
+        result["intervals"] = .array(intervals);return result
+    }
+    @MainActor static func states(_ snapshot:APIValue,store:APIStore)->[APIValue]{project(snapshot,store:store)["states"].array}
+    static func summary(_ rows:[APIValue],now:Date=Date(),financial:Bool=false)->APIValue{
+        let keys=["workMs","travelMs","breakMs","otherMs"]+(financial ? ["workCostMinor","travelCostMinor","unpricedMs"] : [])
+        let blank=APIValue.object(Dictionary(uniqueKeysWithValues:keys.map{($0,.n(0))}))
+        var people:[String:APIValue]=[:],days:[String:APIValue]=[:],total=blank
+        var calendar=Calendar(identifier:.gregorian);calendar.timeZone=TimeZone(identifier:"Europe/Prague")!
+        let formatter=DateFormatter();formatter.calendar=calendar;formatter.timeZone=calendar.timeZone;formatter.dateFormat="yyyy-MM-dd"
+        func add(_ row:inout APIValue,_ key:String,_ amount:Double){row[key] = .number(row[key].double+amount)}
+        for row in rows{
+            let start=row["startAt"].double,end=min(row["endAt"].isNull ? now.timeIntervalSince1970*1000 : row["endAt"].double,now.timeIntervalSince1970*1000),kind=row["kind"].string,id=row["userId"].string,key=kind+"Ms"
+            guard end>start,keys.contains(key)else{continue}
+            var person=people[id] ?? blank.merged(["userId":.s(id),"name":row["userName"]]);add(&person,key,end-start)
+            if financial && ["work","travel"].contains(kind){if row["hourlyMinor"].isNull{add(&person,"unpricedMs",end-start)}else{add(&person,kind+"CostMinor",(end-start)*row["hourlyMinor"].double/3600000)}}
+            people[id]=person
+            var position=start
+            while position<end{
+                let date=Date(timeIntervalSince1970:position/1000),dayKey=formatter.string(from:date),next=calendar.date(byAdding:.day,value:1,to:calendar.startOfDay(for:date))!.timeIntervalSince1970*1000,stop=min(next,end)
+                var day=days[dayKey] ?? blank.merged(["date":.s(dayKey),"workers":.object([:])]);add(&day,key,stop-position)
+                var worker=day["workers"][id].isNull ? blank : day["workers"][id];add(&worker,key,stop-position);day["workers"][id]=worker;days[dayKey]=day;position=stop
+            }
+        }
+        for id in people.keys{if financial{people[id]?["workCostMinor"] = .number(people[id]!["workCostMinor"].double.rounded());people[id]?["travelCostMinor"] = .number(people[id]!["travelCostMinor"].double.rounded())};for key in keys{add(&total,key,people[id]![key].double)}}
+        return .object(["total":total,"workers":.array(people.keys.sorted().compactMap{people[$0]}),"days":.array(days.keys.sorted(by:>).compactMap{days[$0]})])
     }
 }
 
@@ -38,11 +67,13 @@ struct APIJobTimeView:View {
     private var mayManage:Bool{snapshot["canManage"].bool && !store.isRolePreview}
     private var financial:Bool{snapshot["canManageCosts"].bool && store.manager}
     var body:some View{
+        let projected=APIWorkTimeLogic.project(snapshot,store:store)
+        let summary=APIWorkTimeLogic.summary(projected["intervals"].array,financial:financial)
         List{
             if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}
             if snapshot.isNull{ProgressView("Načítám pracovní dobu…")}else{
                 Section("Součet práce"){
-                    Text(APIWorkTimeLogic.hours(Int64(snapshot["summary"]["total"]["workMs"].double))).font(.title2.bold())
+                    TimelineView(.periodic(from:.now,by:15)){context in Text(APIWorkTimeLogic.hours(Int64(APIWorkTimeLogic.summary(projected["intervals"].array,now:context.date)["total"]["workMs"].double))).font(.title2.bold())}
                     Text("Člověkohodiny · doprava a přestávky jsou zvlášť.").font(.caption).foregroundStyle(.secondary)
                     if !store.online{Label("Offline · změny čekají v iPhonu",systemImage:"wifi.slash")}
                 }
@@ -71,19 +102,19 @@ struct APIJobTimeView:View {
                 }
                 Section{
                     DisclosureGroup("Jednotlivé dny"){
-                        ForEach(Array(snapshot["summary"]["days"].array.enumerated()),id:\.offset){_,day in
+                        ForEach(Array(summary["days"].array.enumerated()),id:\.offset){_,day in
                             DisclosureGroup(day["date"].string+" · "+APIWorkTimeLogic.hours(Int64(day["workMs"].double))){
                                 ForEach(day["workers"].object.keys.sorted(),id:\.self){id in Text((snapshot["states"].array.first{$0["userId"].string==id}?["name"].string ?? id)+" · "+APIWorkTimeLogic.hours(Int64(day["workers"][id]["workMs"].double)))}
                             }
                         }
                     }
                     DisclosureGroup("Souhrn pracovníků"){
-                        ForEach(Array(snapshot["summary"]["workers"].array.enumerated()),id:\.offset){_,person in
+                        ForEach(Array(summary["workers"].array.enumerated()),id:\.offset){_,person in
                             VStack(alignment:.leading){Text(person["name"].string).font(.headline);Text("Práce "+APIWorkTimeLogic.hours(Int64(person["workMs"].double))+" · doprava "+APIWorkTimeLogic.hours(Int64(person["travelMs"].double))+" · přestávky "+APIWorkTimeLogic.hours(Int64(person["breakMs"].double))).font(.caption)}
                         }
                     }
                     DisclosureGroup("Ukončené intervaly"){
-                        ForEach(Array(snapshot["intervals"].array.filter{!$0["endAt"].isNull}.prefix(more ? Int.max : 20)),id:\.id){interval in
+                        ForEach(Array(projected["intervals"].array.filter{!$0["endAt"].isNull}.prefix(more ? Int.max : 20)),id:\.id){interval in
                             VStack(alignment:.leading,spacing:8){Text(interval["userName"].string+" · "+(APIWorkTimeLogic.titles[interval["kind"].string] ?? "")).font(.headline);Text(APIFormat.date(interval["startAt"])+" · "+APIWorkTimeLogic.hours(APIWorkTimeLogic.duration(interval))).font(.caption);Text(interval["approval"].string=="approved" ? "Schváleno" : "Čeká na schválení").font(.caption)
                                 if !store.isRolePreview && (mayManage || interval["userId"].string==store.userID){Button("Navrhnout opravu"){proposal=APIWorkTimeProposal(interval:interval)}}
                                 if financial && interval["approval"].string != "approved"{Button("Schválit zaznamenané hodiny"){Task{await approveInterval(interval)}}}
@@ -101,9 +132,9 @@ struct APIJobTimeView:View {
                 }
                 if financial{
                     Section("Interní náklady"){
-                        Text("Práce: "+APIFormat.money(snapshot["summary"]["total"]["workCostMinor"]))
-                        Text("Doprava: "+APIFormat.money(snapshot["summary"]["total"]["travelCostMinor"]))
-                        if snapshot["summary"]["total"]["unpricedMs"].double>0{Text("U části intervalů není známá sazba.").foregroundStyle(DiaryStyle.warning)}
+                        Text("Práce: "+APIFormat.money(summary["total"]["workCostMinor"]))
+                        Text("Doprava: "+APIFormat.money(summary["total"]["travelCostMinor"]))
+                        if summary["total"]["unpricedMs"].double>0{Text("U části intervalů není známá sazba.").foregroundStyle(DiaryStyle.warning)}
                         Button("Nákladové sazby pracovníků"){costs=true}
                         Button("Vedoucí pracovní doby"){lead=true}
                         DisclosureGroup("Historie změn"){

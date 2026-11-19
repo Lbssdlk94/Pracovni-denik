@@ -55,6 +55,14 @@ final class APIJobMonthCacheTests:XCTestCase {
         XCTAssertEqual(APIFixtureProtocol.requests.filter{$0.url?.path=="/api/me"}.count,1)
         store.purgeJobMonthCopies();XCTAssertEqual(local.state.outbox.count,1);XCTAssertNotNil(local.state.drafts["kept"])
     }
+    @MainActor func testPreTimeSchemaMonthCopiesAreRemovedBeforeOfflineReadsButDraftsStay()async throws{
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start();await store.downloadJobMonths()
+        let local=store.vault!,month=String(store.today.prefix(7))
+        local.state.jobMonths?.months[month]?.timeModel=nil
+        store.saveDraft("preserved",draft:APIDraft(value:.s("Rozepsané"),baseVersion:1,operationID:"preserved",updatedAt:Date()))
+        store.online=false;store.resetJobMonthWork();await store.prepareJobMonths()
+        XCTAssertNil(local.state.jobMonths?.months[month]);XCTAssertNotNil(local.state.drafts["preserved"])
+    }
     @MainActor func testAcknowledgedMoveUpdatesBothMonthsWithoutDiscardingOtherVisits()async throws{
         APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start();await store.downloadJobMonths()
         let months=APIJobMonthCache.months(containing:store.today),original=APIFixtureProtocol.fixtureData()["jobs"].array[0]

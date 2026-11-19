@@ -264,6 +264,7 @@ final class APIStore: ObservableObject {
         guard let vault else{return}
         let roots:[String:String]=["jobs":"job","customers":"customer","defects":"defect","vehicles":"vehicle","subscriptions":"subscription"]
         let parts=path.split(separator:"/");guard parts.count>=2,let singular=roots[String(parts[1])]else{return}
+        if parts.count>=4,parts[1]=="jobs",parts[3]=="time",!result["intervals"].isNull{vault.state.cache["/api/jobs/"+String(parts[2])+"/time"]=result}
         var entity=result[singular];guard !entity.id.isEmpty else{return}
         if singular=="job",!result["report"].isNull{entity["protocolStatus"]=result["report"]["documentState"].string=="ready" ? .s("ready") : .s("draft")}
         func patch(_ value:APIValue)->APIValue{switch value{case .object(let fields):if value.id==entity.id{return value.merged(entity.object)};return .object(fields.mapValues{patch($0)});case .array(let values):return .array(values.map{patch($0)});default:return value}}
