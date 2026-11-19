@@ -68,3 +68,10 @@ test('A new online stop first sends the older offline pause for the same worker'
  f.online=true;const result=await f.client.action('a',{action:'stop',at:at+2000});
  assert.equal(result.states[0].version,3);assert.equal(result.states[0].active,null);assert.equal(result.summary.total.workMs,1000);assert.equal(result.summary.total.breakMs,1000);assert.equal(f.records.filter(r=>r.pending).length,0);
 });
+
+
+test('An in-flight GET cannot return a former account snapshot after the account changes',async()=>{
+ const f=await fixture();await f.client.load('a');let release;f.responseGate=new Promise(r=>release=r);
+ const old=f.client.load('a',true);await new Promise(r=>setTimeout(r,10));f.session.user.id='other-account';release();
+ await assert.rejects(old,e=>e.code==='job_time_access_changed');assert.equal(f.records.filter(r=>r.ownerId==='other-account').length,0);
+});
