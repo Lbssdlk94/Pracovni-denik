@@ -1,7 +1,7 @@
 import {pragueToday,moveJobMonth} from './job-schedule.js?v=workspace-roles-v1';
 import {compareWorkJobs} from './job-workflow-model.js?v=workspace-roles-v1';
 
-export const JOB_CACHE_KEY='job-list-cache-v1';
+export const JOB_CACHE_KEY='job-list-cache-person-hours-v1';
 export const jobCacheMonths=(now=new Date())=>{const month=pragueToday(now).slice(0,7);return [month,moveJobMonth(month,-1),moveJobMonth(month,1)];};
 export const jobCacheScope=session=>session?.user?JSON.stringify([session.user.id,session.user.role,session.permissions,session.features,session.installation?.id,session.workspace?.workspaceId,session.workspace?.authorizationVersion,session.workspace?.disciplines,session.workspace?.selectedDiscipline,session.rolePreview?.selectedRole]):null;
 const empty=()=>({entries:[],months:[]});

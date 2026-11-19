@@ -83,8 +83,8 @@ extension APIStore {
         let ticket=directoryEpoch,binding=scope,session=me
         let task=Task{@MainActor () async throws -> APIValue in
             var oldAllowed=true
-            func check()throws{guard !Task.isCancelled,self.authenticated,self.scope==binding,self.directoryEpoch==ticket else{throw APIDirectoryCache.invalid()}}
-            func fence(_ expected:String="")async throws->String{
+            @MainActor func check()throws{guard !Task.isCancelled,self.authenticated,self.scope==binding,self.directoryEpoch==ticket else{throw APIDirectoryCache.invalid()}}
+            @MainActor func fence(_ expected:String="")async throws->String{
                 if session["workspace"].isNull{return ""}
                 var input:APIValue = .object(["records":.array([]),"gardens":.array([]),"services":.array([]),"serviceWork":.array([]),"defects":.array([])])
                 if !expected.isEmpty{input["expectedStamp"] = .s(expected)}

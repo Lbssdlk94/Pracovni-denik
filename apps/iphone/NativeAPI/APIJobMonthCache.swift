@@ -91,6 +91,7 @@ extension APIStore {
             // Generic job lists from older versions have no per-record access fence.
             for key in Array(local.state.cache.keys) where APIJobMonthCache.isList(key){local.state.cache.removeValue(forKey:key)}
             var state=local.state.jobMonths ?? APIJobMonthState();let window=Set(APIJobMonthCache.months(containing:self.today));state.months=state.months.filter{window.contains($0.key)}
+            if self.enabled("attendance"){state.months=state.months.filter{_,snapshot in snapshot.jobs.allSatisfy{!$0["myTime"].isNull}}}
             if !self.online{self.jobMonthsAuthorized=local.offlineAllowed() && Date().timeIntervalSince(state.verifiedAt)<86400;self.jobMonthsReady=true;return}
             if self.me["workspace"].isNull{state=APIJobMonthState();local.state.jobMonths=state;self.jobMonthsAuthorized=true;self.jobMonthsReady=true;try? local.persist();return}
             let ids=Array(Set(state.months.values.flatMap{$0.jobs.map(\.id)})).sorted()

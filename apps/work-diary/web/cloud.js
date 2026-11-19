@@ -55,7 +55,7 @@ async function serverRequest(path,options={}){
   if(workspaceBlocked)throw workspaceResetError();
   if(previewRole&&options.method&&!['GET','HEAD'].includes(options.method)&&path!=='/api/workspace/manifest')requireLiveRole();
   if(identity?.workspace?.selectedDiscipline&&['/api/jobs','/api/customers','/api/gardens','/api/defects'].includes(path.split('?')[0])){const selected=new URL(path,location.origin);if(!selected.searchParams.has('discipline'))selected.searchParams.set('discipline',identity.workspace.selectedDiscipline);path=selected.pathname+selected.search;}
-  const epoch=workspaceEpoch,headers=new Headers(options.headers);if(previewRole)headers.set('x-work-diary-preview-role',previewRole);headers.set('x-workspace-client-version','shared-directory-v1');if(identity?.workspace?.selectedDiscipline&&!headers.has('x-work-discipline'))headers.set('x-work-discipline',identity.workspace.selectedDiscipline);if(options.method&&options.method!=='GET')headers.set('x-zavlahy-request','1');
+  const epoch=workspaceEpoch,headers=new Headers(options.headers);if(previewRole)headers.set('x-work-diary-preview-role',previewRole);headers.set('x-workspace-client-version','shared-directory-v1');headers.set('x-work-time-client','v1');if(identity?.workspace?.selectedDiscipline&&!headers.has('x-work-discipline'))headers.set('x-work-discipline',identity.workspace.selectedDiscipline);if(options.method&&options.method!=='GET')headers.set('x-zavlahy-request','1');
   const {timeoutMs,jobCacheRefresh,forceNetwork,...fetchOptions}=options;
   const started=performance.now();let failure;
   try{return await readFromServer(path,{...fetchOptions,headers,credentials:'same-origin',cache:'no-store'},async response=>{

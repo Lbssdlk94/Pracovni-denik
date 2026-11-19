@@ -38,6 +38,18 @@ struct APIAttendanceView:View {
             Button(data["activeShift"].isNull ? "Zaznamenat příchod" : "Zaznamenat odchod"){Task{await punch()}}.diaryBubble(.primary).disabled(busy).frame(minHeight:44)
         }
         Section{TextField("Měsíc RRRR-MM",text:$month).textInputAutocapitalization(.never);if store.manager{Picker("Pracovník",selection:$selectedUser){Text("Všichni").tag("all");ForEach(Array(data["employees"].array.enumerated()),id:\.offset){_,p in Text(p["name"].string).tag(p.id)}}}}
+        if !data["allocations"].object.isEmpty{Section{DisclosureGroup("Rozdělení pracovní doby"){
+            ForEach(data["allocations"].object.keys.sorted(),id:\.self){id in
+                let value=data["allocations"][id]
+                VStack(alignment:.leading,spacing:6){
+                    Text(data["employees"].array.first{$0.id==id}?["name"].string ?? (id==store.userID ? "Moje pracovní doba" : id)).font(.headline)
+                    ForEach(["attendanceMs","workMs","travelMs","breakMs","otherMs","unallocatedMs"],id:\.self){key in
+                        Text((["attendanceMs":"Celkem docházka","workMs":"Práce na zakázkách","travelMs":"Doprava","breakMs":"Přestávky","otherMs":"Ostatní činnost","unallocatedMs":"Zatím nerozřazeno"][key] ?? key)+": "+APIWorkTimeLogic.hours(Int64(value[key].double))).font(.caption)
+                    }
+                }
+            }
+            Text("Zakázkové hodiny jsou rozdělením docházky, nepřičítají se podruhé.").font(.footnote)
+        }}}
         Section("Pracovní dny"){
             ForEach(Array(data["shifts"].array.enumerated()),id:\.offset){_,shift in
                 NavigationLink{List{Text(shift["userName"].string).font(.headline);Text(Self.date(shift["startAt"]));Text(Self.time(shift["startAt"])+"–"+(shift["endAt"].isNull ? "dosud" : Self.time(shift["endAt"])));DisclosureGroup("Poloha a podrobnosti"){if store.manager{APIDataPairs(value:shift["startPosition"],labels:["latitude":"Zeměpisná šířka","longitude":"Zeměpisná délka","accuracy":"Přesnost (m)"]);APIDataPairs(value:shift["endPosition"],labels:["latitude":"Odchod – šířka","longitude":"Odchod – délka"])};Text("GPS příchodu: "+shift["startGpsStatus"].string);Text("GPS odchodu: "+shift["endGpsStatus"].string)};Button("Navrhnout opravu"){action=correction(shift,remove:false)};Button("Požádat o smazání",role:.destructive){action=correction(shift,remove:true)}}.navigationTitle("Pracovní den")} label:{VStack(alignment:.leading,spacing:5){Text(Self.date(shift["startAt"])).font(.headline);Text(Self.time(shift["startAt"])+"–"+(shift["endAt"].isNull ? "dosud" : Self.time(shift["endAt"]))).font(.subheadline);if store.manager{Text(shift["userName"].string).font(.caption).foregroundStyle(.secondary)}}.padding(.vertical,6)}

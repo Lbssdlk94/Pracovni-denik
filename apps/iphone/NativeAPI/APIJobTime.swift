@@ -197,7 +197,20 @@ struct APIWorkTimeActionEditor:View {
         if !sent{Button("Potvrdit pro vybrané pracovníky"){Task{await save()}}.diaryBubble(.primary).disabled(busy||blocked)}
         if let sms,let url=URL(string:sms){Link("Připravit jednu SMS zákazníkovi",destination:url).simultaneousGesture(TapGesture().onEnded{self.sms=nil})}
         if sent{Button("Hotovo"){dismiss()}}
-    }.navigationTitle(APIWorkTimeLogic.actions[kind] ?? "Pracovní akce").toolbar{ToolbarItem(placement:.cancellationAction){Button("Zavřít"){dismiss()}.disabled(busy)}}}.editLease(store).task{if kind=="move"{do{let value=try await store.get("/api/jobs?state=active&order=schedule&month="+String(store.today.prefix(7)));targets=value["jobs"].array.filter{$0.id != job.id}}catch{problem=error.localizedDescription}}}}
+    }.navigationTitle(APIWorkTimeLogic.actions[kind] ?? "Pracovní akce").toolbar{ToolbarItem(placement:.cancellationAction){Button("Zavřít"){dismiss()}.disabled(busy)}}}.editLease(store).task{if kind=="move"{await loadTargets()}}}
+    func loadTargets()async{do{
+        var rows:[APIValue]=[],cursor="",seen=Set<String>()
+        for _ in 0..<100{
+            var url=URLComponents(string:"/api/jobs?state=active&order=schedule")!
+            if !cursor.isEmpty{url.queryItems?.append(URLQueryItem(name:"cursor",value:cursor))}
+            let value=try await store.get(url.string!);rows+=value["jobs"].array.filter{$0.id != job.id && !["done","incomplete"].contains($0["status"].string)}
+            cursor=value["nextCursor"].string
+            if cursor.isEmpty{targets=rows;return}
+            guard seen.insert(cursor).inserted else{throw APIError.local("Seznam zakázek se změnil. Otevřete přesun znovu.")}
+        }
+        throw APIError.local("Zúžení seznamu zakázek vyžaduje připojení.")
+    }catch{problem=error.localizedDescription}}
+
     func save()async{guard !busy else{return};busy=true;defer{busy=false};do{
         let states=APIWorkTimeLogic.states(snapshot,store:store).filter{selected.contains($0["userId"].string)&&$0["assigned"].bool};guard !states.isEmpty else{throw APIError.local("Vyberte alespoň jednoho pracovníka.")}
         if kind=="move"&&target.isEmpty{throw APIError.local("Vyberte cílovou zakázku.")}
