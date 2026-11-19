@@ -28,7 +28,7 @@ import {travelMessage,travelSmsLink,travelArrivalLabel,jobProgressAction} from '
 import {extraAssigneeFields,bindExtraAssignees,selectedAssignees} from './assignees.js?v=workspace-roles-v1';
 import {closeDialog} from './dialog.js?v=workspace-roles-v1';
 import {pragueToday,moveJobMonth,jobMonthDays,jobMonthLabel,jobDayLabel,jobTimeLabel,scheduledJobTitle,groupScheduledJobs} from './job-schedule.js?v=workspace-roles-v1';
-import {customerTelephone,customerContactMarkup} from './customers-ui.js?v=draft-recovery-v1';
+import {customerTelephone,customerContactMarkup} from './customers-ui.js?v=offline-directory-v1';
 import {createJobPhotosUI} from './job-photos-ui.js?v=app-photo-fallback-v1';
 const JOB_TYPES={service:'Servis',installation:'Realizace',survey:'Zaměření'};
 const JOB_STATES={planned:'Naplánováno',on_way:'Na cestě',in_progress:'Probíhá',done:'Hotovo',incomplete:'Nedokončeno'};

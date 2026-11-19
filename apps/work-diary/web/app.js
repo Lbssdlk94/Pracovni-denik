@@ -25,7 +25,7 @@ import {createReminderSettingsUI} from './reminder-settings-ui.js?v=workspace-co
 import {closeDialog} from './dialog.js?v=workspace-roles-v1';
 import {createSubscriptionsUI} from './subscriptions-ui.js?v=workspace-roles-v1';
 import {createServiceWorkUI} from './service-work-ui.js?v=detail-actions-v1';
-import {createCustomersUI} from './customers-ui.js?v=draft-recovery-v1';
+import {createCustomersUI} from './customers-ui.js?v=offline-directory-v1';
 import {createNotificationsUI} from './notifications-ui.js?v=native-push-v1';
 import {createDriveUI} from './drive-ui.js?v=workspace-controls-v1';
 import {createJobsUI} from './jobs-ui.js?v=diary-members-v1';
@@ -41,7 +41,7 @@ import {gardenTabsMarkup,gardenPanel} from './garden-ui.js?v=workspace-roles-v1'
 import {FEATURE_OPTIONS,featureEnabled} from './features.js?v=fleet-photo-v1';
 import {settingsPage,bindSettings} from './settings-ui.js?v=workspace-controls-v1';
 import {COLORS,DEFAULT_ZONES,clamp,createMarker,normalizedPoint,validateBackup} from './model.js?v=workspace-roles-v1';
-import * as db from './cloud.js?v=diary-members-v1';
+import * as db from './cloud.js?v=offline-directory-v1';
 import * as legacyDb from './storage.js?v=workspace-roles-v1';
 import {preparePhoto,annotatedPhoto,download,blobToDataURL} from './export.js?v=workspace-roles-v1';
 

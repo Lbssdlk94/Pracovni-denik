@@ -26,6 +26,10 @@ final class APIStore: ObservableObject {
     private let monitor = NWPathMonitor()
     private var activeScope: String?
     private var started = false
+    var directoryLastAttempt=Date.distantPast
+    var directoryEpoch=0
+    var directoryReady=false
+    var directoryFlight:Task<APIValue,Error>?
     var jobMonthEpoch=0
     var jobMonthTask:Task<Void,Never>?
     var jobMonthPreparation:Task<Void,Never>?
@@ -48,7 +52,7 @@ final class APIStore: ObservableObject {
             temporary.state.session=source.state.session;temporary.state.verifiedAt=source.state.verifiedAt;temporary.state.cache=source.state.cache;temporary.state.jobMonths=source.state.jobMonths
             liveVault=source;vault=temporary
         }else{vault=source;liveVault=nil}
-        generation+=1;previewRole=role;transport.previewRole=role;route=nil;tab=0;revision=UUID();updateOutbox();resetJobMonthWork()
+        generation+=1;previewRole=role;transport.previewRole=role;route=nil;tab=0;revision=UUID();updateOutbox();resetDirectory();resetJobMonthWork()
         NativePushController.shared.invalidatePresentation();WatchPhoneCoordinator.shared.invalidate()
     }
     func requireLiveRole()throws{if isRolePreview{throw APIError.local("V náhledu role nelze ukládat změny. Vraťte se ke své roli.")}}
@@ -88,7 +92,7 @@ final class APIStore: ObservableObject {
         me = value; authenticated = true; needsPasswordChange = false
         vault?.state.session = value; vault?.state.verifiedAt = Date(); try vault?.persist()
         if !fixture { UserDefaults.standard.set(next, forKey:"native-api-last-scope:" + transport.origin.host!) }
-        updateOutbox();resetJobMonthWork();if !fixture{scheduleJobMonths()}
+        updateOutbox();resetDirectory();resetJobMonthWork();if !fixture{scheduleJobMonths();scheduleDirectory()}
     }
     // Role/module discovery belongs to process startup or an explicit account,
     // installation or discipline change, never to routine data refreshes.
@@ -99,7 +103,7 @@ final class APIStore: ObservableObject {
     }
     func restore() async {
         guard !busy, !authenticated else { return }; busy = true; defer { busy = false }
-        do { try bind(await transport.request("/api/me")); online = true; error = nil; await sync();if !fixture{scheduleJobMonths()} }
+        do { try bind(await transport.request("/api/me")); online = true; error = nil; await sync();if !fixture{scheduleJobMonths();scheduleDirectory()} }
         catch let e as APIError {
             if e.code == "password_change_required" { needsPasswordChange = true }
             else if e.isTransient, let last = UserDefaults.standard.string(forKey:"native-api-last-scope:" + transport.origin.host!), let local = try? APIVault(scope:last), local.offlineAllowed() {
@@ -114,7 +118,7 @@ final class APIStore: ObservableObject {
         online = true
         error = nil
         await sync()
-        if authenticated { revision = UUID() }
+        if authenticated { scheduleDirectory();revision = UUID() }
     }
     func login(username: String, password: String) async {
         guard !busy else { return }; busy = true; defer { busy = false }
@@ -144,7 +148,7 @@ final class APIStore: ObservableObject {
         transport.discipline = discipline
         do { try bind(await transport.request("/api/me")); revision = UUID() } catch { lock(); throw error }
     }
-    func lock() { resetJobMonthWork();liveVault=nil;previewRole=nil;transport.previewRole=nil;generation += 1; authenticated = false; me = .null; vault = nil; activeScope = nil; outbox = []; route = nil; NativePushController.shared.invalidatePresentation(); WatchPhoneCoordinator.shared.invalidate() }
+    func lock() { resetDirectory();resetJobMonthWork();liveVault=nil;previewRole=nil;transport.previewRole=nil;generation += 1; authenticated = false; me = .null; vault = nil; activeScope = nil; outbox = []; route = nil; NativePushController.shared.invalidatePresentation(); WatchPhoneCoordinator.shared.invalidate() }
     func logout() async throws {
         try requireLiveRole()
         guard vault?.state.outbox.isEmpty != false else { throw APIError.local("Nejdříve synchronizujte neodeslanou práci.") }
@@ -152,6 +156,7 @@ final class APIStore: ObservableObject {
         try transport.forgetCredential(); lock()
     }
     func get(_ path: String, refresh: Bool = false) async throws -> APIValue {
+        if APIDirectoryCache.matches(path){return try await directoryRead(path,refresh:refresh)}
         let ticket = generation
         let requestedDiscipline=APIJobMonthCache.parameters(path,today:today)?["discipline"],selectedDiscipline=me["workspace"]["selectedDiscipline"].string
         let matchingDiscipline=requestedDiscipline==nil || selectedDiscipline.isEmpty || selectedDiscipline=="all" || requestedDiscipline==selectedDiscipline
@@ -252,6 +257,7 @@ final class APIStore: ObservableObject {
         return fallback.merged(cached.object)
     }
     func applyAcknowledgement(path:String,result:APIValue){
+        directoryChanged(path:path)
         var acknowledged=result
         if !result["job"].id.isEmpty,!result["report"].isNull{acknowledged["job"]["protocolStatus"]=result["report"]["documentState"].string=="ready" ? .s("ready") : .s("draft")}
         jobMonthsChanged(path:path,result:acknowledged)

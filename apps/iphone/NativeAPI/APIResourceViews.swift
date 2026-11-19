@@ -13,6 +13,7 @@ struct APIResourceList: View {
     @State private var categories:[APIValue]=[]
     @State private var category=""
     @State private var onlyMine = false
+    @State private var directorySaved:APIValue = .null
     private var serverSearch:Bool{[APIEntity.customers,.jobs].contains(resource.entity)}
     var visible: [APIValue] { rows.filter { row in
         let matches=serverSearch || query.isEmpty || [row.title,row["address"].string,row["sku"].string,row["customerName"].string].joined(separator:" ").localizedStandardContains(query)
@@ -25,6 +26,7 @@ struct APIResourceList: View {
             if resource.entity == .materials {Picker("Kategorie",selection:$category){Text("Všechny kategorie").tag("");ForEach(categories,id:\.id){Text($0.title).tag($0.id)}};if store.manager{NavigationLink("Správa kategorií"){APIResourceList(store:store,resource:APIResource(entity:.categories))};NavigationLink("Kontrola podobných položek"){APIMaterialReview(store:store)}}}
             if resource.entity == .subscriptions && store.manager{NavigationLink("Správa tarifů"){APIResourceList(store:store,resource:APIResource(entity:.tariffs))}}
             if resource.entity == .defects { Section { Toggle("Moje závady",isOn:$onlyMine) } }
+            if !directorySaved.isNull { Label(directorySaved["persistent"].bool ? (store.online ? "Uložený adresář" : "Offline · uložený adresář") : "Adresář se nepodařilo uložit do telefonu",systemImage:store.online ? "checkmark.icloud" : "wifi.slash").font(.caption).foregroundStyle(.secondary) }
             if loading && rows.isEmpty { ProgressView("Načítám…") }
             if let problem { Text(problem).foregroundStyle(DiaryStyle.warning) }
             ForEach(visible,id:\.id) { row in
@@ -50,12 +52,13 @@ struct APIResourceList: View {
             if more { var q=c.queryItems ?? [];q.append(URLQueryItem(name:resource.entity == .materials ? "after" : "cursor",value:cursor));c.queryItems=q }
             let page=try await store.get(c.string!)
             guard scope==store.scope,requestID==ticket else {return}
+            directorySaved=page["_directoryCache"]
             let values=page[resource.listKey].array
             if resource.entity == .materials{categories=page["categories"].array}
             rows=more ? rows+values.filter { value in !rows.contains(where:{$0.id==value.id}) } : values
             cursor=resource.entity == .categories ? "" : page["nextCursor"].string;problem=page["partial"].bool ? "Server v tomto přehledu vrací jen nejnovější část historie." : nil
             if (!resource.seed["gardenId"].string.isEmpty || !resource.seed["customerId"].string.isEmpty || resource.entity == .materials && !query.isEmpty) && !cursor.isEmpty{loading=false;await load(more:true)}
-        } catch is CancellationError{} catch {if requestID==ticket{problem=error.localizedDescription}}
+        } catch is CancellationError{} catch {if requestID==ticket{if [.customers,.gardens].contains(resource.entity){rows=[];cursor=""};problem=error.localizedDescription}}
     }
 }
 struct APIRecordRow: View {
