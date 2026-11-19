@@ -75,6 +75,19 @@ final class NativeAPITests:XCTestCase {
         XCTAssertEqual(store.me,permissions);XCTAssertEqual(store.scope,scope);XCTAssertEqual(store.vault!.state.verifiedAt,verifiedAt)
         XCTAssertTrue(store.authenticated)
     }
+    @MainActor func testPullToRefreshDoesNotAlsoTriggerTheRevisionDrivenLoad()async throws{
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start()
+        let revision=store.revision
+        await store.resume(refreshViews:false)
+        XCTAssertEqual(store.revision,revision,"The visible screen performs its explicit refresh; do not restart its task as well")
+        let page=try await store.get("/api/jobs?state=active&order=schedule",refresh:true)
+        XCTAssertFalse(page["jobs"].array.isEmpty)
+        let requests=APIFixtureProtocol.requestSnapshot()
+        XCTAssertEqual(requests.filter{$0.url?.path=="/api/jobs"}.count,1)
+        XCTAssertEqual(requests.filter{$0.url?.path=="/api/me"}.count,1)
+        await store.resume()
+        XCTAssertNotEqual(store.revision,revision,"Background/foreground refresh still updates visible views")
+    }
     @MainActor func testQueuedSyncAndWatchRefreshDoNotRediscoverPermissions()async throws{
         APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start()
         APIFixtureProtocol.forcedStatus["/api/me"]=503;store.online=false

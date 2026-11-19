@@ -1,8 +1,10 @@
+import {jobCacheScope} from './job-list-cache.js?v=completion-v1';
 import {TIME_KINDS,timeSummary} from './job-time-model.js?v=person-hours-v1';
 import {attendanceLocal,attendanceInstant,attendanceHours} from './attendance-model.js?v=workspace-roles-v1';
 import {travelMessage,travelSmsLink} from './job-travel.js?v=person-hours-v1';
 export function createJobTimeUI({db,esc,getSession,toast,onChanged=async()=>{}}){
  const openPanels=new Set();
+ let readFlight=null,lastReadAt=0,dataScope=null;
  let epoch=0,root=null,job=null,data=null,busy=false,dirty=false,error='',selected=new Set(),editor='',proposal=null,limit=20,sms=null;
  const current=()=>getSession()?.user.id,clock=ms=>new Date(ms).toLocaleString('cs-CZ',{timeZone:'Europe/Prague',day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'}),hours=attendanceHours;
  const markup=()=>'<details class="job-time-section" id="job-work-time"><summary>Pracovní doba <span>Člověkohodiny a tým</span></summary><div data-job-time-content><p role="status">Načítám pracovní dobu…</p></div></details>';
@@ -35,13 +37,18 @@ export function createJobTimeUI({db,esc,getSession,toast,onChanged=async()=>{}})
   }select.innerHTML='<option value="">Vyberte zakázku</option>'+rows.map(j=>`<option value="${esc(j.id)}">${esc(j.customerName||j.title)} · ${esc(j.dueDate||'Bez termínu')}</option>`).join('');
   }catch(e){if(ticket===epoch&&select.isConnected){select.innerHTML='<option value="">'+esc(e.message)+'</option>';toast(e.message,true);}}
  }
- async function refresh(network=true){if(busy||dirty)return;const ticket=epoch,id=job.id;try{const value=await db.jobTime(id,network);if(ticket!==epoch||id!==job?.id)return;data=value;error='';}catch(e){if(ticket!==epoch||id!==job?.id)return;error=e.message;if([401,403,404].includes(e.status))data=null;}render();}
+ async function refresh(network=true){
+  if(busy||dirty)return;if(readFlight?.epoch===epoch)return readFlight.task;
+  const ticket=epoch,id=job.id,who=jobCacheScope(getSession());
+  const task=(async()=>{try{const value=await db.jobTime(id,network);if(ticket!==epoch||id!==job?.id||who!==jobCacheScope(getSession()))return;data=value;error='';lastReadAt=Date.now();}catch(e){if(ticket!==epoch||id!==job?.id||who!==jobCacheScope(getSession()))return;error=e.message;if([401,403,404].includes(e.status))data=null;}render();})();
+  readFlight={epoch:ticket,task};try{return await task;}finally{if(readFlight?.task===task)readFlight=null;}
+ }
  async function update(path,method,value){if(!navigator.onLine)throw Error('Schválení, opravy, sazby a přiřazení potvrďte s připojením.');const ticket=epoch,id=job.id,next=await db.request('/api/jobs/'+encodeURIComponent(id)+'/time/'+path,{method,headers:{'content-type':'application/json'},body:JSON.stringify({operationId:crypto.randomUUID(),...value})});if(ticket!==epoch||job?.id!==id)throw Error('Zakázka se mezitím změnila; uložená změna zůstala u původní zakázky.');data=next;dirty=false;editor='';proposal=null;render();await onChanged(job.id);}
  async function execute(fn){if(busy)return;busy=true;error='';root?.querySelectorAll('button').forEach(b=>b.disabled=true);try{await fn();}catch(e){error=e.message;toast(e.message,true);const message=root?.querySelector('[data-time-error]');if(message)message.remove();const box=document.createElement('p');box.dataset.timeError='';box.className='note-box';box.setAttribute('role','alert');box.textContent=error;root?.querySelector('[data-job-time-content]')?.prepend(box);}finally{busy=false;root?.querySelectorAll('button').forEach(b=>b.disabled=false);}}
  async function approveRow(row){await update('proposals','POST',{intervalId:row.id,userId:row.userId,version:row.version,kind:row.kind,startAt:row.startAt,endAt:row.endAt,reason:'Schválení zaznamenaného intervalu'});const review=data.reviews.find(r=>r.interval_id===row.id&&r.status==='pending');if(review)await update('reviews/'+encodeURIComponent(review.id),'POST',{decision:'approve'});}
  async function begin(kind){if(dirty&&editor&&kind!==editor&&!confirm('Zahodit rozepsané změny tohoto formuláře?'))return;if(!data)await refresh(navigator.onLine);if(!data)return;editor=kind;proposal=null;dirty=false;render();root.open=true;root.querySelector('form')?.scrollIntoView({block:'nearest',behavior:'smooth'});}
  function mount(node,record,{signal}={}){
-  epoch++;if(job?.id!==record.id){selected=new Set([current()]);sms=null;data=null;}root=node;job=record;editor='';dirty=false;
+  epoch++;const who=jobCacheScope(getSession());if(job?.id!==record.id||dataScope!==who){selected=new Set([current()]);sms=null;data=null;lastReadAt=0;readFlight=null;}dataScope=who;root=node;job=record;editor='';dirty=false;
   node.addEventListener('change',e=>{const id=e.target.dataset.timeSelect;if(id){e.target.checked?selected.add(id):selected.delete(id);}},{signal});
   node.addEventListener('click',e=>{const b=e.target.closest('button,a');if(!b)return;
    if(b.hasAttribute('data-time-begin'))begin(b.dataset.timeBegin);
@@ -64,7 +71,7 @@ export function createJobTimeUI({db,esc,getSession,toast,onChanged=async()=>{}})
    else if(f.hasAttribute('data-time-lead-form'))await update('lead','PUT',{userId:f.elements.userId.value||null,version:data.lead?.version||0});
   });},{signal});
   const timer=setInterval(()=>{if(!node.isConnected||signal?.aborted){clearInterval(timer);return;}for(const el of node.querySelectorAll('[data-time-elapsed]'))el.textContent=hours(Date.now()-Number(el.dataset.timeElapsed));},15000),poll=setInterval(()=>{if(node.isConnected&&node.open&&document.visibilityState==='visible'&&navigator.onLine)refresh(true);},30000);
-  signal?.addEventListener('abort',()=>{clearInterval(timer);clearInterval(poll);},{once:true});render();refresh(navigator.onLine);
+  signal?.addEventListener('abort',()=>{clearInterval(timer);clearInterval(poll);},{once:true});node.addEventListener('toggle',()=>{if(node.open&&(!data||Date.now()-lastReadAt>5000))refresh(navigator.onLine);},{signal});render();if(node.open)refresh(navigator.onLine);
  }
  return {markup,mount,begin,open:()=>{if(root)root.open=true;},hasChanges:()=>dirty||busy};
 }

@@ -38,7 +38,7 @@ struct APIResourceList: View {
         }.listStyle(.insetGrouped).scrollContentBackground(.hidden).background(DiaryStyle.background)
             .navigationTitle(resource.title).navigationBarTitleDisplayMode(.inline).searchable(text:$query,prompt:"Hledat")
             .toolbar { if resource.entity.canCreate && resource.editable(store) { ToolbarItem(placement:.topBarTrailing) { Button { create() } label:{Image(systemName:"plus")}.accessibilityLabel("Přidat záznam") } } }
-            .task(id:store.scope+store.revision.uuidString+(serverSearch || resource.entity == .materials ? query : "")) { await load() }.refreshable { await store.resume();await load() }
+            .task(id:store.scope+store.revision.uuidString+(serverSearch || resource.entity == .materials ? query : "")) { await load() }.refreshable { await store.resume(refreshViews:false);await load() }
     }
     func create() {
         if resource.entity == .subscriptions { store.route = APIRoute(resource:resource,value:resource.initial(store),isNew:true) }
@@ -145,7 +145,7 @@ struct APIEntityDetail: View {
         }.background(DiaryStyle.background).navigationTitle(record.title).navigationBarTitleDisplayMode(.inline)
             .toolbar { if resource.editable(store) && !resource.fields.isEmpty && (resource.entity != .entries || store.manager || record["createdBy"].string==store.userID) { ToolbarItem(placement:.topBarTrailing){Button("Upravit"){store.route=APIRoute(resource:resource,value:record)}} } }
             .safeAreaInset(edge:.bottom,spacing:0){if resource.entity == .jobs && !unavailable{APIJobActionBar(store:store,job:record)}}
-            .task(id:store.scope+store.revision.uuidString){await load()}.refreshable{await store.resume();await load()}
+            .task(id:store.scope+store.revision.uuidString){await load()}.refreshable{await store.resume(refreshViews:false);await load()}
             .sheet(item:$action) { APIActionEditor(store:store,action:$0) }
             .confirmationDialog("Opravná zakázka již existuje. Přesto založit další?",isPresented:$repairConfirm,titleVisibility:.visible){Button("Připravit další opravnou zakázku"){Task{await planRepair()}};Button("Zrušit",role:.cancel){}}
             .confirmationDialog("Opravdu smazat tento záznam?",isPresented:$deleteConfirm,titleVisibility:.visible){Button("Smazat",role:.destructive){Task{await remove()}};Button("Zrušit",role:.cancel){}}

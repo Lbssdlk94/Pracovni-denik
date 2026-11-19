@@ -111,14 +111,14 @@ final class APIStore: ObservableObject {
             } else { lock(); if e.status != 401 { error = e.message } }
         } catch { self.error = error.localizedDescription }
     }
-    func resume() async {
+    func resume(refreshViews:Bool=true) async {
         guard authenticated else { return }
         // Retry queued work and refresh visible data. Every actual resource
         // request is still authorized by the server; no /api/me preflight.
         online = true
         error = nil
         await sync()
-        if authenticated { scheduleDirectory();revision = UUID() }
+        if authenticated { scheduleDirectory();if refreshViews{revision = UUID()} }
     }
     func login(username: String, password: String) async {
         guard !busy else { return }; busy = true; defer { busy = false }
