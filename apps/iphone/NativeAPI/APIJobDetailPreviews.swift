@@ -16,10 +16,10 @@ struct APIJobDetailPreviewHost:View {
         let model=APIStore(fixture:true)
         try? model.bind(fixture["context"])
         let now=Date().timeIntervalSince1970*1000
-        let id="fixture-progress",owner=model.userID
+        let id="preview-"+kind+(appearance == .dark ? "-dark" : "-light")+(largeText ? "-large" : "-regular")+(offline ? "-offline" : "-online"),owner=model.userID
         let ids=[owner,"preview-marek","preview-petr"],names=["Luboš Sadílek","Marek","Petr"]
-        let values=fixture["jobs"].array.first{$0.id==id} ?? .null
-        let job=values.merged(["title":.s("Realizace – Pan Petřík"),"customerName":.s("Pan Petřík"),"address":.s("Dřevníky 39, Dřevníky"),"jobType":.s("installation"),"status":.s(kind=="done" ? "done" : kind=="planned" ? "planned" : "in_progress"),"plannedStart":.s("08:00"),"arrivalWindowStart":.s("08:00"),"arrivalWindowEnd":.s("08:10"),"assignedName":.s(names[0]),"assignedTos":.array(ids.map(APIValue.s)),"completionPercent":.n(45),"completionUpdatedName":.s(names[0]),"completionUpdatedAt":.number(now-900000),"materialStatus":.s("ready"),"description":.s("Realizace kapkové závlahy. Dokončit větve u terasy a prověřit těsnost spojů."),"customerContact":.object(["id":.s("customer-1"),"name":.s("Pan Petřík"),"phones":.array([.object(["number":.s("+420000000000")])])])])
+        let values=fixture["jobs"].array.first{$0.id=="fixture-progress"} ?? .null
+        let job=values.merged(["id":.s(id),"title":.s("Realizace – Pan Petřík"),"customerName":.s("Pan Petřík"),"address":.s("Dřevníky 39, Dřevníky"),"jobType":.s("installation"),"status":.s(kind=="done" ? "done" : kind=="planned" ? "planned" : "in_progress"),"plannedStart":.s("08:00"),"arrivalWindowStart":.s("08:00"),"arrivalWindowEnd":.s("08:10"),"assignedName":.s(names[0]),"assignedTos":.array(ids.map(APIValue.s)),"completionPercent":.n(45),"completionUpdatedName":.s(names[0]),"completionUpdatedAt":.number(now-900000),"materialStatus":.s("ready"),"description":.s("Realizace kapkové závlahy. Dokončit větve u terasy a prověřit těsnost spojů."),"customerContact":.object(["id":.s("customer-1"),"name":.s("Pan Petřík"),"phones":.array([.object(["number":.s("+420000000000")])])])])
         self.job=job
         let hours=[5.5,6.25,3.0]
         var intervals:[APIValue]=[]
@@ -57,4 +57,10 @@ struct APIJobDetailPreviewHost:View {
 #Preview("Přerušeno"){APIJobDetailPreviewHost(kind:"break",appearance:.dark)}
 #Preview("Dokončeno"){APIJobDetailPreviewHost(kind:"done")}
 #Preview("Velký text · offline"){APIJobDetailPreviewHost(largeText:true,offline:true)}
+#Preview("Pracovní doba · načítání"){
+    APIJobTimeOverview(store:APIStore(fixture:true),job:.null,snapshot:.null,problem:nil,retry:{}).padding().background(DiaryStyle.background)
+}
+#Preview("Pracovní doba · chyba"){
+    APIJobTimeOverview(store:APIStore(fixture:true),job:.null,snapshot:.null,problem:"Připojení není dostupné. Neodeslaná data zůstávají uložená.",retry:{}).padding().background(DiaryStyle.background)
+}
 #endif

@@ -8,7 +8,7 @@ struct PracovniDenikApp:App {
     @StateObject private var store:APIStore
     init(){
         #if DEBUG
-        let fixture=ProcessInfo.processInfo.arguments.contains("--native-api-testing")
+        let fixture=ProcessInfo.processInfo.arguments.contains("--native-api-testing") || ProcessInfo.processInfo.arguments.contains("--native-job-detail-preview")
         #else
         let fixture=false
         #endif

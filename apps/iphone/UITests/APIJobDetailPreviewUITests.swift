@@ -24,4 +24,14 @@ final class APIJobDetailPreviewUITests:XCTestCase {
         XCTAssertFalse(app.tabBars.firstMatch.exists)
         capture("detail-swiftui-my-work-stopped",app)
     }
+    func testMaterialUsesTheExistingEditorFromItsDetail(){
+        let app=launch()
+        let material=app.buttons.matching(NSPredicate(format:"label BEGINSWITH %@","Připravenost materiálu")).firstMatch
+        for _ in 0..<5{if material.isHittable{break};app.swipeUp()}
+        XCTAssertTrue(material.isHittable);material.tap()
+        let update=app.buttons["Aktualizovat připravenost"];XCTAssertTrue(update.waitForExistence(timeout:10));update.tap()
+        XCTAssertTrue(app.buttons["Potvrdit"].waitForExistence(timeout:10))
+        capture("detail-swiftui-material-editor",app)
+    }
+
 }

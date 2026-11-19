@@ -56,7 +56,7 @@ final class APIFixtureProtocol:URLProtocol {
         if path=="/api/vehicles"{return json(.object(["vehicles":.array([vehicle]),"driver":.object(["enabled":.bool(true),"vehicleId":vehicle["id"],"version":.n(1)]),"canManage":.bool(true),"canWrite":.bool(true)]))}
         if path=="/api/vehicles/vehicle-1"{return json(.object(["vehicle":vehicle,"entries":.array([.object(["id":.s("entry-1"),"kind":.s("fuel"),"date":.s("2026-11-06"),"costMinor":.n(36000),"litersMilli":.n(10000),"createdByName":.s("Luboš – ukázka"),"version":.n(1)])]),"receipts":.array([]),"consumption":.number(7.2),"canWrite":.bool(true)]))}
         let parts=path.split(separator:"/").map(String.init)
-        if parts.count>=3 && parts[1]=="jobs",let base=fixture["jobs"].array.first(where:{$0.id==parts[2]}){let key="/api/jobs/"+parts[2];var job=records[key] ?? base
+        if parts.count>=3 && parts[1]=="jobs",let base=fixture["jobs"].array.first(where:{$0.id==parts[2]}) ?? records["/api/jobs/"+parts[2]]{let key="/api/jobs/"+parts[2];var job=records[key] ?? base
             if parts.count==3{if method=="PUT"{let b=body();guard b["version"]==job["version"]else{return json(.object(["error":.s("Konflikt verze")]),409)};job=job.merged(b.object);job["version"] = .n(job["version"].int+1);records[key]=job};return json(.object(["job":job]))}
             if ["completion","completion-target"].contains(parts[3]),method=="PATCH"{
                 let b=body(),target=parts[3]=="completion-target",field=target ? "points" : "percent",versionKey=target ? "completionTargetVersion" : "completionVersion",operationKey="completion-operation:"+b["operationId"].string
