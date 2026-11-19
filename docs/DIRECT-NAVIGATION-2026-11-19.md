@@ -33,3 +33,17 @@ Regresní prohlížečový test odhalil při offline přestávce nahrazení otev
 Přímý návrat z dokončovacího protokolu již nevyžaduje přítomnost seznamu `#jobs` pod detailem. Test přímého odkazu také ověřuje změnu stavu bez přesunu do seznamu, zavření během načítání bez následného znovuotevření a rychlé opětovné otevření pracovní doby. Kopie pracovní doby se při nové verzi zakázky nepovažuje automaticky za právě obnovenou.
 
 Kontrolní workflow iOS s `checks_only=true` nebyl spuštěn: automatická kontrola oprávnění jej odmítla s odkazem na předchozí pokyn nespouštět GitHub Actions. Commit a push zdrojových změn jsou povolené a provedené; nová IPA nevzniká. Přidaný XCTest a změny SwiftUI proto zatím nemají ověření v Xcode; čeká se na výslovné potvrzení tohoto kontrolního běhu. V aktuálním prostředí není Swift/Xcode ani Swift syntaktický parser.
+
+
+## Výsledky a zveřejnění
+
+- Závěrečná plná webová regrese: **87 testovacích souborů, bez selhání**.
+- Prošly syntax kontroly, přesné Service Worker importy a oba sestavené instalační artefakty s izolovaným přihlášeným startem a odmítnutím anonymního přístupu.
+- Prošel přímý navigační scénář také nad přesným sestaveným Workerem kanonického webu. První pokus o jeho ověření narazil na zákaz relativní cesty mimo kořen Miniflare; opakování používá identickou kopii artefaktu uvnitř testovacího kořene a prošlo.
+- Prošly plné prohlížečové scénáře člověkohodin (hromadná práce, samostatné ukončení, offline přestávka, restart, synchronizace, zachovaný globální stav) a procent dokončení (konflikt, poznámka, hranice, koncept, seznam).
+- Striktní porovnání obou Workerů mimo vložené `ASSETS` potvrdilo shodný backend. Oba publikované archivy obsahují jen Worker a hostingové manifesty; žádné databázové migrace.
+- Dr. Závlaha: **Sites v147**, zdroj `44c9a7127fac5deb059799a731572445fea548b5`, nasazení `appgdep_6aff35937b708191bb1aeaf4a69d5398`, stav `succeeded`.
+- Dr. Garden: **Sites v67**, zdroj `fab4676b3231f32e9139cefc080d4d08818af780`, nasazení `appgdep_6aff35c23bc481919d998f7348f9f754`, stav `succeeded`.
+- Publikum, tajné údaje a databázové vazby zůstaly zachované. Produkční zakázky ani kontakty nebyly kvůli testům měněny.
+
+Zdroje včetně nativní přípravy: GitHub větev `perf/direct-job-navigation-2026-11-19`. Návrat webu je možný nasazením předchozí verze Dr. Závlaha 146 / Dr. Garden 66 bez změny databáze. Nativní aplikace potřebuje pro aktivaci změny další samostatné vydání; v tomto úkolu nová IPA nevznikla.
