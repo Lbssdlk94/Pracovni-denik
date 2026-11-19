@@ -4,7 +4,7 @@ export function createJobDiaryUI({db,esc,getSession,toast}){
  let job=null,root=null,data=null,epoch=0,dirty=false,busy=false,editor=null,photos=[],timer=null;const mediaUrls=new Map(),previewQueues=new Map();
  const releasePhotos=id=>{for(const [key,queue]of previewQueues)if(id===undefined||key===id){queue.dispose();previewQueues.delete(key);}for(const [key,urls]of mediaUrls)if(id===undefined||key===id){urls.forEach(url=>URL.revokeObjectURL(url));mediaUrls.delete(key);}};
  const draftKey=()=> 'job-diary:'+job.id;
- const writer=()=>getSession()?.permissions.write&&!job?.cancelled&&!data?.job?.cancelled;
+ const writer=()=>['owner','administrator','admin','worker','reader'].includes(getSession()?.user.role)&&!job?.cancelled&&!data?.job?.cancelled;
  const photoWriter=()=>writer()&&getSession()?.features.photoUploads!==false&&getSession()?.features.protocolPhotos!==false;
  const hasChanges=()=>dirty||busy;
  function markup(){return '<section id="job-diary" class="job-diary diary-workspace" aria-label="Deník realizace"><div data-job-diary-body><p class="mini-empty" role="status">Načítám denní zápisy…</p></div></section>';}

@@ -80,7 +80,7 @@ enum APIImage {
     static func temporary(_ data:Data,name:String)->URL {let directory=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString,isDirectory:true);try? FileManager.default.createDirectory(at:directory,withIntermediateDirectories:true);let url=directory.appendingPathComponent(name.replacingOccurrences(of:"/",with:"_"));try? data.write(to:url,options:[.atomic,.completeFileProtectionUntilFirstUserAuthentication]);return url}
 }
 struct APIFilesView:View {
-    enum Mode {case vehicle,receipts,service,job,plan}
+    enum Mode {case vehicle,receipts,service,diary,job,plan}
     @ObservedObject var store:APIStore
     let path:String
     let mode:Mode
@@ -99,7 +99,7 @@ struct APIFilesView:View {
     @State private var photoAction:APIDomainAction?
     @State private var removePhoto:APIValue = .null
     @State private var confirmRemoval=false
-    var allowed:Bool { store.writer && !store.isRolePreview && !record["cancelled"].bool && store.enabled("photoUploads") && (mode != .service || store.enabled("protocolPhotos")) && (mode != .receipts || store.enabled("fleetReceipts") && (store.manager || record["createdBy"].string==store.userID)) && (mode != .job || store.enabled("drivePhotos")) }
+    var allowed:Bool { (store.writer || mode == .diary && APIJobWorkflow.diaryRole(store.role)) && !store.isRolePreview && !record["cancelled"].bool && store.enabled("photoUploads") && (![Mode.service,.diary].contains(mode) || store.enabled("protocolPhotos")) && (mode != .receipts || store.enabled("fleetReceipts") && (store.manager || record["createdBy"].string==store.userID)) && (mode != .job || store.enabled("drivePhotos")) }
     var body:some View {
         VStack(alignment:.leading,spacing:12) {
             if mode != .vehicle && mode != .plan {
@@ -143,7 +143,7 @@ struct APIFilesView:View {
         let scope=store.scope
         do {
             switch mode {
-            case .service,.job:let s=try await store.get(path);guard scope==store.scope else{return};files=s["photos"].array
+            case .service,.diary,.job:let s=try await store.get(path);guard scope==store.scope else{return};files=s["photos"].array
             case .receipts:let pieces=path.split(separator:"/");guard pieces.count>=5 else{return};let data=try await store.get("/api/vehicles/"+pieces[2]);guard scope==store.scope else{return};files=data["receipts"].array.filter{$0["entryId"].string==String(pieces[4])}
             default:break
             }
@@ -158,7 +158,7 @@ struct APIFilesView:View {
             switch mode {
             case .vehicle:try await store.upload(path,bytes:data,type:type,headers:["if-match":record["version"].string])
             case .receipts:try await store.upload(path+"/"+id,bytes:data,type:type)
-            case .service:try await store.upload(path+"/photos/"+id,bytes:data,type:type,headers:["x-file-name":name.addingPercentEncoding(withAllowedCharacters:.urlPathAllowed) ?? name],offline:true,id:id);attached?(id)
+            case .service,.diary:try await store.upload((mode == .diary ? path.replacingOccurrences(of:"/service",with:"/diary") : path)+"/photos/"+id,bytes:data,type:type,headers:["x-file-name":name.addingPercentEncoding(withAllowedCharacters:.urlPathAllowed) ?? name],offline:true,id:id);attached?(id)
             case .plan:var form=APIMultipart();form.field("version",record["version"].string);form.file("plan",filename:name,type:type,bytes:data);try await store.upload(path,bytes:form.finished,type:form.type)
             case .job:try await APIJobPhotoUpload.upload(store:store,path:path,data:data,type:type,name:name,id:id,category:category,note:note)
             }

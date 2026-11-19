@@ -248,6 +248,12 @@ async function workspaceRawApi(request,env,ctx){
     if(path==='/api/materials'||path.startsWith('/api/materials/'))return await handleMaterials(request,env,m,{body,fail,json,validId,cleanText,expectedVersion});
     if(path.startsWith('/api/service-reminders/'))return await handleServiceReminders(request,env,m,{json,fail,boundedBytes,body});
     if(/^\/api\/jobs\/[-\w]+\/protocol-emails(?:\/|$)/.test(path)){const {features}=await featureSettingsOnce();if(!features.jobs)fail(403,'Zakázky jsou vypnuté.');return await handleProtocolEmails(request,env,ctx,m,{body,fail,json,validId,cleanText,boundedBytes});}
+    if(/^\/api\/jobs\/[-\w]{1,100}\/diary\/photos\/[-\w]{1,100}$/.test(path)){
+      const {features}=await featureSettingsOnce();if(!features.jobs||!features.photoUploads||!features.protocolPhotos)fail(403,'Fotografie deníku jsou vypnuté.',{code:'feature_disabled'});
+      if(method!=='PUT')fail(405,'Tato cesta slouží pouze k nahrání fotografie deníku.');
+      const translated=new URL(request.url);translated.pathname=translated.pathname.replace('/diary/photos/','/service/photos/');
+      return await handleServiceWork(new Request(translated,request),env,ctx,m,{body,fail,json,validId,cleanText,boundedBytes,features,diaryPhoto:true});
+    }
     if(/^\/api\/jobs\/[-\w]+\/diary(?:\/|$)/.test(path)){const {features}=await featureSettingsOnce();if(!features.jobs)fail(403,'Zakázky jsou vypnuté.',{code:'jobs_disabled'});return await handleJobDiary(request,env,m,{body,fail,json,validId,cleanText,features});}
     if(/^\/api\/jobs\/[-\w]+\/service(?:\/|$)/.test(path)){const {features}=await featureSettingsOnce();if(!features.jobs)fail(403,'Zakázky jsou v nastavení vypnuté.',{code:'jobs_disabled'});const response=await handleServiceWork(request,env,ctx,m,{body,fail,json,validId,cleanText,boundedBytes,features});if(method!=='GET')deliver();return response;}
     if(path.startsWith('/api/subscriptions')||path.startsWith('/api/tariffs')){const {features}=await featureSettingsOnce();if(!features.subscriptions||!features.jobs||!features.customers)fail(403,'Předplatné, zákazníci nebo zakázky jsou v nastavení vypnuté.',{code:'subscriptions_disabled'});const response=await handleSubscriptions(request,env,m,{body,fail,json,validId,cleanText,boundedBytes});if(method!=='GET')deliver();return response;}

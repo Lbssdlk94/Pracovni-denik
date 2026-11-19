@@ -71,3 +71,24 @@ test('Deleting cannot race past a role revocation or affect an entry in another 
  const batch=e.DB.batch;e.DB.batch=async statements=>{e.sqlite.prepare("UPDATE members SET role='worker' WHERE user_id=?").run(people.owner.id);return batch(statements);};
  assert.ok([403,404,409].includes((await call(e,'/api/jobs/build/diary/day1',people.owner,'DELETE',b)).status));assert.equal(e.sqlite.prepare("SELECT deleted_at FROM job_diary_entries WHERE id='day1'").get().deleted_at,null);assert.equal(e.sqlite.prepare("SELECT count(*) n FROM subscription_operations WHERE id='delete-race'").get().n,0);
  }finally{e.sqlite.close();}});
+
+test('Every existing role can write its own diary, including reader photos, but only owner/administrator can delete',async()=>{const e=await setup();try{
+ e.sqlite.prepare("UPDATE jobs SET assigned_users=? WHERE id='build'").run(JSON.stringify([people.worker.id,people.reader.id,people.admin.id]));
+ const path='/api/jobs/build/diary',upload=(photo,user=people.reader)=>api(new Request('https://zavlahy.test'+path+'/photos/'+photo,{method:'PUT',headers:{'x-zavlahy-request':'1','x-workspace-client-version':'shared-directory-v1','oai-authenticated-user-id':user.id,'oai-authenticated-user-email':user.email,'content-type':'image/jpeg'},body:new Uint8Array([255,216,255,219,0,1])}),e,ctx);
+ await good(await upload('reader-photo'));await good(await upload('reader-photo'));
+ assert.equal(e.sqlite.prepare("SELECT count(*) n FROM service_photos WHERE id='reader-photo'").get().n,1);
+ const saved=await good(await call(e,path+'/reader-entry',people.reader,'PUT',{...write(0,'reader-create'),photoIds:['reader-photo']}));assert.equal(saved.entry.createdBy,people.reader.id);assert.equal(saved.entry.canEdit,true);assert.equal(saved.entry.canDelete,false);
+ await good(await call(e,path+'/reader-entry',people.reader,'PUT',{...write(1,'reader-edit','Doplněný postup'),photoIds:['reader-photo']}));
+ assert.equal((await call(e,path+'/reader-entry',people.worker,'PUT',write(2,'foreign-edit'))).status,403);
+ for(const role of ['reader','worker'])assert.equal((await call(e,path+'/reader-entry',people[role],'DELETE',{version:2,operationId:'deny-'+role,confirm:'DELETE_JOB_DIARY_ENTRY'})).status,403);
+ // The reader exception must not grant protocol or job editing.
+ assert.equal((await call(e,'/api/jobs/build/service',people.reader,'PUT',{version:1,operationId:'reader-protocol',report:{work:'Forbidden'}})).status,403);
+ assert.equal((await call(e,'/api/jobs/build',people.reader,'PUT',{version:1,title:'Forbidden reassignment',jobType:'installation',assignedTo:people.reader.id,status:'planned'})).status,403);
+ e.sqlite.prepare("UPDATE members SET role='admin' WHERE user_id=?").run(people.admin.id);
+ assert.equal((await call(e,path+'/reader-entry',people.admin,'DELETE',{version:2,operationId:'deny-manager',confirm:'DELETE_JOB_DIARY_ENTRY'})).status,403);
+ e.sqlite.prepare("UPDATE members SET role='administrator' WHERE user_id=?").run(people.admin.id);
+ await good(await call(e,path+'/reader-entry',people.admin,'DELETE',{version:2,operationId:'delete-admin',confirm:'DELETE_JOB_DIARY_ENTRY'}));
+ assert.equal((await call(e,'/api/jobs/build/service/photos/reader-photo',people.reader)).status,200);
+ e.sqlite.prepare("UPDATE jobs SET assigned_users=? WHERE id='build'").run(JSON.stringify([people.worker.id]));
+ assert.equal((await upload('revoked')).status,404);assert.equal((await call(e,path+'/new',people.reader,'PUT',write(0,'revoked-entry'))).status,404);
+ }finally{e.sqlite.close();}});

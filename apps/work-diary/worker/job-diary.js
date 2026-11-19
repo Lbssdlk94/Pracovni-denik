@@ -6,7 +6,8 @@ import {subDate,subToday} from '../web/subscription-model.js';
 export async function handleJobDiary(request,env,m,h){
  const {json,fail,body,validId,cleanText}=h,url=new URL(request.url),match=url.pathname.match(/^\/api\/jobs\/([-\w]{1,100})\/diary(?:\/([-\w]{1,100}))?$/),method=request.method;
  if(!match)fail(404,'Deník realizace není dostupný.');
- const jobId=match[1],entryId=match[2],manager=['owner','administrator','admin'].includes(m.role),job=await subWorkJob(env,m,jobId,fail,method!=='GET');
+ const jobId=match[1],entryId=match[2],manager=['owner','administrator','admin'].includes(m.role),job=await subWorkJob(env,m,jobId,fail);
+ if(method!=='GET'&&(job.deleted||!['owner','administrator','admin','worker','reader'].includes(m.role)))fail(403,'Deník této zakázky nelze upravovat.');
  if(job.job_type!=='installation')fail(404,'Deník je dostupný u zakázek typu Realizace.');
  const jobDTO={id:job.id,title:job.title,jobType:job.job_type,gardenId:job.garden_id,discipline:job.discipline,status:job.deleted?'cancelled':job.status,version:job.version,cancelled:!!job.deleted};
  const photoIndex=new Map();
@@ -18,7 +19,7 @@ export async function handleJobDiary(request,env,m,h){
  }
  async function dto(row){
   const ids=JSON.parse(row.photo_ids),photos=ids.map(id=>photoIndex.get(id)).filter(Boolean);
-  return {id:row.id,jobId,date:row.date,work:row.work,material:row.material,notes:row.notes,nextStep:row.next_step,photoIds:ids,photos,version:row.version,createdBy:row.created_by,authorName:row.author_name,updatedBy:row.updated_by,updatedByName:row.updated_by_name,createdAt:row.created_at,updatedAt:row.updated_at,canDelete:!job.deleted&&['owner','administrator'].includes(m.role),canEdit:!job.deleted&&(manager||m.role==='worker'&&row.created_by===m.user_id)};
+  return {id:row.id,jobId,date:row.date,work:row.work,material:row.material,notes:row.notes,nextStep:row.next_step,photoIds:ids,photos,version:row.version,createdBy:row.created_by,authorName:row.author_name,updatedBy:row.updated_by,updatedByName:row.updated_by_name,createdAt:row.created_at,updatedAt:row.updated_at,canDelete:!job.deleted&&['owner','administrator'].includes(m.role),canEdit:!job.deleted&&(manager||['worker','reader'].includes(m.role)&&row.created_by===m.user_id)};
  }
  async function detail(row){await hydratePhotos([row]);return dto(row);}
 
@@ -55,7 +56,7 @@ export async function handleJobDiary(request,env,m,h){
  if(!input.photoIds.length)fail(400,'K dennímu zápisu přidejte alespoň jednu fotografii.',{code:'diary_photo_required'});
  const photoIds=input.photoIds.map(validId);
  if(photoIds.length){const valid=await subAll(env.DB,"SELECT id FROM service_photos WHERE job_id=? AND status='ready' AND id IN (SELECT value FROM json_each(?)) UNION SELECT id FROM job_photos WHERE job_id=? AND status='complete' AND id IN (SELECT value FROM json_each(?))",jobId,JSON.stringify(photoIds),jobId,JSON.stringify(photoIds));if(valid.length!==photoIds.length)fail(400,'Fotografie nepatří k zakázce nebo ještě není nahraná.');}
- const now=Date.now(),access=`EXISTS(SELECT 1 FROM jobs j WHERE j.id=? AND j.job_type='installation' AND j.deleted=0 AND ${subWorkScope}) AND EXISTS(SELECT 1 FROM members w WHERE w.user_id=? AND w.role IN ('owner','administrator','admin','worker'))`,accessArgs=[jobId,m.user_id,m.user_id],operationGate='EXISTS(SELECT 1 FROM job_diary_entries WHERE id=? AND job_id=? AND version=? AND last_mutation_id=?)',gateArgs=[entryId,jobId,input.version+1,operationId];
+ const now=Date.now(),access=`EXISTS(SELECT 1 FROM jobs j WHERE j.id=? AND j.job_type='installation' AND j.deleted=0 AND ${subWorkScope}) AND EXISTS(SELECT 1 FROM members w WHERE w.user_id=? AND w.role IN ('owner','administrator','admin','worker','reader'))`,accessArgs=[jobId,m.user_id,m.user_id],operationGate='EXISTS(SELECT 1 FROM job_diary_entries WHERE id=? AND job_id=? AND version=? AND last_mutation_id=?)',gateArgs=[entryId,jobId,input.version+1,operationId];
  const statement=old?env.DB.prepare(`UPDATE job_diary_entries SET date=?,work=?,material=?,notes=?,next_step=?,photo_ids=?,version=version+1,last_mutation_id=?,updated_at=?,updated_by=?,updated_by_name=? WHERE id=? AND job_id=? AND version=? AND deleted_at IS NULL AND (created_by=? OR EXISTS(SELECT 1 FROM members a WHERE a.user_id=? AND a.role IN ('owner','administrator','admin'))) AND ${access}`).bind(input.date,work,material,notes,nextStep,JSON.stringify(photoIds),operationId,now,m.user_id,m.name||m.user_id,entryId,jobId,input.version,m.user_id,m.user_id,...accessArgs):env.DB.prepare(`INSERT OR IGNORE INTO job_diary_entries(id,job_id,date,work,material,notes,next_step,photo_ids,version,last_mutation_id,created_at,updated_at,created_by,author_name,updated_by,updated_by_name) SELECT ?,?,?,?,?,?,?,?,1,?,?,?,?,?,?,? WHERE ${access}`).bind(entryId,jobId,input.date,work,material,notes,nextStep,JSON.stringify(photoIds),operationId,now,now,m.user_id,m.name||m.user_id,m.user_id,m.name||m.user_id,...accessArgs);
  const result=await env.DB.batch([statement,subOperation(env,operationId,m.user_id,jobId,hash,operationGate,gateArgs)]);
  if(!result[0].meta.changes&&!await subReplay(env,operationId,m.user_id,jobId,hash,fail))fail(409,'Zápis nebo oprávnění se změnily. Obnovte deník.',{code:'diary_conflict'});

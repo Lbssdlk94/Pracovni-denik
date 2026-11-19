@@ -186,7 +186,7 @@ final class APIStore: ObservableObject {
         let ticket = generation
         if path.hasPrefix("/api/jobs"){beginJobMonthChange()}
         if offline && enabled("offline") {
-            guard writer, online || vault.offlineAllowed() else { throw APIError.local("Platnost offline přístupu vyžaduje nové spuštění s připojením.") }
+            guard writer || APIJobWorkflow.isDiaryWrite(path:path,method:method,role:role), online || vault.offlineAllowed() else { throw APIError.local("Platnost offline přístupu vyžaduje nové spuštění s připojením.") }
             var op = APIMutation(id:operationID ?? UUID().uuidString,path:path,method:method,body:body,bytes:nil,contentType:"application/json",headers:[:],scope:scope,dependsOn:dependsOn,draftKey:draftKey)
             op.draftSnapshot = draftKey.flatMap { vault.state.drafts[$0]?.value }
             try vault.enqueue(op); updateOutbox(); if online { await sync() }
@@ -208,7 +208,7 @@ final class APIStore: ObservableObject {
         guard authenticated else { throw APIError.local("Nejdříve se přihlaste.") }
         let ticket = generation
         if offline && enabled("offline"), let vault {
-            guard writer, online || vault.offlineAllowed() else { throw APIError.local("Offline přístup vyžaduje nové spuštění s připojením.") }
+            guard writer || APIJobWorkflow.isDiaryWrite(path:path,method:"PUT",role:role), online || vault.offlineAllowed() else { throw APIError.local("Offline přístup vyžaduje nové spuštění s připojením.") }
             var op=APIMutation(id:id,path:path,method:"PUT",body:nil,bytes:bytes,contentType:type,headers:headers,scope:scope,dependsOn:[],draftKey:draftKey);op.draftSnapshot=draftKey.flatMap{vault.state.drafts[$0]?.value};try vault.enqueue(op);updateOutbox();if online{await sync()};guard authenticated,ticket==generation else{throw APIError.local("Přístup už není platný nebo se změnil účet. Neodeslaná příloha zůstává zabezpečená.")};if let current=self.vault?.state.outbox.first(where:{$0.id==id}),current.state != "pending"{throw APIError(status:409,code:current.state,message:current.error)};return
         }
         guard online else { throw APIError.local("Nahrání souboru vyžaduje připojení.") }

@@ -1,5 +1,5 @@
 import {createScopedReadCache} from './scoped-read-cache.js?v=fast-read-v1';
-import {createJobDiaryClient} from './job-diary-client.js?v=detail-actions-v1';
+import {createJobDiaryClient} from './job-diary-client.js?v=diary-members-v1';
 import {createJobListCache,JOB_CACHE_KEY,jobCacheScope} from './job-list-cache.js?v=job-three-month-v1';
 import {rolePreviewSession,rolePreviewTargets} from './role-preview-model.js?v=role-preview-v1';
 import {createWorkspaceClient} from './workspace-client.js?v=job-diary-v1';
@@ -258,7 +258,7 @@ async function sendServiceWork(key){
  const task=(async()=>{const entry=(await allServiceWork()).find(e=>e.id===key);if(!entry?.pending||entry.ownerId!==identity?.user.id)return;
   const mutationId=entry.mutationId,actor=identity.user.id,role=identity.user.role;
   try{
-   for(const photo of entry.photos||[]){await request('/api/jobs/'+encodeURIComponent(entry.jobId)+'/service/photos/'+encodeURIComponent(photo.id),{method:'PUT',headers:{'content-type':photo.file.type||(/\.hei[cf]$/i.test(photo.file.name)?'image/heic':'image/jpeg'),'x-file-name':encodeURIComponent(photo.file.name||'fotografie.jpg')},body:photo.file,timeoutMs:120000});}
+   for(const photo of entry.photos||[]){await request('/api/jobs/'+encodeURIComponent(entry.jobId)+(entry.kind==='jobDiary'?'/diary/photos/':'/service/photos/')+encodeURIComponent(photo.id),{method:'PUT',headers:{'content-type':photo.file.type||(/\.hei[cf]$/i.test(photo.file.name)?'image/heic':'image/jpeg'),'x-file-name':encodeURIComponent(photo.file.name||'fotografie.jpg')},body:photo.file,timeoutMs:120000});}
    const snapshot=await request('/api/jobs/'+encodeURIComponent(entry.jobId)+(entry.kind==='jobDiary'?'/diary/'+encodeURIComponent(entry.entryId):'/service'),{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(entry.payload)});
    if(identity?.user.id!==actor||identity?.user.role!==role)return;if(entry.kind==='jobDiary'){await jobDiaryClient.acknowledge(entry,snapshot);return;}await changeServiceWork(key,current=>{if(!current)return current;if(current.mutationId!==mutationId)return {...current,snapshot,expiresAt:Date.now()+86400000,payload:{...current.payload,version:snapshot.job.version}};return {...current,snapshot,expiresAt:Date.now()+86400000,pending:false,photos:[],payload:null,error:'',conflict:false,blocked:false};});
   }catch(e){await changeServiceWork(key,current=>current?{...current,conflict:['service_conflict','diary_conflict'].includes(e.code),blocked:e.status>=400&&e.status<500&&!['service_conflict','diary_conflict'].includes(e.code),snapshot:[401,403,404].includes(e.status)?null:current.snapshot,error:e.message,blockedCode:e.code}:current);if([403,404].includes(e.status)&&e.code!=='subscriptions_disabled')window.dispatchEvent(new CustomEvent('service-work-access-revoked',{detail:{jobId:entry.jobId}}));throw e;}
