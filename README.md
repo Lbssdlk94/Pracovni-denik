@@ -22,3 +22,5 @@ Skutečný izolovaný D1/R2: `npm run test:worker`, `node scripts/test-tenant-po
 Izolované prohlížečové testy vyžadují Playwright a Chromium: `node apps/super-admin/tests/admin-browser.cjs`. Testovací HTTP server je pouze na loopbacku a není součástí nasazeného Workeru. `npm run preview` rovněž spouští výhradně izolovaná testovací data.
 
 Super Admin se publikuje z kořenového buildu podle kořenového `.openai/hosting.json`. Firemní aplikaci na tento projekt nepublikovat. Její instalační balíček vznikne přes `node scripts/prepare-company.mjs`; nová instalace musí získat vlastní Sites ID, DB/R2 a nové klíče. Existující migrace každé instalace zachovat.
+
+Individuální měření dopravy/práce a člověkohodin na zakázkách, propojení s docházkou, opravy, oprávnění a offline fronta: [popis a bezpečné nasazení](docs/JOB-PERSON-HOURS-2026-11-19.md). iOS lze zkontrolovat ručním během `iphone.yml` s `checks_only=true` bez vytvoření IPA.

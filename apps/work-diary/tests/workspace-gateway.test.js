@@ -35,3 +35,11 @@ test('Month snapshot revision requests survive the signed Garden entry as query 
  globalThis.fetch=(url,options)=>workspaceGateway(new Request(url,options),f.env,f.ctx,req=>{const url=new URL(req.url);assert.equal(url.searchParams.get('cacheSnapshot'),'1');assert.equal(url.searchParams.get('month'),'2026-11');assert.equal(req.headers.get('oai-authenticated-user-id'),'owner-id');return Response.json({jobs:[],listRevision:7,nextCursor:null});});
  try{const response=await workspaceGateway(new Request(entry+'/api/jobs?state=all&order=schedule&month=2026-11&cacheSnapshot=1',{headers:{'oai-authenticated-user-id':'owner-id'}}),f.proxy,f.ctx);assert.equal(response.status,200);assert.equal((await response.json()).listRevision,7);}finally{globalThis.fetch=original;}
 });
+
+
+test('Signed Garden relay preserves explicit time-client support without inventing it for installed old clients',async()=>{
+ for(const value of ['', 'v1']){const f=fixture(),original=globalThis.fetch;
+  globalThis.fetch=(url,options)=>workspaceGateway(new Request(url,options),f.env,f.ctx,req=>{assert.equal(req.headers.get('x-work-time-client')||'',value);return Response.json({ok:true});});
+  try{const r=await workspaceGateway(new Request(entry+'/api/jobs?state=active',{headers:{'oai-authenticated-user-id':'owner-id',...(value?{'x-work-time-client':value}:{})}}),f.proxy,f.ctx);assert.equal(r.status,200);}finally{globalThis.fetch=original;}
+ }
+});

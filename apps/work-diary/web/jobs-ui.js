@@ -1,5 +1,5 @@
 import {createJobTimeUI} from './job-time-ui.js?v=person-hours-v1';
-import {jobCacheScope} from './job-list-cache.js?v=job-three-month-v1';
+import {jobCacheScope} from './job-list-cache.js?v=person-hours-v1';
 import {StatusBadge,AvatarStack,StickyActionBar,OfflineBadge,VisitCard,VisitTime,Accordion,shortVisitDate,distinctWorkLabel} from './field-components.js?v=field-ui-v1';
 import {createJobDiaryUI} from './job-diary-ui.js?v=diary-members-v1';
 import {workspaceBadge,workspaceDisciplineField} from './workspace-ui.js?v=shared-directory-v1';
@@ -25,7 +25,7 @@ import {jobWeekDays,jobWeekMarkup} from './job-week-ui.js?v=workspace-roles-v1';
 import {jobTableMarkup,JOB_TABLE_COLUMNS} from './job-table-ui.js?v=workspace-roles-v1';
 import {jobTimelineMarkup,bindTimelineInfo} from './job-timeline-ui.js?v=workspace-roles-v1';
 import {moveTimelineDay} from './job-timeline-model.js?v=workspace-roles-v1';
-import {travelMessage,travelSmsLink,travelArrivalLabel,jobProgressAction} from './job-travel.js?v=job-progress-v1';
+import {travelMessage,travelSmsLink,travelArrivalLabel,jobProgressAction} from './job-travel.js?v=person-hours-v1';
 import {extraAssigneeFields,bindExtraAssignees,selectedAssignees} from './assignees.js?v=workspace-roles-v1';
 import {closeDialog} from './dialog.js?v=workspace-roles-v1';
 import {pragueToday,moveJobMonth,jobMonthDays,jobMonthLabel,jobDayLabel,jobTimeLabel,scheduledJobTitle,groupScheduledJobs} from './job-schedule.js?v=workspace-roles-v1';
@@ -195,7 +195,7 @@ export function createJobsUI({onOpenGarden,gardenHistory,onOpenDrive,onOpenWork,
   let interacted=false;const controller=new AbortController();for(const event of ['pointerdown','click','keydown','input','change'])modal.addEventListener(event,()=>interacted=true,{signal:controller.signal});for(const event of ['close','dialog-view-changing'])modal.addEventListener(event,()=>controller.abort(),{once:true,signal:controller.signal});
   fresh(id).then(job=>{
    if(!job||who!==jobCacheScope(getSession())||!root.isConnected||!modal.contains(root))return;
-   if(!interacted&&!photosUI.hasChanges()&&!diaryUI.hasChanges()){const top=modal.scrollTop;renderDetails(job,true,detailViews.get(id)||initialView);modal.scrollTop=top;return;}
+   if(!interacted&&!photosUI.hasChanges()&&!diaryUI.hasChanges()&&!timeUI.hasChanges()){const top=modal.scrollTop;renderDetails(job,true,detailViews.get(id)||initialView);modal.scrollTop=top;return;}
    status.textContent='';status.hidden=true;if(job.gardenId)gardenHistory?.()?.alert(root.querySelector('#job-garden-defects'),{gardenId:job.gardenId,jobId:job.id});
    const contact=root.querySelector('[data-job-contact-slot]');if(contact&&!contact.contains(document.activeElement)){const wasOpen=contact.querySelector('details')?.open;contact.innerHTML=detailContact(job);if(wasOpen&&contact.querySelector('details'))contact.querySelector('details').open=true;}
    if(job.version!==snapshot.version){status.hidden=false;status.innerHTML='Údaje zakázky se změnily. <button class="text-link" type="button" data-refresh-detail>Obnovit detail</button>';status.querySelector('button').onclick=()=>{if((photosUI.hasChanges()||diaryUI.hasChanges()||timeUI.hasChanges())&&!confirm('Obnovit detail? Rozepsaný deník zůstane uložený v zařízení.'))return;details(id,true,detailViews.get(id)).catch(e=>toast(e.message,true));};}
@@ -205,6 +205,7 @@ export function createJobsUI({onOpenGarden,gardenHistory,onOpenDrive,onOpenWork,
  function detailContact(job){const phone=getSession()?.features.customers!==false?job.customerContact?.phones?.find(p=>/[0-9]/.test(p.number||'')):null,more=getSession()?.features.customers!==false&&job.customerContact&&Array.isArray(job.customerContact.phones)?customerContactMarkup(job.customerContact,esc).replace(/<h3>.*?<\/h3>/,''):'';return (phone?'<a class="btn job-customer-call" href="'+esc(customerTelephone(phone.number))+'">'+interfaceIcon('phone')+'Zavolat zákazníkovi</a>':'')+(more?Accordion('Další kontaktní údaje',more,{className:'job-detail-contact'}):'');}
  function renderDetails(job,modalOnly=false,initialView=null,deferExtras=false){const id=job.id,origin={x:scrollX,y:scrollY,who:actor()};if(!modalOnly&&matchMedia('(min-width:1200px)').matches){showPanel(job);return;}
 
+  const timeWasOpen=modal.open&&modal.querySelector('[data-detail-job]')?.dataset.detailJob===id&&modal.querySelector('#job-work-time')?.open;
   const customer=job.customerName||job.customerContact?.name||scheduledJobTitle(job),address=jobMapAddress(job),hasDiary=job.jobType==='installation',photosAllowed=getSession()?.features.drivePhotos!==false;
   const workLabel=distinctWorkLabel(scheduledJobTitle(job),customer);
   const navigation=address?addressNavigationLink(address):null;
@@ -225,7 +226,7 @@ export function createJobsUI({onOpenGarden,gardenHistory,onOpenDrive,onOpenWork,
    modal.querySelector('#job-jump-photos')?.addEventListener('click',()=>selectTab('photos'));modal.querySelector('#job-photos-back')?.addEventListener('click',()=>selectTab('overview'));
    selectTab(initialView||detailViews.get(job.id)||'overview');
   }
-  const timeRoot=modal.querySelector('#job-work-time');if(timeRoot)timeUI.mount(timeRoot,job,{signal:detailSignal});
+  const timeRoot=modal.querySelector('#job-work-time');if(timeRoot){timeUI.mount(timeRoot,job,{signal:detailSignal});if(timeWasOpen)timeUI.open();}
   const disposeDetail=()=>{barSize.disconnect();menuController.abort();diaryUI.clear();photosUI.clear();modal.style.removeProperty('--job-action-height');modal.classList.remove('job-detail-dialog','job-diary-dialog');detailLifecycle.abort();};modal.addEventListener('dialog-view-changing',disposeDetail,{once:true,signal:detailSignal});modal.addEventListener('close',()=>{disposeDetail();if(origin.who===actor()&&document.querySelector('#jobs'))requestAnimationFrame(()=>scrollTo(origin.x,origin.y));},{once:true,signal:detailSignal});
   if(job.gardenId&&!deferExtras)gardenHistory?.()?.alert(modal.querySelector('#job-garden-defects'),{gardenId:job.gardenId,jobId:job.id});
   if(!tool('jobHandoffs'))modal.querySelectorAll('[data-job-handoff]').forEach(b=>b.remove());modal.querySelector('[data-job-handoff]')?.addEventListener('click',()=>handoffsUI.open(job.id).catch(e=>toast(e.message,true)));

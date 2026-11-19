@@ -1,7 +1,7 @@
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync} from 'node:fs';
-export function environment(filename=':memory:'){
- const sqlite=new DatabaseSync(filename);for(const entry of JSON.parse(readFileSync('drizzle/meta/_journal.json','utf8')).entries)sqlite.exec(readFileSync('drizzle/'+entry.tag+'.sql','utf8'));
+export function environment(filename=':memory:',throughMigration=Infinity){
+ const sqlite=new DatabaseSync(filename);for(const entry of JSON.parse(readFileSync('drizzle/meta/_journal.json','utf8')).entries.filter(entry=>entry.idx<=throughMigration))sqlite.exec(readFileSync('drizzle/'+entry.tag+'.sql','utf8'));
  const statement=(sql,args=[])=>({bind(...values){return statement(sql,values);},async first(){return sqlite.prepare(sql).get(...args)||null;},async all(){return {results:sqlite.prepare(sql).all(...args)};},async run(){const r=sqlite.prepare(sql).run(...args);return {success:true,meta:{changes:Number(r.changes)}};}});
  const objects=new Map(),controlObjects=new Map(),objectStore=key=>key==='__installation.json'||key.startsWith('system-backups/')?controlObjects:objects;return {DB:{prepare:statement,async batch(statements){sqlite.exec('BEGIN');try{const results=[];for(const s of statements)results.push(await s.run());sqlite.exec('COMMIT');return results;}catch(e){sqlite.exec('ROLLBACK');throw e;}}},BUCKET:{async put(key,data){objectStore(key).set(key,typeof data==='string'?new TextEncoder().encode(data):new Uint8Array(data));},async get(key){const value=objectStore(key).get(key);return value?{body:new Blob([value]).stream(),arrayBuffer:async()=>value.slice().buffer}:null;},async delete(key){objectStore(key).delete(key);}},TEAM_OWNER_EMAIL:'owner@example.com',sqlite,objects,controlObjects};
 }
