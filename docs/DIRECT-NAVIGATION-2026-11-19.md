@@ -47,3 +47,5 @@ Kontrolní workflow iOS s `checks_only=true` nebyl spuštěn: automatická kontr
 - Publikum, tajné údaje a databázové vazby zůstaly zachované. Produkční zakázky ani kontakty nebyly kvůli testům měněny.
 
 Zdroje včetně nativní přípravy: GitHub větev `perf/direct-job-navigation-2026-11-19`. Návrat webu je možný nasazením předchozí verze Dr. Závlaha 146 / Dr. Garden 66 bez změny databáze. Nativní aplikace potřebuje pro aktivaci změny další samostatné vydání; v tomto úkolu nová IPA nevznikla.
+
+Následná read-only kontrola živých webů potvrdila index a Service Worker `direct-navigation-v1`, HTTP 401 bez aplikační relace a bajtovou shodu všech čtyř změněných JS modulů s publikovaným artefaktem (SHA256). Původní hledání zdrojových názvů funkcí nemohlo ověřit minifikované moduly; porovnání skutečných publikovaných bajtů prošlo. Žádné provozní zápisy nebyly provedeny.
