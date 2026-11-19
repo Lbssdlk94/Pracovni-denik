@@ -123,7 +123,7 @@ struct APIPlanView:View {
             if store.writer && value["plan"]["type"].string.hasPrefix("image/"){
                 Picker("Šachta",selection:$shaft){Text("Vyberte šachtu").tag("");ForEach(shafts,id:\.id){Text($0.title).tag($0.id)}}
                 Button("Přidat značku"){guard !shaft.isEmpty else{return};var markers=value["plan"]["markers"].array;guard !markers.contains(where:{$0["shaftId"].string==shaft})else{return};markers.append(.object(["shaftId":.s(shaft),"x":.number(0.5),"y":.number(0.5)]));value["plan"]["markers"] = .array(markers)}
-                Button("Uložit umístění"){Task{await save()}}.buttonStyle(.borderedProminent)
+                Button("Uložit umístění"){Task{await save()}}.diaryBubble(.primary)
             }
         }else{Text("Zahrada zatím nemá nahraný plán.")}
         APIFilesView(store:store,path:"/api/gardens/"+garden.id+"/plan",mode:.plan,record:value).disabled(dirty)

@@ -50,9 +50,9 @@ struct APIProtocolEditor:View {
                     if store.writer && store.enabled("defects") && !snapshot["job"]["gardenId"].string.isEmpty{
                         Button("Převést text protokolu na sledovanou závadu"){Task{await trackDefect()}}.frame(minHeight:44)
                     }
-                    Button("Zobrazit PDF"){Task{await showPDF()}}.buttonStyle(.bordered).frame(minHeight:44)
-                    if store.writer {Button("Uložit rozpracovaný protokol"){Task{await save(finalize:false,complete:false)}}.buttonStyle(.bordered).frame(minHeight:44)
-                    Button(completing ? "Potvrdit dokončení návštěvy" : "Potvrdit hotový protokol"){Task{await save(finalize:completing ? hasContent : true,complete:completing)}}.buttonStyle(.borderedProminent).frame(minHeight:44)}
+                    Button("Zobrazit PDF"){Task{await showPDF()}}.diaryBubble().frame(minHeight:44)
+                    if store.writer {Button("Uložit rozpracovaný protokol"){Task{await save(finalize:false,complete:false)}}.diaryBubble().frame(minHeight:44)
+                    Button(completing ? "Potvrdit dokončení návštěvy" : "Potvrdit hotový protokol"){Task{await save(finalize:completing ? hasContent : true,complete:completing)}}.diaryBubble(.primary).frame(minHeight:44)}
                     if store.owner && store.enabled("emailNotifications"){Button("Odeslání protokolu zákazníkovi"){Task{guard value==baseline,snapshot["report"]["documentState"].string=="ready",!store.outbox.contains(where:{$0.path.hasPrefix("/api/jobs/"+jobID+"/")})else{problem="Nejdříve uložte a synchronizujte hotový protokol. E-mailem lze odeslat jen uložený výkaz.";return};await preparePDF();if pdfData != nil{email=true}}}}
                 }
                 if let problem{DiaryStatusBanner(text:problem,warning:true)}

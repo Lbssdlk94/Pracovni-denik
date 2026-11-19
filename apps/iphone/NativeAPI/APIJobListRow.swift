@@ -15,7 +15,7 @@ struct APIJobListRow:View {
             if mayWork,let primary=APIJobWorkflow.primary(job,travelEnabled:store.enabled("jobTravel")){Button{if primary == .departure{departure=true}else{statusRequest=APIJobStatusRequest(targetStatus:primary.targetStatus)}}label:{action(primary.title,primary.symbol)}}
             else if mayWork{Button{report=true}label:{action("Servisní protokol","doc.text")}}
             NavigationLink{detail}label:{action("Podrobnosti","chevron.right")}
-        }.buttonStyle(.bordered)
+        }.diaryBubble()
     }.padding(.vertical,6).sheet(item:$statusRequest){request in APIJobStatusEditor(store:store,job:job,initialStatus:request.targetStatus)}.sheet(isPresented:$departure){APIDepartureEditor(store:store,job:job)}.sheet(isPresented:$report){APIProtocolEditor(store:store,jobID:job.id)}}
     private var detail:some View{APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:job)}
     private func action(_ title:String,_ symbol:String)->some View{Label(title,systemImage:symbol).font(.subheadline).frame(maxWidth:.infinity,minHeight:44).fixedSize(horizontal:false,vertical:true)}

@@ -70,9 +70,9 @@ struct APIJobDetailContent:View {
             }
             if let phone=job["customerContact"]["phones"].array.first?["number"].string,
                !phone.isEmpty, let url=URL(string:"tel:"+phone.filter{"+0123456789".contains($0)}) {
-                Link(destination:url){Label("Zavolat zákazníkovi",systemImage:"phone").frame(maxWidth:.infinity,minHeight:48)}.buttonStyle(.bordered)
+                Link(destination:url){Label("Zavolat zákazníkovi",systemImage:"phone").frame(maxWidth:.infinity,minHeight:48)}.diaryBubble()
             }
-            if store.enabled("drivePhotos"){NavigationLink{ScrollView{APIFilesView(store:store,path:"/api/jobs/"+job.id+"/photos",mode:.job,record:job).padding(18)}.navigationTitle("Fotodokumentace")}label:{Label("Fotodokumentace",systemImage:"camera").frame(maxWidth:.infinity,minHeight:48)}.buttonStyle(.bordered)}
+            if store.enabled("drivePhotos"){NavigationLink{ScrollView{APIFilesView(store:store,path:"/api/jobs/"+job.id+"/photos",mode:.job,record:job).padding(18)}.navigationTitle("Fotodokumentace")}label:{Label("Fotodokumentace",systemImage:"camera").frame(maxWidth:.infinity,minHeight:48)}.diaryBubble()}
             if store.writer && store.enabled("defects") && !job["gardenId"].string.isEmpty {
                 Button("Přidat závadu"){let r=APIResource(entity:.defects,seed:.object(["gardenId":job["gardenId"],"sourceJobId":.s(job.id),"discipline":job["discipline"]]));store.route=APIRoute(resource:r,value:r.initial(store),isNew:true)}.frame(minHeight:44)
             }

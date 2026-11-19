@@ -16,9 +16,8 @@ struct DiaryTile: View {
                 Image(systemName: symbol).font(.title2).frame(width: 48, height: 48).background(DiaryStyle.soft, in: RoundedRectangle(cornerRadius: 16))
                 VStack(alignment: .leading, spacing: 5) { Text(title).font(.headline); Text(subtitle).font(.subheadline).foregroundStyle(.secondary) }
                 Spacer(minLength: 0); Image(systemName: "chevron.right").font(.caption.weight(.semibold))
-            }.foregroundStyle(DiaryStyle.accent).padding(16).frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
-                .background(.background, in: RoundedRectangle(cornerRadius: 24)).overlay(RoundedRectangle(cornerRadius: 24).stroke(DiaryStyle.accent.opacity(0.09)))
-        }.buttonStyle(.plain).accessibilityLabel(title)
+            }.foregroundStyle(DiaryStyle.accent).frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+        }.diaryBubble().accessibilityLabel(title)
     }
 }
 struct NativeJobCard: View {

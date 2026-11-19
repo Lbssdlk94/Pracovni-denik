@@ -156,7 +156,7 @@ struct APIEntityDetail: View {
             link("Zakázky",.jobs,seed:.object(["customerId":.s(record.id)]))
             if store.enabled("subscriptions") { link("Servisní předplatné",.subscriptions,seed:.object(["customerId":.s(record.id)])) }
             DisclosureGroup("Fakturační údaje"){APIReadFields(value:record["billing"],fields:APISchemas.billing)}.diaryCard()
-            if store.manager,!store.me["workspace"].isNull { Button("Zařazení do oborů"){action=APIDomainAction.membership(record:record,kind:"customers")}.buttonStyle(.bordered).frame(minHeight:44) }
+            if store.manager,!store.me["workspace"].isNull { Button("Zařazení do oborů"){action=APIDomainAction.membership(record:record,kind:"customers")}.diaryBubble().frame(minHeight:44) }
         }
     }
     private var garden: some View {
@@ -185,14 +185,14 @@ struct APIEntityDetail: View {
             if !record["repairJobs"].array.isEmpty{DisclosureGroup("Navazující opravné zakázky"){ForEach(record["repairJobs"].array,id:\.id){job in NavigationLink(job.title+" · "+APIFormat.status(job["status"].string)){APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:job)}}}.diaryCard()}
             if record["hasOtherRepair"].bool{Text("Další oprava existuje mimo vaše oprávnění.").font(.footnote)}
             ForEach(record["photos"].array,id:\.id){photo in APIAuthenticatedImage(store:store,path:photo["url"].string)}
-            if store.manager { Button("Naplánovat opravu"){if !record["repairJobs"].array.isEmpty || record["hasOtherRepair"].bool{repairConfirm=true}else{Task{await planRepair()}}}.buttonStyle(.borderedProminent).frame(minHeight:44) }
+            if store.manager { Button("Naplánovat opravu"){if !record["repairJobs"].array.isEmpty || record["hasOtherRepair"].bool{repairConfirm=true}else{Task{await planRepair()}}}.diaryBubble(.primary).frame(minHeight:44) }
             DisclosureGroup("Historie změn") { ForEach(Array(detail["events"].array.enumerated()),id:\.offset){_,e in VStack(alignment:.leading){Text(e["actorName"].string).font(.headline);Text(APIFormat.status(e["record"]["status"].string));Text(e["record"]["nextStep"].string);Text(APIFormat.date(e["at"])).font(.caption).foregroundStyle(.secondary)}.padding(.vertical,6)} }.diaryCard()
         }
     }
     private var vehicle: some View {
         VStack(spacing:18) {
             if record["hasPhoto"].bool { APIAuthenticatedImage(store:store,path:resource.recordPath(record.id)+"/photo",version:record["photoVersion"]) }
-            if store.writer && store.enabled("fleetFuel") { Button("Přidat tankování"){let r=APIResource(entity:.entries,parent:record.id,seed:.object(["odometer":record["odometer"]]));store.route=APIRoute(resource:r,value:r.initial(store),isNew:true)}.buttonStyle(.borderedProminent).frame(minHeight:44) }
+            if store.writer && store.enabled("fleetFuel") { Button("Přidat tankování"){let r=APIResource(entity:.entries,parent:record.id,seed:.object(["odometer":record["odometer"]]));store.route=APIRoute(resource:r,value:r.initial(store),isNew:true)}.diaryBubble(.primary).frame(minHeight:44) }
             link("Tankování a provozní záznamy",.entries,parent:record.id)
             DisclosureGroup("Podrobnosti vozidla"){APIReadFields(value:record,fields:resource.fields)}.diaryCard()
             if store.enabled("fleetConsumption"),!detail["consumption"].isNull { DisclosureGroup("Spotřeba"){Text(detail["consumption"].string+" l / 100 km mezi plnými nádržemi")}.diaryCard() }

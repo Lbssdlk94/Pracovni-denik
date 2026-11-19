@@ -14,7 +14,7 @@ struct PracovniDenikApp:App {
         #endif
         _store=StateObject(wrappedValue:APIStore(fixture:fixture))
     }
-    var body:some Scene{WindowGroup{APIRoot(store:store)}}
+    var body:some Scene{WindowGroup{APIRoot(store:store).diaryBubble()}}
 }
 struct FileShare:UIViewControllerRepresentable {
     let url:URL

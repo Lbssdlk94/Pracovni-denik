@@ -25,18 +25,18 @@ struct APIJobActionBar: View {
                 if primary == .departure { departure=true }
                 else { statusRequest=APIJobStatusRequest(targetStatus:primary.targetStatus) }
             } label: {
-                Label(primary.title,systemImage:primary.symbol).frame(maxWidth:.infinity,minHeight:48)
-            }.buttonStyle(.borderedProminent).accessibilityIdentifier("job-primary-action").accessibilityLabel(primary.title)
+                Label(primary.title,systemImage:primary.symbol).frame(maxWidth:.infinity)
+            }.diaryBubble(.primary).accessibilityIdentifier("job-primary-action").accessibilityLabel(primary.title)
         }
         if store.enabled("jobs") {
             Button { report=true } label: {
-                Label("Protokol",systemImage:"doc.text").frame(maxWidth:.infinity,minHeight:48)
-            }.buttonStyle(.bordered).accessibilityLabel("Servisní protokol")
+                Label("Protokol",systemImage:"doc.text").frame(maxWidth:.infinity)
+            }.diaryBubble().accessibilityLabel("Servisní protokol")
         }
         if mayWork {
             Button { statusRequest=APIJobStatusRequest(targetStatus:nil) } label: {
-                Image(systemName:"checkmark").frame(minWidth:44,minHeight:48)
-            }.buttonStyle(.bordered).accessibilityLabel("Změnit stav")
+                Image(systemName:"checkmark")
+            }.diaryBubble(.icon).accessibilityLabel("Změnit stav")
         }
     }
 }

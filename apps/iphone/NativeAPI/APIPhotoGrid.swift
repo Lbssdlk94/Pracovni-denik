@@ -18,7 +18,7 @@ struct APIPhotoGrid: View {
                         if opening==photo.id { ProgressView() }
                     }.padding(8).frame(maxWidth:.infinity,minHeight:130)
                         .background(DiaryStyle.soft,in:RoundedRectangle(cornerRadius:14))
-                }.buttonStyle(.plain).accessibilityLabel("Otevřít fotografii "+photo["name"].string)
+                }.diaryBubble(.thumbnail).accessibilityLabel("Otevřít fotografii "+photo["name"].string)
             }
         }
         if let problem { Text(problem).font(.footnote).foregroundStyle(DiaryStyle.warning) }

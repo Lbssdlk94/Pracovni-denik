@@ -35,7 +35,7 @@ struct APIAttendanceView:View {
     var body:some View{List{
         Section("Moje dnešní docházka"){
             Text(data["activeShift"].isNull ? "Práce není zahájená" : "V práci od "+Self.time(data["activeShift"]["startAt"]))
-            Button(data["activeShift"].isNull ? "Zaznamenat příchod" : "Zaznamenat odchod"){Task{await punch()}}.buttonStyle(.borderedProminent).disabled(busy).frame(minHeight:44)
+            Button(data["activeShift"].isNull ? "Zaznamenat příchod" : "Zaznamenat odchod"){Task{await punch()}}.diaryBubble(.primary).disabled(busy).frame(minHeight:44)
         }
         Section{TextField("Měsíc RRRR-MM",text:$month).textInputAutocapitalization(.never);if store.manager{Picker("Pracovník",selection:$selectedUser){Text("Všichni").tag("all");ForEach(Array(data["employees"].array.enumerated()),id:\.offset){_,p in Text(p["name"].string).tag(p.id)}}}}
         Section("Pracovní dny"){
