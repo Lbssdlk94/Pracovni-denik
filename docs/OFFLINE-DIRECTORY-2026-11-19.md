@@ -26,12 +26,17 @@ Vyhledávání podle jména, kontaktu nebo adresy a stránkování fungují i na
 
 ## Ověření
 
-Prošlo 83 backendových a klientských testovacích souborů v izolovaném prostředí. Nový soubor obsahuje 11 konkrétních scénářů: 305 zákazníků a zahrad, všechny stránky, lokální hledání, více zahrad, nová instance cache bez sítě, vypršení lease, oddělení účtů/rolí/oborů, neúplné stažení, skutečné odmítnutí serverem, změna oprávnění uprostřed stahování, okamžitá uložená kopie s obnovou na pozadí a nedostatek místa. Prošly také syntax kontroly a izolované ověření obou sestavených Workerů.
+Prošlo 83 backendových a klientských testovacích souborů v izolovaném prostředí. Nový soubor obsahuje 11 konkrétních scénářů: 305 zákazníků a zahrad, všechny stránky, lokální hledání, více zahrad, nová instance cache bez sítě, vypršení lease, oddělení účtů/rolí/oborů, neúplné stažení, skutečné odmítnutí serverem, změna oprávnění uprostřed stahování, okamžitá uložená kopie s obnovou na pozadí a nedostatek místa. Prošly také syntax kontroly a izolované ověření obou sestavených Workerů. Dodatečný integrační test `directory-api.test.js` prošel proti skutečnému API nad izolovanou SQLite databází: ověřuje shodu manifestu a modulů, oddělení oborů, offline hledání, zachování oborového přístupu po přeřazení zakázky a odstranění kopie při odebrání oprávnění. Ve společném workspace zákazníky omezuje obor; přiřazení omezuje zakázky. Tato dosavadní pravidla se nemění.
 
 Pro iOS je připraveno pět XCTest scénářů v `APIDirectoryCacheTests.swift`. Na výslovné přání uživatele nebylo spuštěno GitHub sestavení ani vytvořena nová IPA. SwiftUI část tedy není nyní ověřena kompilací, XCTest nebo na skutečném iPhonu. V tomto prostředí neproběhl ruční test Safari/PWA; provozní zakázky ani kontakty nebyly kvůli testování měněny.
 
 ## Nasazení
 
-Webové sestavení obsahuje pouze změnu frontendu. Backend mimo vložené webové soubory zůstává byte shodný s předchozí verzí. Archiv neobsahuje kořenové migrace a nespouští historické migrace Garden. Přesná čísla publikovaných verzí budou doplněna po nasazení. Service Worker používá cache `zavlahovy-denik-offline-directory-v1`.
+Webové sestavení obsahuje pouze změnu frontendu. Backend mimo vložené webové soubory zůstává byte shodný s předchozí verzí. Archiv neobsahuje kořenové migrace a nespouští historické migrace Garden. Obě publikace Sites skončily `succeeded` dne 19. 11. 2026:
+
+- Dr. Závlaha: verze 143, zdroj `068fc893753e56e091a99a2585fa8a65157ddd97`, deployment `appgdep_6afeb742265c81919fa3262ac0ffe931`.
+- Dr. Garden: verze 63, zdroj `fca351ee71a589f9299919dc4db81bd101fa25ff`, deployment `appgdep_6afeb7772d808191be85e7d8f770311b`.
+
+ Service Worker používá cache `zavlahovy-denik-offline-directory-v1`.
 
 iOS zdrojový kód se ukládá na GitHub s `[skip ci]`, na samostatnou větev. Workflow ani číslo verze se nemění; v nainstalované IPA se změna projeví až po pozdějším sestavení a instalaci nové verze.

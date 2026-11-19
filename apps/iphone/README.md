@@ -10,6 +10,8 @@ Role a moduly klient načítá při novém spuštění procesu a po výslovném 
 
 **Stav vydání:** **0.8.2 (11)** úspěšně sestavena ze zdroje `bb7db04af270b02c53b893a51ea79f9238251077`, [běh 44469633898](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/44469633898), Xcode / SDK 27.1. Prošlo 72 unit + 13 UI testů, release device build, kontrola čistě nativního bundle, vložené Watch aplikace i její simulátor. [Stáhnout IPA, logy a náhledy](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/44469633898/artifacts/14503209578) (GitHub artefakt do 3. 12. 2026). Balíček je nepodepsaný a vyžaduje vlastní podepsání; fyzická zařízení a TestFlight/App Store nejsou ověřené ani publikované. Změny: [PR #26](https://github.com/Lbssdlk94/Pracovni-denik/pull/26).
 
+Připravené rozšíření [uloženého adresáře zákazníků a zahrad](../../docs/OFFLINE-DIRECTORY-2026-11-19.md) doplňuje přednačtení, lokální hledání a základní detaily ve stávajícím šifrovaném vaultu. Je pouze na větvi `feat/offline-directory-2026-11-19`; nová IPA nebyla vytvořena a tato změna zatím neprošla Xcode ověřením.
+
 [Architektura, funkce, přechod, testy a omezení](../../docs/IPHONE-NATIVE-API-2026-11-06.md).
 
 ## Sestavení
