@@ -1,0 +1,137 @@
+/* Visible action surfaces for every company and role. No interaction handlers change. */
+:root {
+  --pd-control-border: #C5D0CB;
+  --pd-control-hover: #F0F5F2;
+  --pd-control-shadow: 0 1px 2px rgb(23 63 58 / 5%);
+}
+
+/* Keep existing filled primary actions, selected tabs and specialist controls. */
+:where(#app, dialog) button {
+  border: 1px solid var(--pd-control-border);
+  border-radius: var(--pd-radius-control, 14px);
+  background: var(--pd-surface, #fff);
+  min-height: 44px;
+  cursor: pointer;
+}
+
+/* Text actions now have the same outline and surface as secondary buttons. */
+:is(#app, dialog) :is(button, a).text-link:not(.primary, .accent),
+:is(#app, dialog) a.signout,
+#app #jobs .visit-card-actions > .visit-details,
+#modal .job-menu-items > .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--pd-control-border);
+  border-radius: var(--pd-radius-control, 14px);
+  background: var(--pd-surface, #fff);
+  color: var(--pd-forest, #173f3a);
+  box-shadow: var(--pd-control-shadow);
+  font-family: var(--pd-font, system-ui);
+  font-size: .875rem;
+  font-weight: 700;
+  line-height: 1.4;
+  text-decoration: none;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Summaries keep their native keyboard/toggle behavior and any existing icons. */
+:is(#app, dialog) details:not(.job-detail-menu, .nav-overflow, .notification-dialog-bell) > summary {
+  position: relative;
+  min-height: 48px;
+  padding: 12px 44px 12px 14px;
+  border: 1px solid var(--pd-control-border);
+  border-radius: var(--pd-radius-control, 14px);
+  background: var(--pd-surface, #fff);
+  color: var(--pd-forest, #173f3a);
+  box-shadow: var(--pd-control-shadow);
+  font-weight: 700;
+  line-height: 1.45;
+  list-style: none;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+:is(#app, dialog) details > summary::-webkit-details-marker { display: none; }
+:is(#app, dialog) details:not(.job-detail-menu, .nav-overflow, .notification-dialog-bell) > summary:not(:has(> .interface-icon))::after {
+  content: "+";
+  position: absolute;
+  inset-inline-end: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+}
+:is(#app, dialog) details[open]:not(.job-detail-menu, .nav-overflow, .notification-dialog-bell) > summary {
+  background: var(--pd-sage-soft, #e8f0ec);
+  border-color: #8AA99A;
+}
+:is(#app, dialog) details[open]:not(.job-detail-menu, .nav-overflow, .notification-dialog-bell) > summary:not(:has(> .interface-icon))::after { content: "−"; }
+
+/* A visible gap separates disclosure buttons from the expanded content. */
+:is(#app, dialog) .field-accordion .accordion-content { padding-top: 12px; }
+#modal .job-completion-target { border-top: 0; padding-top: 0; }
+#modal .job-completion-target > summary { font-size: .875rem; }
+#modal .job-menu-items { display: grid; gap: 6px; }
+#modal .job-menu-items > .btn { justify-content: flex-start; text-align: left; }
+#modal .job-menu-items > .danger {
+  color: var(--pd-danger, #963d32);
+  border-color: #D9B8B1;
+  margin-top: 0;
+}
+:is(#app, dialog) button.top-status {
+  min-width: 44px;
+  padding: 8px;
+  border: 1px solid var(--pd-control-border);
+  border-radius: 999px;
+  background: var(--pd-surface, #fff);
+  box-shadow: var(--pd-control-shadow);
+}
+#app .nav-overflow [data-page] {
+  border: 1px solid var(--pd-control-border);
+  border-radius: var(--pd-radius-control, 14px);
+  box-shadow: var(--pd-control-shadow);
+}
+#app .nav-overflow [data-page]:not(.active) { background: var(--pd-surface, #fff); }
+:is(#app, dialog) [hidden] { display: none !important; }
+
+:is(#app, dialog) :is(button, .btn, summary) {
+  transition: background-color .12s ease, border-color .12s ease, box-shadow .12s ease;
+  -webkit-tap-highlight-color: rgb(23 63 58 / 14%);
+}
+:is(#app, dialog) :is(button, .btn, summary):focus-visible {
+  outline: 3px solid var(--pd-forest, #173f3a);
+  outline-offset: 3px;
+}
+:is(#app, dialog) :is(button, .btn, summary):active:not(:disabled, [aria-disabled=true]) {
+  filter: brightness(.94);
+  box-shadow: inset 0 1px 3px rgb(23 63 58 / 16%);
+}
+:is(#app, dialog) :is(button, .btn):disabled,
+:is(#app, dialog) [aria-disabled=true] { cursor: not-allowed; }
+
+@media (hover: hover) and (pointer: fine) {
+  :is(#app, dialog) :is(button, a).text-link:not(.primary, .accent, :disabled, [aria-disabled=true]):hover,
+  #app #jobs .visit-card-actions > .visit-details:hover,
+  #modal .job-menu-items > .btn:hover,
+  :is(#app, dialog) details:not(.job-detail-menu, .nav-overflow, .notification-dialog-bell) > summary:hover {
+    background: var(--pd-control-hover);
+    border-color: #8AA99A;
+    text-decoration: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(#app, dialog) :is(button, .btn, summary) { transition: none; }
+}
+@media (forced-colors: active) {
+  :is(#app, dialog) :is(button, a.text-link, summary) { border-color: ButtonText; }
+}
