@@ -143,3 +143,11 @@ test('Applying 0057 to a populated 0056 database preserves original records and 
  assert.equal(env.sqlite.prepare('SELECT count(*) n FROM job_time_intervals').get().n,0);assert.deepEqual(env.sqlite.prepare('PRAGMA foreign_key_check').all(),[]);
  const r=await api(request('/api/jobs/original/time',people.owner),env,ctx);assert.equal(r.status,200);assert.equal((await r.json()).intervals.length,0);
 });
+
+
+test('A manager can correct an existing historical worker interval without reassigning the worker to the job',async()=>{
+ const f=await setup(),at=Date.now()-7200000;await f.action('a',people.worker,{operationId:'historical-start',action:'work',at,workers:[worker('worker',0)]});await f.action('a',people.worker,{operationId:'historical-end',action:'stop',at:at+3600000,workers:[worker('worker',1)]});
+ const row=(await f.call('/api/jobs/a/time')).intervals[0];f.env.sqlite.prepare("UPDATE jobs SET assigned_to=?,assigned_users='[]' WHERE id='a'").run(people.owner.id);
+ let r=await f.call('/api/jobs/a/time/proposals',people.owner,'POST',{operationId:'former-worker-fix',intervalId:row.id,userId:row.userId,version:row.version,kind:row.kind,startAt:row.startAt,endAt:row.endAt+600000,reason:'Oprava původní návštěvy po změně obsazení'});assert.equal(r.status,200,JSON.stringify(r));
+ r=await f.call('/api/jobs/a/time/reviews/former-worker-fix',people.owner,'POST',{operationId:'former-worker-approved',decision:'approve'});assert.equal(r.status,200,JSON.stringify(r));assert.equal(r.intervals[0].endAt,row.endAt+600000);assert.deepEqual(r.job.assignedTos,[people.owner.id]);assert.equal((await f.call('/api/jobs/a/time',people.worker)).status,404);
+});
