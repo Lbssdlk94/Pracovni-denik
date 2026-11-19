@@ -47,7 +47,7 @@ struct APIJobDetailPreviewHost:View {
                 APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:job)
                     .safeAreaInset(edge:.top,spacing:0){Text("NÁVRH · UKÁZKOVÁ DATA").font(.caption2.weight(.semibold)).foregroundStyle(.secondary).frame(maxWidth:.infinity).padding(.vertical,4).background(DiaryStyle.background)}
             }
-        }.diaryBubble().preferredColorScheme(appearance).dynamicTypeSize(largeText ? .accessibility3 : .large)
+        }.diaryBubble().tint(DiaryStyle.accent).preferredColorScheme(appearance).dynamicTypeSize(largeText ? .accessibility3 : .large)
     }
 }
 

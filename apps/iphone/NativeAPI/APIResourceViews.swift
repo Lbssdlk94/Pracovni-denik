@@ -115,40 +115,7 @@ struct APIEntityDetail: View {
     private var timeSnapshot:APIValue { workScope==store.scope && workSnapshot["job"].id==initial.id ? workSnapshot : .null }
     private var record: APIValue { let current=value.isNull ? initial : value;return resource.entity == .jobs ? store.currentJob(current) : current }
     var body: some View {
-        ScrollView {
-            VStack(alignment:.leading,spacing:18) {
-                if unavailable{Text("Záznam není dostupný pro tento účet.")}else{
-                if resource.entity != .jobs && !defects.isEmpty {
-                    NavigationLink { APIResourceList(store:store,resource:APIResource(entity:.defects,seed:.object(["gardenId":record["gardenId"].isNull ? .s(record.id) : record["gardenId"]]))) } label:{Label("Pozor: \(defects.count) nevyřešené závady",systemImage:"exclamationmark.triangle.fill").font(.headline).foregroundStyle(DiaryStyle.warning).diaryCard()}
-                }
-                if resource.entity != .jobs && !defects.isEmpty{DisclosureGroup("Otevřené závady"){ForEach(defects,id:\.id){d in NavigationLink{APIEntityDetail(store:store,resource:APIResource(entity:.defects),initial:d)}label:{APIDefectBadge(defect:d)}}}.diaryCard()}
-                if resource.entity != .jobs,let defectProblem{DiaryStatusBanner(text:defectProblem,warning:true)}
-                if resource.entity == .jobs { APIJobDetailContent(store:store,job:record,timeSnapshot:timeSnapshot,timeProblem:workProblem,defects:defects,defectProblem:defectsLoaded ? nil : defectProblem ?? "Závady se načítají.",retryTime:{Task{await loadTime(refresh:true)}},remove:{deleteConfirm=true},action:$action) }
-                else if resource.entity == .customers { customer }
-                else if resource.entity == .gardens { garden }
-                else if resource.entity == .defects { defect }
-                else if resource.entity == .vehicles { vehicle }
-                else if resource.entity == .shafts {APIShaftContent(store:store,record:record)}
-                else if resource.entity == .notifications { APINoticeContent(store:store,notice:record) }
-                else if resource.entity == .subscriptions { APISubscriptionContent(store:store,snapshot:detail,subscription:record,action:$action) }
-                else if resource.entity == .team { APITeamContent(store:store,member:record,action:$action) }
-                else {
-                    APIReadFields(value:record,fields:resource.fields).diaryCard()
-                    if resource.entity == .entries {
-                        if !record["authorName"].string.isEmpty { Text("Přidal/a: "+record["authorName"].string).font(.footnote) }
-                        APIFilesView(store:store,path:"/api/vehicles/"+resource.parent+"/entries/"+record.id+"/receipts",mode:.receipts,record:record)
-                    }
-                    if resource.entity == .history { APIHistoryVisit(store:store,visit:record) }
-                }
-                }
-                if resource.entity == .tariffs && store.manager{Button("Duplikovat tarif"){var copy=record;copy["id"] = .s(UUID().uuidString);copy["version"] = .n(0);copy["definition"]["name"] = .s(record["definition"]["name"].string+" – kopie");store.route=APIRoute(resource:resource,value:copy,isNew:true)}}
-                if let problem { DiaryStatusBanner(text:problem,warning:true) }
-                if resource.entity != .jobs { DisclosureGroup("Doplňující údaje") { Text("ID: "+record.id).font(.caption).textSelection(.enabled);Text("Verze: "+record["version"].string).font(.caption) }.diaryCard() }
-                if store.manager && [.materials,.categories,.services,.vehicles,.subscriptions].contains(resource.entity) {
-                    DisclosureGroup("Správa záznamu") { Button("Smazat záznam",role:.destructive){deleteConfirm=true}.frame(minHeight:44) }.diaryCard()
-                }
-            }.padding(18)
-        }.background(DiaryStyle.background).navigationTitle(resource.entity == .jobs ? "Detail zakázky" : record.title).navigationBarTitleDisplayMode(.inline)
+        detailScrollView.background(DiaryStyle.background).navigationTitle(resource.entity == .jobs ? "Detail zakázky" : record.title).navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if resource.entity == .jobs && !unavailable {
                     ToolbarItem(placement:.topBarTrailing){jobMenu}
@@ -165,6 +132,74 @@ struct APIEntityDetail: View {
             .sheet(item:$action) { APIActionEditor(store:store,action:$0) }
             .confirmationDialog("Opravná zakázka již existuje. Přesto založit další?",isPresented:$repairConfirm,titleVisibility:.visible){Button("Připravit další opravnou zakázku"){Task{await planRepair()}};Button("Zrušit",role:.cancel){}}
             .confirmationDialog("Opravdu smazat tento záznam?",isPresented:$deleteConfirm,titleVisibility:.visible){Button("Smazat",role:.destructive){Task{await remove()}};Button("Zrušit",role:.cancel){}} message:{if resource.entity == .jobs{Text("Zakázka zmizí všem přiřazeným kolegům. Fotografie na Google Disku zůstanou.")}}
+    }
+    private var detailScrollView:some View {
+        ScrollView {
+            VStack(alignment:.leading,spacing:18){
+                if unavailable{Text("Záznam není dostupný pro tento účet.")}else{
+                    defectWarnings
+                    entityContent
+                }
+                if resource.entity == .tariffs && store.manager{
+                    Button("Duplikovat tarif"){
+                        var copy=record;copy["id"] = .s(UUID().uuidString);copy["version"] = .n(0)
+                        copy["definition"]["name"] = .s(record["definition"]["name"].string+" – kopie")
+                        store.route=APIRoute(resource:resource,value:copy,isNew:true)
+                    }
+                }
+                if let problem{DiaryStatusBanner(text:problem,warning:true)}
+                recordAdministration
+            }.padding(18)
+        }
+    }
+    @ViewBuilder private var defectWarnings:some View {
+        if resource.entity != .jobs {
+            if !defects.isEmpty {
+                NavigationLink{APIResourceList(store:store,resource:APIResource(entity:.defects,seed:.object(["gardenId":record["gardenId"].isNull ? .s(record.id) : record["gardenId"]])))}label:{
+                    Label("Pozor: \(defects.count) nevyřešené závady",systemImage:"exclamationmark.triangle.fill").font(.headline).foregroundStyle(DiaryStyle.warning).diaryCard()
+                }
+                DisclosureGroup("Otevřené závady"){
+                    ForEach(defects,id:\.id){d in NavigationLink{APIEntityDetail(store:store,resource:APIResource(entity:.defects),initial:d)}label:{APIDefectBadge(defect:d)}}
+                }.diaryCard()
+            }
+            if let defectProblem{DiaryStatusBanner(text:defectProblem,warning:true)}
+        }
+    }
+    private var jobContent:some View {
+        APIJobDetailContent(store:store,job:record,timeSnapshot:timeSnapshot,timeProblem:workProblem,defects:defects,defectProblem:defectsLoaded ? nil : defectProblem ?? "Závady se načítají.",retryTime:{Task{await loadTime(refresh:true)}},remove:{deleteConfirm=true},action:$action)
+    }
+    @ViewBuilder private var entityContent:some View {
+        switch resource.entity {
+        case .jobs:jobContent
+        case .customers:customer
+        case .gardens:garden
+        case .defects:defect
+        case .vehicles:vehicle
+        case .shafts:APIShaftContent(store:store,record:record)
+        case .notifications:APINoticeContent(store:store,notice:record)
+        case .subscriptions:APISubscriptionContent(store:store,snapshot:detail,subscription:record,action:$action)
+        case .team:APITeamContent(store:store,member:record,action:$action)
+        default:genericFields
+        }
+    }
+    @ViewBuilder private var genericFields:some View {
+        APIReadFields(value:record,fields:resource.fields).diaryCard()
+        if resource.entity == .entries{
+            if !record["authorName"].string.isEmpty{Text("Přidal/a: "+record["authorName"].string).font(.footnote)}
+            APIFilesView(store:store,path:"/api/vehicles/"+resource.parent+"/entries/"+record.id+"/receipts",mode:.receipts,record:record)
+        }
+        if resource.entity == .history{APIHistoryVisit(store:store,visit:record)}
+    }
+    @ViewBuilder private var recordAdministration:some View {
+        if resource.entity != .jobs{
+            DisclosureGroup("Doplňující údaje"){
+                Text("ID: "+record.id).font(.caption).textSelection(.enabled)
+                Text("Verze: "+record["version"].string).font(.caption)
+            }.diaryCard()
+        }
+        if store.manager && [.materials,.categories,.services,.vehicles,.subscriptions].contains(resource.entity){
+            DisclosureGroup("Správa záznamu"){Button("Smazat záznam",role:.destructive){deleteConfirm=true}.frame(minHeight:44)}.diaryCard()
+        }
     }
     private var jobMenu:some View {
         Menu {
