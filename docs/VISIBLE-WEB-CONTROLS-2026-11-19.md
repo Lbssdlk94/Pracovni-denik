@@ -22,3 +22,12 @@ Nezměnily se obslužné funkce, API, databáze, oprávnění, offline fronty, i
 - Prošly přesné offline importy a oba instalační artefakty. Celá backendová regrese se kvůli čistě CSS změně znovu nespouští. Fyzický iPhone/Safari nebyl v tomto úkolu ověřován.
 
 Náhledy skutečného webového sestavení: `/workspace/reports/visible-controls/`.
+
+
+## Nasazení
+
+- Dr. Závlaha: Sites **v148**, zdroj `3cd8c7909404f28606f178c98a9200acbc6e3454`, nasazení `appgdep_6aff4712e4b48191bf4814ff0eff685a`, stav `succeeded`.
+- Dr. Garden: Sites **v68**, zdroj `c21b0c5680f6acf0b4c5bd91b02180e54c96ca52`, nasazení `appgdep_6aff4737ebac819192eef90aacf43143`, stav `succeeded`.
+- Oba archivy obsahují jen Worker a hostingové manifesty, žádné databázové migrace. Porovnání Workerů mimo vložené prostředky `ASSETS` potvrdilo byte shodný backend před a po změně.
+- Publikované indexy, Service Workery a nový stylesheet byly read-only porovnány se sestavenými soubory podle skutečných bajtů/SHA256. Publikum a revize tajných údajů zůstaly zachované.
+- Návrat je možný nasazením předchozích verzí Dr. Závlaha 147 / Dr. Garden 67 bez změny databáze.
