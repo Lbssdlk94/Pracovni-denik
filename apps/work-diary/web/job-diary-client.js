@@ -17,7 +17,7 @@ export function createJobDiaryClient({all,change,send,request,getSession,isPrevi
   if(who!==getSession()?.user.id+'|'+getSession()?.user.role||await isLocked())throw Error('Přihlášení se změnilo.');return {...index.snapshot,entries:mergeDiaryEntries(index.snapshot,pending),offline:!navigator.onLine};
  }
  async function save(jobId,value,photos=[]){
-  checkWrite();await valid();if(!getSession()?.permissions.write)throw Error('Pro zápis potřebujete oprávnění pracovníka.');
+  checkWrite();await valid();if(isPreview()||!['owner','administrator','admin','worker','reader'].includes(getSession()?.user.role))throw Error('Pro zápis deníku se přihlaste firemním účtem.');
   const user=getSession().user,id=key(jobId,value.id),records=await all(),index=records.find(r=>r.id===key(jobId)),old=records.find(r=>r.id===id);
   const repairing=old?.pending&&old.blockedCode==='diary_photo_required'&&!old.conflict;
   if(old?.pending&&!repairing)throw Error('Nejdříve sdílejte nebo porovnejte předchozí změnu zápisu.');

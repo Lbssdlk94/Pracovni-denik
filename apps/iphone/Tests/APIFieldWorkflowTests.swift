@@ -103,4 +103,23 @@ final class APIFieldWorkflowTests:XCTestCase {
         XCTAssertEqual(after["version"],job["version"]);XCTAssertEqual(after["status"],job["status"])
     }
 
+    func testAllDiaryRolesCanWriteButOtherReaderMutationsStayExcluded(){
+        let job:APIValue = .object(["assignedTos":.array([.s("member")])])
+        for role in ["owner","administrator","admin","worker","reader"]{XCTAssertTrue(APIJobWorkflow.canWriteDiary(job,userID:"member",role:role,preview:false))}
+        XCTAssertFalse(APIJobWorkflow.canWriteDiary(job,userID:"other",role:"reader",preview:false))
+        XCTAssertFalse(APIJobWorkflow.canWriteDiary(job,userID:"member",role:"reader",preview:true))
+        for path in ["/api/jobs/job/diary/entry","/api/jobs/job/diary/photos/photo"]{XCTAssertTrue(APIJobWorkflow.isDiaryWrite(path:path,method:"PUT",role:"reader"))}
+        for path in ["/api/jobs/job/status","/api/jobs/job/service","/api/jobs/job/service/photos/photo","/api/customers/customer"]{XCTAssertFalse(APIJobWorkflow.isDiaryWrite(path:path,method:"PUT",role:"reader"))}
+        XCTAssertFalse(APIJobWorkflow.isDiaryWrite(path:"/api/jobs/job/diary/entry",method:"DELETE",role:"reader"))
+    }
+    @MainActor func testReaderOfflineDiaryAndPhotoUseExistingQueueWithoutGeneralWriterRole()async throws{
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start();var me=store.me;me["user"]["role"] = .s("reader");me["workspace"]["role"] = .s("reader");me["permissions"]["write"] = .bool(false);me["permissions"]["manage"] = .bool(false);try store.bind(me)
+        store.online=false;let id="reader-photo",path="/api/jobs/fixture-next/diary"
+        try await store.upload(path+"/photos/"+id,bytes:Data([255,216,255,1]),type:"image/jpeg",offline:true,id:id)
+        _ = try await store.write(path+"/reader-entry",method:"PUT",body:.object(["version":.n(0),"operationId":.s("reader-entry"),"date":.s(store.today),"work":.s("Denní zápis čtenáře"),"photoIds":.array([.s(id)])]),offline:true,operationID:"reader-entry",dependsOn:[id])
+        XCTAssertFalse(store.writer);XCTAssertEqual(store.outbox.count,2)
+        store.online=true;await store.sync();XCTAssertTrue(store.outbox.isEmpty)
+        let result=try await store.get(path);XCTAssertEqual(result["entries"].array.first?["work"],.s("Denní zápis čtenáře"))
+    }
+
 }

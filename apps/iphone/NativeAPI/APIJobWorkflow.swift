@@ -18,6 +18,13 @@ struct APIJobStatusRequest:Identifiable {
     let targetStatus:String?
 }
 enum APIJobWorkflow {
+    static func diaryRole(_ role:String)->Bool{["owner","administrator","admin","worker","reader"].contains(role)}
+    static func canWriteDiary(_ job:APIValue,userID:String,role:String,preview:Bool)->Bool{
+        !preview && diaryRole(role) && !userID.isEmpty && !job["cancelled"].bool && (["owner","administrator","admin"].contains(role) || job["assignedTo"].string==userID || job["assignedTos"].array.contains(.s(userID)))
+    }
+    static func isDiaryWrite(path:String,method:String,role:String)->Bool{
+        method=="PUT" && diaryRole(role) && path.range(of:"^/api/jobs/[-\\w]{1,100}/diary/(?:[-\\w]{1,100}|photos/[-\\w]{1,100})$",options:.regularExpression) != nil
+    }
     static func primary(_ job: APIValue, travelEnabled: Bool) -> APIJobPrimaryAction? {
         guard !job["cancelled"].bool else { return nil }
         switch job["status"].string {

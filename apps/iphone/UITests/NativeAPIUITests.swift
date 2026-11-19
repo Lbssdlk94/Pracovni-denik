@@ -63,4 +63,15 @@ final class NativeAPIUITests:XCTestCase {
         XCTAssertEqual(app.webViews.count,0);capture("fotodokumentace-bez-disku-api",app)
     }
 
+    func testReaderCanOpenDiaryEditorWithoutJobManagementActions(){
+        let app=XCUIApplication();app.launchArguments=["--native-api-testing","--native-api-reader-testing"];app.launch()
+        XCTAssertTrue(app.staticTexts["native-overview-title"].waitForExistence(timeout:15));app.tabBars.buttons["Zakázky"].tap()
+        let job=app.buttons["native-job-fixture-progress"];XCTAssertTrue(job.waitForExistence(timeout:10));job.tap()
+        let diary=app.buttons["Deník realizace"];XCTAssertTrue(diary.waitForExistence(timeout:10));if !diary.isHittable{app.swipeUp()};diary.tap()
+        let add=app.buttons["Přidat dnešní zápis"];XCTAssertTrue(add.waitForExistence(timeout:10));add.tap()
+        XCTAssertTrue(app.textViews["Co se udělalo"].waitForExistence(timeout:10))
+        for _ in 0..<3{if app.buttons["Vybrat fotografii"].exists{break};app.swipeUp()};XCTAssertTrue(app.buttons["Vybrat fotografii"].exists);XCTAssertFalse(app.buttons["Smazat zápis"].exists);XCTAssertEqual(app.webViews.count,0)
+        capture("denik-ctenar-api",app)
+    }
+
 }

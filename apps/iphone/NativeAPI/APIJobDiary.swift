@@ -33,7 +33,7 @@ struct APIJobDiary:View {
     var body:some View{List{
         Section{
             Text("Denní postup prací. Zápis nemění stav zakázky ani servisní protokol.").font(.footnote).foregroundStyle(.secondary)
-            if APIJobWorkflow.canWork(job,userID:store.userID,writer:store.writer,manager:store.manager),!store.isRolePreview{Button{editing=nil;editorOpen=true}label:{Label("Přidat dnešní zápis",systemImage:"plus")}.frame(minHeight:48)}
+            if APIJobWorkflow.canWriteDiary(job,userID:store.userID,role:store.role,preview:store.isRolePreview){Button{editing=nil;editorOpen=true}label:{Label("Přidat dnešní zápis",systemImage:"plus")}.frame(minHeight:48)}
         }
         ForEach(days,id:\.self){day in
             Section(DiaryDate.localized(day)){
@@ -42,7 +42,7 @@ struct APIJobDiary:View {
                         Text(entry["work"].string).textSelection(.enabled)
                         ForEach(["material","notes","nextStep"],id:\.self){key in if !entry[key].string.isEmpty{Text(key=="material" ? "Materiál" : key=="notes" ? "Komplikace a poznámka" : "Další krok").font(.caption.bold());Text(entry[key].string)}}
                         if !entry["photos"].array.isEmpty{APIPhotoGrid(store:store,photos:entry["photos"].array)}
-                        if entry["canEdit"].bool && store.writer && !store.isRolePreview{Button("Upravit zápis"){editing=entry;editorOpen=true}.frame(minHeight:44)}
+                        if entry["canEdit"].bool && APIJobWorkflow.diaryRole(store.role) && !store.isRolePreview{Button("Upravit zápis"){editing=entry;editorOpen=true}.frame(minHeight:44)}
                         if APIJobWorkflow.canDeleteDiary(entry,role:store.role,preview:store.isRolePreview){Button("Smazat zápis",role:.destructive){removing=entry;deleteOperation=UUID().uuidString;confirmRemoval=true}.frame(minHeight:44).disabled(deleting)}
                         if entry["pending"].bool{Text("Čeká na odeslání · "+entry["syncState"].string).foregroundStyle(DiaryStyle.warning);Text("Případný konflikt vyřešíte ve Více → Synchronizace.").font(.footnote)}
                     }label:{VStack(alignment:.leading,spacing:5){HStack{Text(entry["authorName"].string).font(.headline);Spacer();if !entry["photoIds"].array.isEmpty{Label(String(entry["photoIds"].array.count),systemImage:"camera").font(.caption)}};Text(entry["work"].string).font(.subheadline).foregroundStyle(.secondary).lineLimit(2)}}
@@ -85,7 +85,7 @@ struct APIJobDiaryEditor:View {
             APIFieldsView(fields:fields,value:$value)
             Section("Fotografie · povinné"){
                 Text("K zápisu přidejte alespoň jednu fotografii.").font(.footnote).foregroundStyle(.secondary)
-                APIFilesView(store:store,path:"/api/jobs/"+job.id+"/service",mode:.service,record:job,attached:{id in var ids=value["photoIds"].array;if !ids.contains(.s(id)){ids.append(.s(id))};value["photoIds"] = .array(ids);photoUploads.append(id);persist()},selection:photoSelection,selectionLabel:"Zahrnout do denního zápisu")
+                APIFilesView(store:store,path:"/api/jobs/"+job.id+"/service",mode:.diary,record:job,attached:{id in var ids=value["photoIds"].array;if !ids.contains(.s(id)){ids.append(.s(id))};value["photoIds"] = .array(ids);photoUploads.append(id);persist()},selection:photoSelection,selectionLabel:"Zahrnout do denního zápisu")
             }
             if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}
             Button(saving ? "Ukládám…" : "Uložit denní zápis"){Task{await save()}}.disabled(saving||value["work"].string.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty||value["photoIds"].array.isEmpty)
