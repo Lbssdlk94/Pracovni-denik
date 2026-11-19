@@ -42,7 +42,7 @@ enum APIWorkTimeLogic {
                 var worker=day["workers"][id].isNull ? blank : day["workers"][id];add(&worker,key,stop-position);day["workers"][id]=worker;days[dayKey]=day;position=stop
             }
         }
-        for id in people.keys{if financial{people[id]?["workCostMinor"] = .number(people[id]!["workCostMinor"].double.rounded());people[id]?["travelCostMinor"] = .number(people[id]!["travelCostMinor"].double.rounded())};for key in keys{add(&total,key,people[id]![key].double)}}
+        for id in Array(people.keys){var person=people[id]!;if financial{person["workCostMinor"] = .number(person["workCostMinor"].double.rounded());person["travelCostMinor"] = .number(person["travelCostMinor"].double.rounded())};people[id]=person;for key in keys{add(&total,key,person[key].double)}}
         return .object(["total":total,"workers":.array(people.keys.sorted().compactMap{people[$0]}),"days":.array(days.keys.sorted(by:>).compactMap{days[$0]})])
     }
 }
