@@ -11,9 +11,14 @@ final class NativeAPIUITests:XCTestCase {
     }
     func testJobsAndNativeDetail(){let app=launch();app.tabBars.buttons["Zakázky"].tap();let job=app.buttons["native-job-fixture-progress"];XCTAssertTrue(job.waitForExistence(timeout:10));job.tap();XCTAssertTrue(app.buttons["Servisní protokol"].waitForExistence(timeout:10));XCTAssertTrue(app.tabBars.buttons["Přehled"].exists);XCTAssertEqual(app.webViews.count,0);capture("detail-api",app)}
     func testCompletionEstimateUsesNativeSheetAndStaysInJobDetail(){
+        continueAfterFailure=false
         let app=launch();app.tabBars.buttons["Zakázky"].tap();let job=app.buttons["native-job-fixture-progress"];XCTAssertTrue(job.waitForExistence(timeout:10));job.tap()
-        let edit=app.buttons["Upravit odhad"];XCTAssertTrue(edit.waitForExistence(timeout:10));for _ in 0..<5{if edit.isHittable{break};app.swipeUp()};XCTAssertTrue(edit.isHittable);edit.tap()
-        XCTAssertTrue(app.navigationBars["Dokončení zakázky"].waitForExistence(timeout:10))
+        let edit=app.buttons["Upravit odhad"],bar=app.buttons["job-primary-action"];XCTAssertTrue(edit.waitForExistence(timeout:10))
+        // XCTest can report a scrolled control as hittable even when its center is
+        // behind the safe-area action bar. Bring its whole frame into the content.
+        for _ in 0..<5{if edit.isHittable && edit.frame.minY>120 && edit.frame.maxY<bar.frame.minY-8{break};app.swipeUp()}
+        XCTAssertTrue(edit.isHittable);XCTAssertLessThan(edit.frame.maxY,bar.frame.minY-8);edit.tap()
+        XCTAssertTrue(app.navigationBars["Dokončení zakázky"].waitForExistence(timeout:10),app.debugDescription)
         let slider=app.sliders["Odhad dokončení v procentech"];XCTAssertTrue(slider.waitForExistence(timeout:10));slider.adjust(toNormalizedSliderPosition:0.3)
         capture("odhad-dokonceni-api",app);app.buttons["Uložit odhad"].tap()
         XCTAssertTrue(app.buttons["Upravit odhad"].waitForExistence(timeout:10));XCTAssertTrue(app.tabBars.buttons["Zákazníci"].exists);XCTAssertTrue(app.buttons["Servisní protokol"].exists);XCTAssertEqual(app.webViews.count,0)
