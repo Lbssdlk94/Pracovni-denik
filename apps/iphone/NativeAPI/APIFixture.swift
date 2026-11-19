@@ -8,6 +8,7 @@ final class APIFixtureProtocol:URLProtocol {
     static var requests:[URLRequest]=[]
     static var forcedStatus:[String:Int]=[:]
     static func reset(){lock.lock();defer{lock.unlock()};records=[:];requests=[];forcedStatus=[:]}
+    static func requestSnapshot()->[URLRequest]{lock.lock();defer{lock.unlock()};return requests}
     override class func canInit(with request:URLRequest)->Bool{true}
     override class func canonicalRequest(for request:URLRequest)->URLRequest{request}
     override func startLoading(){Self.lock.lock();let result=Self.response(request);Self.lock.unlock();let http=HTTPURLResponse(url:request.url!,statusCode:result.0,httpVersion:"HTTP/1.1",headerFields:result.2)!;client?.urlProtocol(self,didReceive:http,cacheStoragePolicy:.notAllowed);client?.urlProtocol(self,didLoad:result.1);client?.urlProtocolDidFinishLoading(self)}

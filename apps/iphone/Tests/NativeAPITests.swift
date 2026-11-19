@@ -135,8 +135,12 @@ final class NativeAPITests:XCTestCase {
         let realScope=store.scope,real=try XCTUnwrap(store.vault)
         try store.setRolePreview("reader")
         XCTAssertEqual(store.role,"reader");XCTAssertEqual(store.actualRole,"owner");XCTAssertFalse(store.manager);XCTAssertFalse(store.writer);XCTAssertTrue(store.canPreviewRoles)
-        _ = try await store.get("/api/customers")
-        XCTAssertEqual(APIFixtureProtocol.requests.last?.value(forHTTPHeaderField:"x-work-diary-preview-role"),"reader")
+        // Background refreshes from another store may finish after this request.
+        // Assert the actual preview request rather than the shared log's last item.
+        let marker="rolePreviewCheck="+UUID().uuidString
+        _ = try await store.get("/api/customers?"+marker)
+        let previewRequest=try XCTUnwrap(APIFixtureProtocol.requestSnapshot().last{$0.url?.path=="/api/customers" && $0.url?.query==marker})
+        XCTAssertEqual(previewRequest.value(forHTTPHeaderField:"x-work-diary-preview-role"),"reader")
         try store.setRolePreview(nil)
         XCTAssertEqual(store.role,"owner");XCTAssertTrue(store.manager);XCTAssertTrue(store.vault === real);XCTAssertEqual(store.scope,realScope)
         XCTAssertEqual(APIFixtureProtocol.requests.filter{$0.url?.path=="/api/me"}.count,1)
