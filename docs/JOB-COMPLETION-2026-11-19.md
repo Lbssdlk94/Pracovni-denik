@@ -41,3 +41,12 @@ SwiftUI komponenty v `APIJobCompletion.swift` zobrazují procenta, barevný posu
 - Syntaktická kontrola, přesné offline importy a čistý instalační balíček včetně schématu.
 
 Neověřeno: fyzický iPhone/Safari, kompilace nové nativní verze v Xcode a ukládání pod skutečnými provozními účty. Zápisové produkční testy nebyly prováděny.
+
+## Nasazení 19. 11. 2026
+
+- Dr. Závlaha: verze 146, zdroj `fdef5420cc184a0c51fb70027030c34ef3919c91`, nasazení `appgdep_6aff04e446c0819193d01fab42bc8cac` úspěšné. Obsahuje aditivní migraci 0058.
+- Dr. Garden: verze 66, zdroj `1a191701d340d21235566e845cc788c8228dd3d4`, nasazení `appgdep_6aff0515e3088191b08dc9f10873bbfe` úspěšné. Backend je mimo vložené webové prostředky shodný s předchozí verzí; balíček neobsahuje migrace jeho dřívější databáze.
+- Přesný balíček Dr. Závlahy prošel také prohlížečovým testem v izolované D1/R2, včetně desktopového bočního panelu a přechodu do plného editoru odhadu.
+- Zdrojové změny jsou na GitHub větvi `feat/job-completion-web-2026-11-19`. Nebyl vytvořen pull request ani spuštěn workflow, sestavení nebo balíčkování IPA.
+
+Pro návrat lze nasadit původní verze Dr. Závlaha 145 / Dr. Garden 65. Nové tabulky ponechat v databázi, aby uložené odhady a audit zůstaly zachované.
