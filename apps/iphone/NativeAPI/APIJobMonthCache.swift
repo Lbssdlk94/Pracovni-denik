@@ -6,6 +6,7 @@ struct APIJobMonthSnapshot:Codable {
     var revision:Int
     var dirty:Bool=false
     var timeModel:String?="person-hours-v1"
+    var completionModel:String?="completion-v1"
 }
 struct APIJobMonthState:Codable {
     var months:[String:APIJobMonthSnapshot]=[:]
@@ -92,10 +93,9 @@ extension APIStore {
             // Generic job lists from older versions have no per-record access fence.
             for key in Array(local.state.cache.keys) where APIJobMonthCache.isList(key){local.state.cache.removeValue(forKey:key)}
             var state=local.state.jobMonths ?? APIJobMonthState();let window=Set(APIJobMonthCache.months(containing:self.today));state.months=state.months.filter{window.contains($0.key)}
-            if self.enabled("attendance"){
-                let oldCount=state.months.count;state.months=state.months.filter{$0.value.timeModel=="person-hours-v1"}
-                if state.months.count != oldCount{for key in Array(local.state.cache.keys) where APIJobMonthCache.isList(key){local.state.cache.removeValue(forKey:key)}}
-            }
+            let oldCount=state.months.count
+            state.months=state.months.filter{$0.value.completionModel=="completion-v1" && (!self.enabled("attendance") || $0.value.timeModel=="person-hours-v1")}
+            if state.months.count != oldCount{for key in Array(local.state.cache.keys) where APIJobMonthCache.isList(key){local.state.cache.removeValue(forKey:key)}}
             local.state.jobMonths=state;try? local.persist()
             if !self.online{self.jobMonthsAuthorized=local.offlineAllowed() && Date().timeIntervalSince(state.verifiedAt)<86400;self.jobMonthsReady=true;return}
             if self.me["workspace"].isNull{state=APIJobMonthState();local.state.jobMonths=state;self.jobMonthsAuthorized=true;self.jobMonthsReady=true;try? local.persist();return}

@@ -31,7 +31,7 @@ const subscriptionFiles=['worker/volume-fixture-cleanup-statements.js','worker/v
 // Standalone installations may add an idempotent company initializer.
 // Keep it when refreshing the shared build script.
 if((await readdir(path.join(root,'worker'))).includes('company-bootstrap.js'))subscriptionFiles.push('worker/company-bootstrap.js');
-subscriptionFiles.push('web/job-time-model.js','worker/job-time.js');
+subscriptionFiles.push('web/job-time-model.js','worker/job-time.js','worker/job-completion.js');
 const subscriptionSource=(await Promise.all(subscriptionFiles.map(f=>readFile(path.join(root,f),'utf8')))).map(s=>s.replace(/^import .*;$/gm,'').replaceAll('export const ','const ').replaceAll('export async function ','async function ').replaceAll('export function ','function ')).join('\n');
 const tenantPlatform=(await readFile(path.join(root,'worker/tenant-platform.js'),'utf8')).replace(/^import .*;$/gm,'').replaceAll('export async function ','async function ');
 const vehicles=(await readFile(path.join(root,'worker/vehicles.js'),'utf8')).replace(/^import .*;$/gm,'').replaceAll('export async function ','async function ');

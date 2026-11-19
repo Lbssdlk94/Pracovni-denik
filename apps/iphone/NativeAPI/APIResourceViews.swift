@@ -74,6 +74,7 @@ struct APIRecordRow: View {
                 if entity == .jobs {
                     if value.title != value["customerName"].string {Text(value.title).font(.subheadline).foregroundStyle(.secondary)}
                     Text([APIFormat.status(value["status"].string),value["dueDate"].string,value["plannedStart"].string].filter{!$0.isEmpty}.joined(separator:" · ")).font(.caption).foregroundStyle(.secondary)
+                    APIJobCompletionSummary(job:value,compact:true)
                     if value["status"].string == "done" { Text(APIFormat.protocolState(value["protocolStatus"].string)).font(.caption).foregroundStyle(DiaryStyle.accent) }
                 }
                 if entity == .defects { Text(APIFormat.status(value["status"].string)+" · "+value["discoveredOn"].string).font(.caption).foregroundStyle(value["status"].string == "resolved" ? Color.secondary : DiaryStyle.warning) }

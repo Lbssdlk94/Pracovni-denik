@@ -24,3 +24,5 @@ Izolované prohlížečové testy vyžadují Playwright a Chromium: `node apps/s
 Super Admin se publikuje z kořenového buildu podle kořenového `.openai/hosting.json`. Firemní aplikaci na tento projekt nepublikovat. Její instalační balíček vznikne přes `node scripts/prepare-company.mjs`; nová instalace musí získat vlastní Sites ID, DB/R2 a nové klíče. Existující migrace každé instalace zachovat.
 
 Individuální měření dopravy/práce a člověkohodin na zakázkách, propojení s docházkou, opravy, oprávnění a offline fronta: [popis a bezpečné nasazení](docs/JOB-PERSON-HOURS-2026-11-19.md). iOS lze zkontrolovat ručním během `iphone.yml` s `checks_only=true` bez vytvoření IPA.
+
+Odhad dokončení zakázek v procentech a barevný denní posun s výchozí hranicí 20 procentních bodů: [použití, nasazení a příprava SwiftUI bez IPA](docs/JOB-COMPLETION-2026-11-19.md).

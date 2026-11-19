@@ -407,6 +407,13 @@
       "when": 1795079093570,
       "tag": "0057_job_person_hours",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "6",
+      "when": 1795095930710,
+      "tag": "0058_job_completion",
+      "breakpoints": true
     }
   ]
 }

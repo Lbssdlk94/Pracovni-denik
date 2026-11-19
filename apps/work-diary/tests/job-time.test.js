@@ -135,7 +135,7 @@ test('A manager reduction during a private time read fails closed before seriali
 test('Applying 0057 to a populated 0056 database preserves original records and does not invent historical hours',async()=>{
  const env=environment(':memory:',56),call=async(path,method='GET',body)=>{const req=request(path,people.owner,method,body);req.headers.delete('x-work-time-client');const r=await api(req,env,ctx);assert.equal(r.status,200,await r.clone().text());return r.json();};
  await call('/api/me');await call('/api/customers/original','PUT',{version:0,name:'Zachovaný zákazník',phones:[],addresses:[{id:'original-address',address:'Původní 123',city:'Blatná'}]});
- await call('/api/jobs/original','PUT',{version:0,title:'Zachovaná zakázka',assignedTo:people.owner.id,customerId:'original',status:'in_progress'});
+ env.sqlite.prepare("INSERT INTO jobs(id,title,description,address,assigned_to,assigned_name,due_date,status,created_at,updated_at,created_by,updated_by,customer_id) VALUES('original','Zachovaná zakázka','','',?,'Vlastník','','in_progress',?,?,?,?, 'original')").run(people.owner.id,Date.now(),Date.now(),people.owner.id,people.owner.id);
  await call('/api/attendance/punch','POST',{mutationId:'existing-shift',kind:'arrival',gpsStatus:'unavailable'});
  const tables=['members','customers','gardens','jobs','attendance_shifts','attendance_corrections','notifications'],before=Object.fromEntries(tables.map(table=>[table,env.sqlite.prepare('SELECT * FROM '+table).all()]));
  env.sqlite.exec(readFileSync('drizzle/0057_job_person_hours.sql','utf8'));

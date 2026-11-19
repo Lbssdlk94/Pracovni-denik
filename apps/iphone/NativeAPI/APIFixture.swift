@@ -58,6 +58,17 @@ final class APIFixtureProtocol:URLProtocol {
         let parts=path.split(separator:"/").map(String.init)
         if parts.count>=3 && parts[1]=="jobs",let base=fixture["jobs"].array.first(where:{$0.id==parts[2]}){let key="/api/jobs/"+parts[2];var job=records[key] ?? base
             if parts.count==3{if method=="PUT"{let b=body();guard b["version"]==job["version"]else{return json(.object(["error":.s("Konflikt verze")]),409)};job=job.merged(b.object);job["version"] = .n(job["version"].int+1);records[key]=job};return json(.object(["job":job]))}
+            if ["completion","completion-target"].contains(parts[3]),method=="PATCH"{
+                let b=body(),target=parts[3]=="completion-target",field=target ? "points" : "percent",versionKey=target ? "completionTargetVersion" : "completionVersion",operationKey="completion-operation:"+b["operationId"].string
+                if let previous=records[operationKey]{guard previous==b else{return json(.object(["error":.s("Jiný obsah operace")]),409)};return json(.object(["job":job,"replayed":.bool(true)]))}
+                guard b["version"].int==job[versionKey].int,b[field].int>=(target ? 1 : 0),b[field].int<=100 else{return json(.object(["error":.s("Konflikt odhadu")]),409)}
+                if target{job["completionTargetPoints"]=b[field]}else{
+                    let formatter=DateFormatter();formatter.timeZone=TimeZone(identifier:"Europe/Prague");formatter.dateFormat="yyyy-MM-dd";let day=formatter.string(from:Date())
+                    if job["completionDay"].string != day{job["completionBaselinePercent"]=job["completionPercent"];job["completionBaselineDay"]=job["completionDay"]}
+                    job["completionPercent"]=b[field];job["completionDay"] = .s(day);job["completionNote"]=b["note"].isNull ? .s("") : b["note"];job["completionUpdatedBy"]=me["user"]["id"];job["completionUpdatedName"]=me["user"]["name"];job["completionUpdatedAt"] = .number(Date().timeIntervalSince1970*1000)
+                }
+                job[versionKey] = .n(job[versionKey].int+1);job["version"] = .n(job["version"].int+1);records[key]=job;records[operationKey]=b;return json(.object(["job":job]))
+            }
             if parts[3]=="time"{
                 let timeKey=key+"/timeSnapshot",userID=me["user"]["id"],name=me["user"]["name"],manager=["owner","administrator","admin"].contains(me["user"]["role"].string)
                 var time=records[timeKey] ?? .object(["job":job,"states":.array([.object(["userId":userID,"name":name,"version":.n(0),"active":.null,"assigned":.bool(true)])]),"intervals":.array([]),"reviews":.array([]),"rates":.array([]),"history":.array([]),"summary":.object(["total":.object(["workMs":.n(0),"travelMs":.n(0),"breakMs":.n(0)]),"days":.array([]),"workers":.array([])]),"canWrite":.bool(true),"canManage":.bool(manager),"canManageCosts":.bool(manager),"serverNow":.number(Date().timeIntervalSince1970*1000)])
