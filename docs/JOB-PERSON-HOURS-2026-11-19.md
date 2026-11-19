@@ -60,3 +60,11 @@ Neověřené: fyzický iPhone/Watch a skutečné odeslání SMS mobilním operá
 Správce/vedoucí může opravovat také existující uzavřený interval dřívějšího pracovníka po změně obsazení zakázky. Samotná oprava pracovníka znovu nepřiřadí a neobnoví jeho přístup k zakázce. Pro nové doplnění nadále platí současné přiřazení a stávající docházka.
 
 Zpožděná odpověď a zápis místní mezipaměti jsou navíc vázané na neměnný účet, roli a grant. Změna účtu během načítání nedovolí vrátit původní soukromý snapshot ani vyřešit frontu pod jiným účtem; ověřeno samostatným regresním testem.
+
+## Zveřejněné verze
+
+- Dr. Závlaha: Sites v145, zdroj `7d4268ad8efe374478f989980ae7c8bb3978cd80`.
+- Dr. Garden: Sites v65, zdroj `6fb88fb74e1861cb68f94ee4b538cfdcfe47f199`.
+- Obě nasazení mají stav `succeeded`. Vazby na hosting, publikum a revize tajných údajů zůstaly zachované. Garden dostal pouze Worker/manifest bez historických databázových migrací.
+- Kontrola živých adres ověřila nové prostředky aplikace a Service Worker, odpovědi API bez aplikačního přihlášení jsou 401. Měření pod skutečným provozním účtem nebylo spouštěno; zápisové scénáře byly testovány výhradně izolovaně.
+- Předchozí verze v143/v63 a meziverze v144/v64 zůstávají dostupné pro řízený návrat. Nová data při návratu nemažte.
