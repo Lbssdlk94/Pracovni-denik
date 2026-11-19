@@ -1,3 +1,4 @@
+import {timeLegacyStatements,timeAssertApplied} from './job-time.js';
 import {workspaceJobScope} from './workspace-policy.js';
 import {hasProtocolContent} from '../web/job-workflow-model.js';
 import {protocolBilling} from './protocol-billing.js';
@@ -78,7 +79,7 @@ export async function handleServiceWork(request,env,ctx,m,h){
  if(b.complete)statements.push(env.DB.prepare(`UPDATE jobs SET status='done',incomplete_reason='' WHERE id=? AND ${gate}`).bind(id,...args));
  if(materialStatus==='missing'&&(j.material_status!=='missing'||materialNote!==j.material_note))statements.push(env.DB.prepare(`INSERT OR IGNORE INTO notifications(id,event_key,user_id,kind,resource_id,title,body,created_at) SELECT lower(hex(randomblob(16))),?,user_id,'job_material',?,'Chybí materiál k servisu',?,? FROM members WHERE role IN ('owner','administrator','admin') AND user_id<>? AND ${gate} AND COALESCE((SELECT json_extract(value,'$.notifications') FROM settings WHERE key='features'),1)=1`).bind('material:'+operationId,id,j.title+' · '+materialNote,now,m.user_id,...args));
  statements.push(subOperation(env,operationId,m.user_id,id,hash,gate,args));
- let result;try{result=await env.DB.batch(statements);}catch(e){if(String(e.message).includes('subscription_quota_exceeded'))fail(409,'Zahrnuté služby jsou již vyčerpány. Správce může potvrdit mimořádný servis bez odpočtu.',{code:'service_quota'});throw e;}
+ let result;try{const time=b.complete&&h.features?.attendance!==false?await timeLegacyStatements(env,m,j,'stop',fail):[];result=await env.DB.batch([...time,...statements,...(time.length?[timeAssertApplied(env,id,m.user_id,operationId)]:[])]);if(time.length)result=result.slice(time.length);}catch(e){if(String(e.message).includes('job_time_')||String(e.message).includes('CHECK constraint failed'))fail(409,'Pracovní doba nebo oprávnění se změnily. Obnovte zakázku.',{code:'job_time_conflict'});if(String(e.message).includes('subscription_quota_exceeded'))fail(409,'Zahrnuté služby jsou již vyčerpány. Správce může potvrdit mimořádný servis bez odpočtu.',{code:'service_quota'});throw e;}
  if(!result[0].meta.changes&&!await subReplay(env,operationId,m.user_id,id,hash,fail))fail(409,'Zakázka se změnila. Obnovte ji a porovnejte své změny.',{code:'service_conflict'});
  return json(await detail());
 }

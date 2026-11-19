@@ -1,5 +1,7 @@
+import {timeAttendanceSummary} from './job-time.js';
 import {attendanceMonthBounds,attendanceDuration,attendanceDayBounds,attendanceOverview} from '../web/attendance-model.js';
 export async function handleAttendance(request,env,m,helpers,features){
+ try {
  const {all,one,execute,body,fail,json,validId,cleanText}=helpers,url=new URL(request.url),path=url.pathname,method=request.method,manager=['owner','administrator','admin'].includes(m.role),now=Date.now();
  const own=row=>{if(!row)fail(404,'Docházkový záznam nebyl nalezen.');if(!manager&&row.user_id!==m.user_id)fail(403,'Můžete zobrazit pouze vlastní docházku.');return row;};
  const dto=row=>({id:row.id,userId:row.user_id,userName:row.user_name,startAt:row.start_at,endAt:row.end_at,version:row.version,startGpsStatus:row.start_gps_status,endGpsStatus:row.end_gps_status,corrected:!!row.last_correction_id,...(manager?{startPosition:row.start_position?JSON.parse(row.start_position):null,endPosition:row.end_position?JSON.parse(row.end_position):null,recordedStartAt:row.recorded_start_at,recordedEndAt:row.recorded_end_at}:{})});
@@ -17,7 +19,7 @@ export async function handleAttendance(request,env,m,helpers,features){
   const employees=manager?await all(env.DB,'SELECT user_id AS id,name FROM members UNION SELECT user_id AS id,user_name AS name FROM attendance_shifts WHERE user_id NOT IN (SELECT user_id FROM members) GROUP BY user_id ORDER BY name'):null;
   const shifts=rows.map(dto),sums=new Map();for(const s of shifts){const total=sums.get(s.userId)||{userId:s.userId,userName:s.userName,durationMs:0,closedShifts:0,openShifts:0};total.durationMs+=attendanceDuration(s,month);if(s.endAt==null)total.openShifts++;else total.closedShifts++;sums.set(s.userId,total);}
   if(manager){for(const p of employees){if((userId==='all'||userId===p.id)&&!sums.has(p.id))sums.set(p.id,{userId:p.id,userName:p.name,durationMs:0,closedShifts:0,openShifts:0});}}else if(!sums.has(m.user_id))sums.set(m.user_id,{userId:m.user_id,userName:m.name,durationMs:0,closedShifts:0,openShifts:0});
-  return json({overview:attendanceOverview(ownRows,now),pendingCorrections:pendingRows.map(correction),month,timeZone:'Europe/Prague',serverNow:now,shifts,corrections:requests.map(correction),summary:[...sums.values()],activeShift:active?dto(active):null,...(manager?{employees}:{}),canManage:manager});
+  return json({overview:attendanceOverview(ownRows,now),pendingCorrections:pendingRows.map(correction),month,timeZone:'Europe/Prague',serverNow:now,allocations:await timeAttendanceSummary(env,shifts,now),shifts,corrections:requests.map(correction),summary:[...sums.values()],activeShift:active?dto(active):null,...(manager?{employees}:{}),canManage:manager});
  }
  if(path==='/api/attendance/punch'&&method==='POST'){
   const b=await body(request,3000),id=validId(b.mutationId);if(b.userId&&b.userId!==m.user_id)fail(403,'Příchod a odchod zapisujete pouze za sebe.');if(!['arrival','departure'].includes(b.kind))fail(400,'Vyberte příchod nebo odchod.');
@@ -52,4 +54,5 @@ export async function handleAttendance(request,env,m,helpers,features){
   const result=await env.DB.batch([mutation,env.DB.prepare("UPDATE attendance_corrections SET status='approved',reviewed_by=?,reviewed_at=?,review_note=? WHERE id=? AND status='pending' AND EXISTS(SELECT 1 FROM attendance_shifts WHERE id=? AND last_correction_id=?)").bind(m.user_id,now,note,c.id,c.shift_id,c.id)]);if(!result[1].meta.changes)conflict();return json({ok:true});
  }
  fail(404,'Docházková operace nebyla nalezena.');
+ }catch(error){if(String(error.message).includes('job_time_'))helpers.fail(409,'Směna obsahuje pracovní intervaly zakázek. Nejdříve je opravte nebo schvalte odpovídající změnu.');throw error;}
 }

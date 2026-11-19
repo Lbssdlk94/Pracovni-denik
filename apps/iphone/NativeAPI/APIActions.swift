@@ -50,6 +50,7 @@ struct APIJobDetailContent:View {
                 if !job["assignedName"].string.isEmpty{Label(job["assignedName"].string,systemImage:"person")}
                 if job["status"].string=="incomplete"{Text("Důvod: "+job["incompleteReason"].string).foregroundStyle(DiaryStyle.warning)}
             }
+            if store.enabled("attendance"){NavigationLink{APIJobTimeView(store:store,job:job)}label:{Label("Pracovní doba",systemImage:"person.2.badge.gearshape").frame(minHeight:44)}.diaryCard()}
             if job["jobType"].string=="installation"{NavigationLink{APIJobDiary(store:store,job:job)}label:{Label("Deník realizace",systemImage:"book.closed").frame(minHeight:44)}.diaryCard()}
             if !job["address"].string.isEmpty{DiarySection(title:"Místo",symbol:"mappin"){Text(job["address"].string);if let url=APIFormat.navigation(job["address"].string){Link("Navigovat",destination:url).frame(minHeight:44)}}}
             if store.enabled("jobHandoffs"){

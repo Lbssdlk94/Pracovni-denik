@@ -15,6 +15,7 @@ export function travelArrivalLabel(job){
 // Suggest the next explicit action; never change a job without confirmation.
 export function jobProgressAction(job,{canWrite=false,travelEnabled=true}={}){
  if(!canWrite||job.serviceApproval!=='confirmed')return null;
+ if(job.myTime&&['on_way','in_progress'].includes(job.status)){const own=job.myTime.active?.jobId===job.id?job.myTime.active:null;return own?.kind==='work'?{kind:'time',action:'stop',label:'Ukončit moji práci',icon:'check'}:{kind:'time',action:'work',label:own?.kind==='break'?'Pokračovat v práci':'Zahájit práci',icon:'clock'};}
  if(job.status==='planned'&&travelEnabled)return {kind:'departure',label:'Jsem na cestě',icon:'navigate'};
  if(job.status==='on_way')return {kind:'status',status:'in_progress',label:'Probíhá',icon:'clock'};
  if(job.status==='in_progress')return {kind:'status',status:'done',label:'Hotovo',icon:'check'};

@@ -23,6 +23,11 @@ on:
         required: false
         type: boolean
         default: false
+      checks_only:
+        description: 'Simulator validation only. Never build, sign or export any IPA.'
+        required: false
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -71,6 +76,7 @@ jobs:
             xcrun xcresulttool export attachments --path build/Tests.xcresult --output-path build/iphone-previews
           fi
       - name: Unsigned iPhone build
+        if: inputs.checks_only != true
         shell: bash
         run: |
           set -o pipefail
@@ -117,7 +123,7 @@ jobs:
             xcrun simctl io "$WATCH_UDID" screenshot "build/watch-previews/$SCREEN.png"
           done
       - name: Signed IPA with Push Notifications
-        if: github.event_name == 'workflow_dispatch' && inputs.sign_ipa == true
+        if: github.event_name == 'workflow_dispatch' && inputs.sign_ipa == true && inputs.checks_only != true
         env:
           APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -167,10 +173,13 @@ jobs:
           python3 -c 'import os,plistlib,pathlib; p=plistlib.loads(pathlib.Path(os.environ["RUNNER_TEMP"],"signed-entitlements.plist").read_bytes()); assert p.get("aps-environment") in ("development","production"), "Signed IPA lacks Push Notifications entitlement"'
           cp "$IPA_PATH" build/PracovniDenik-SIGNED.ipa
           shasum -a 256 build/PracovniDenik-SIGNED.ipa > build/SIGNED-IPA-SHA256.txt
+      - name: Verify checks-only run did not create IPA
+        if: always() && inputs.checks_only == true
+        run: python3 -c 'from pathlib import Path; assert not list(Path("build").rglob("*.ipa")), "Checks-only run must never create IPA"; print("PASS checks only, no IPA")'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: PracovniDenik-builds-and-logs-${{ inputs.sign_ipa && 'SIGNED' || 'UNSIGNED' }}
+          name: PracovniDenik-builds-and-logs-${{ inputs.checks_only && 'CHECKS-ONLY-NO-IPA' || (inputs.sign_ipa && 'SIGNED' || 'UNSIGNED') }}
           retention-days: 14
           path: |
             build/*.ipa

@@ -6,6 +6,7 @@ struct APIJobActionBar: View {
     @State private var departure = false
     @State private var statusRequest:APIJobStatusRequest?
     @State private var report = false
+    @State private var time=false
     private var mayWork: Bool { APIJobWorkflow.canWork(job, userID:store.userID, writer:store.writer, manager:store.manager) && !store.isRolePreview }
     private var primary: APIJobPrimaryAction? { APIJobWorkflow.primary(job, travelEnabled:store.enabled("jobTravel")) }
     var body: some View {
@@ -17,12 +18,14 @@ struct APIJobActionBar: View {
         .frame(maxWidth:.infinity).background(.regularMaterial)
         .sheet(isPresented:$departure) { APIDepartureEditor(store:store,job:job) }
         .sheet(item:$statusRequest) { request in APIJobStatusEditor(store:store,job:job,initialStatus:request.targetStatus) }
+        .sheet(isPresented:$time){NavigationStack{APIJobTimeView(store:store,job:job,initialAction:"stop")}}
         .sheet(isPresented:$report) { APIProtocolEditor(store:store,jobID:job.id) }
     }
     @ViewBuilder private var actions: some View {
         if mayWork, let primary {
             Button {
-                if primary == .departure { departure=true }
+                if primary == .stopWork{time=true}
+                else if primary == .departure { departure=true }
                 else { statusRequest=APIJobStatusRequest(targetStatus:primary.targetStatus) }
             } label: {
                 Label(primary.title,systemImage:primary.symbol).frame(maxWidth:.infinity)

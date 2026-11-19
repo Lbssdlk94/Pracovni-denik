@@ -58,6 +58,20 @@ final class APIFixtureProtocol:URLProtocol {
         let parts=path.split(separator:"/").map(String.init)
         if parts.count>=3 && parts[1]=="jobs",let base=fixture["jobs"].array.first(where:{$0.id==parts[2]}){let key="/api/jobs/"+parts[2];var job=records[key] ?? base
             if parts.count==3{if method=="PUT"{let b=body();guard b["version"]==job["version"]else{return json(.object(["error":.s("Konflikt verze")]),409)};job=job.merged(b.object);job["version"] = .n(job["version"].int+1);records[key]=job};return json(.object(["job":job]))}
+            if parts[3]=="time"{
+                let timeKey=key+"/timeSnapshot",userID=me["user"]["id"],name=me["user"]["name"],manager=["owner","administrator","admin"].contains(me["user"]["role"].string)
+                var time=records[timeKey] ?? .object(["job":job,"states":.array([.object(["userId":userID,"name":name,"version":.n(0),"active":.null,"assigned":.bool(true)])]),"intervals":.array([]),"reviews":.array([]),"rates":.array([]),"history":.array([]),"summary":.object(["total":.object(["workMs":.n(0),"travelMs":.n(0),"breakMs":.n(0)]),"days":.array([]),"workers":.array([])]),"canWrite":.bool(true),"canManage":.bool(manager),"canManageCosts":.bool(manager),"serverNow":.number(Date().timeIntervalSince1970*1000)])
+                if parts.count==5,parts[4]=="actions",method=="POST"{
+                    let b=body(),operationKey="time-operation:"+b["operationId"].string
+                    if records[operationKey] != nil{return json(time.merged(["replayed":.bool(true)]))}
+                    var state=time["states"].array[0],intervals=time["intervals"].array
+                    guard b["workers"].array.first?["version"]==state["version"]else{return json(.object(["error":.s("Čas se změnil"),"code":.s("job_time_conflict")]),409)}
+                    if !state["active"].isNull{intervals=intervals.map{row in row.id==state["active"].id ? row.merged(["endAt":b["at"]]) : row}}
+                    if b["action"].string=="stop"{state["active"] = .null}else{let row=APIValue.object(["id":.s(b["operationId"].string+"_0"),"jobId":.s(parts[2]),"userId":userID,"userName":name,"kind":b["action"],"startAt":b["at"],"endAt":.null,"version":.n(1),"approval":.s("pending")]);intervals.append(row);state["active"]=row}
+                    state["version"] = .n(state["version"].int+1);time["states"] = .array([state]);time["intervals"] = .array(intervals);records[timeKey]=time;records[operationKey] = .bool(true)
+                }
+                return json(time)
+            }
             if parts[3]=="departure",method=="POST"{
                 let b=body();guard b["version"]==job["version"]else{return json(.object(["error":.s("Konflikt verze")]),409)}
                 guard b["arrivalTime"].string.range(of:"^([01][0-9]|2[0-3]):[0-5][0-9]$",options:.regularExpression) != nil else{return json(.object(["error":.s("Přesný čas je povinný")]),400)}

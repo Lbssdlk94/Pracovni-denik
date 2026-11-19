@@ -2,15 +2,15 @@ import Foundation
 
 // Presentation decisions only. Every mutation is still authorized and versioned by the API.
 enum APIJobPrimaryAction: String {
-    case departure, start, complete
+    case departure, start, complete, stopWork
     var title: String {
-        switch self { case .departure: return "Jsem na cestě"; case .start: return "Probíhá"; case .complete: return "Hotovo" }
+        switch self { case .departure: return "Jsem na cestě"; case .start: return "Probíhá"; case .complete: return "Hotovo";case .stopWork:return "Ukončit moji práci" }
     }
     var symbol: String {
-        switch self { case .departure: return "location"; case .start: return "play.fill"; case .complete: return "checkmark" }
+        switch self { case .departure: return "location"; case .start: return "play.fill"; case .complete: return "checkmark";case .stopWork:return "stop.fill" }
     }
     var targetStatus: String? {
-        switch self { case .departure: return nil; case .start: return "in_progress"; case .complete: return "done" }
+        switch self { case .departure: return nil; case .start: return "in_progress"; case .complete: return "done";case .stopWork:return nil }
     }
 }
 struct APIJobStatusRequest:Identifiable {
@@ -27,6 +27,7 @@ enum APIJobWorkflow {
     }
     static func primary(_ job: APIValue, travelEnabled: Bool) -> APIJobPrimaryAction? {
         guard !job["cancelled"].bool else { return nil }
+        if !job["myTime"].isNull,["on_way","in_progress"].contains(job["status"].string){let active=job["myTime"]["active"];return active["jobId"].string==job.id && active["kind"].string=="work" ? .stopWork : .start}
         switch job["status"].string {
         case "planned": return travelEnabled ? .departure : .start
         case "on_way": return .start
