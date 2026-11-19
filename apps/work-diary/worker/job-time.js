@@ -1,4 +1,4 @@
-import {attendanceInstant} from '../web/attendance-model.js';
+import {attendanceInstant,attendanceDayBounds} from '../web/attendance-model.js';
 import {workspaceJobScope} from './workspace-policy.js';
 import {jobAssignedIds,jobAssignment} from './assignments.js';
 import {subHash} from './subscriptions.js';
@@ -87,18 +87,24 @@ export async function timeLegacyStatements(env,m,job,kind,fail,extra={}){
 export function timeAssertApplied(env,jobId,actorId,token){return env.DB.prepare('UPDATE job_time_operations SET valid=CASE WHEN EXISTS(SELECT 1 FROM jobs WHERE id=? AND service_operation=?) THEN 1 ELSE 0 END WHERE job_id=? AND actor_id=?').bind(jobId,token,jobId,actorId);}
 export async function timeBatch(env,statements,fail){try{return await env.DB.batch(statements);}catch(e){timeFailure(e,fail);}}
 
-async function timeDetail(env,m,job,fail){
- const manager=tmManager(m),canManage=await timeMayManage(env,m,job),now=Date.now(),rows=await tmAll(env,'SELECT * FROM job_time_intervals WHERE job_id=? ORDER BY start_at DESC,id DESC',job.id),ids=[...new Set([...jobAssignedIds(job),...rows.map(r=>r.user_id)])];
+export async function timeDetail(env,m,job,fail,{compact=false}={}){
+ const manager=tmManager(m),canManage=await timeMayManage(env,m,job),now=Date.now(),day=attendanceDayBounds(now),rows=await tmAll(env,'SELECT * FROM job_time_intervals WHERE job_id=?'+(compact?' AND start_at<? AND (end_at IS NULL OR end_at>?)':'')+' ORDER BY start_at DESC,id DESC',job.id,...(compact?[now,day.start]:[])),ids=[...new Set([...jobAssignedIds(job),...rows.map(r=>r.user_id)])];
  const people=ids.length?await tmAll(env,'SELECT user_id AS id,name,role FROM members WHERE user_id IN (SELECT value FROM json_each(?)) ORDER BY name',JSON.stringify(ids)):[];
- const states=[];for(const person of people)states.push({...await timeState(env,person.id),name:person.name,assigned:jobAssignedIds(job).includes(person.id)});
+ const versions=ids.length?await tmAll(env,'SELECT user_id,version FROM job_time_states WHERE user_id IN (SELECT value FROM json_each(?))',JSON.stringify(ids)):[];
+ const open=ids.length?await tmAll(env,'SELECT * FROM job_time_intervals WHERE end_at IS NULL AND user_id IN (SELECT value FROM json_each(?))',JSON.stringify(ids)):[];
+ const states=people.map(person=>({userId:person.id,version:versions.find(v=>v.user_id===person.id)?.version||0,active:open.find(i=>i.user_id===person.id)?timeIntervalDTO(open.find(i=>i.user_id===person.id)):null,name:person.name,assigned:jobAssignedIds(job).includes(person.id)}));
  // A colleague's timer can be on a job outside this actor's discipline/assignment.
  // Expose only an anonymous 'elsewhere' indication in that case.
  const elsewhere=[...new Set(states.map(s=>s.active?.jobId).filter(id=>id&&id!==job.id))];
  const allowed=elsewhere.length?new Set((await tmAll(env,`SELECT j.id FROM jobs j WHERE j.id IN(SELECT value FROM json_each(?)) AND j.deleted=0 AND ${workspaceJobScope()}`,JSON.stringify(elsewhere),m.user_id)).map(j=>j.id)):new Set();
  for(const state of states)if(state.active&&state.active.jobId!==job.id&&!allowed.has(state.active.jobId))state.active={jobId:'unavailable',kind:'other'};
  const intervals=rows.map(r=>timeIntervalDTO(r,manager));
- const candidates=canManage?await tmAll(env,`SELECT p.user_id AS id,p.name,p.role FROM members p WHERE p.role IN ${timeWriters} AND (p.role IN ${timeManagers} OR NOT EXISTS(SELECT 1 FROM workspaces WHERE state IN ('active','read_only')) OR EXISTS(SELECT 1 FROM member_disciplines d WHERE d.user_id=p.user_id AND d.discipline=?)) ORDER BY p.name`,job.discipline):[];
- const result={job:{id:job.id,status:job.status,version:job.version,myTime:await timeState(env,m.user_id),assignedTos:jobAssignedIds(job)},intervals,states,summary:timeSummary(intervals,now,manager),serverNow:now,canManage,canManageCosts:manager,canWrite:['owner','administrator','admin','worker'].includes(m.role),candidates,lead:(await tmOne(env,'SELECT * FROM job_time_leads WHERE job_id=?',job.id))||null,reviews:await tmAll(env,'SELECT r.*,p.name AS author_name FROM job_time_reviews r LEFT JOIN members p ON p.user_id=r.created_by WHERE r.job_id=? ORDER BY r.created_at DESC',job.id),...(manager?{rates:await tmAll(env,'SELECT * FROM job_time_rates WHERE user_id IN (SELECT value FROM json_each(?))',JSON.stringify(ids)),history:await tmAll(env,'SELECT e.*,p.name AS actor_name FROM job_time_events e LEFT JOIN members p ON p.user_id=e.actor_id WHERE e.job_id=? ORDER BY e.at DESC,e.id DESC',job.id)}:{})};
+ const candidates=!compact&&canManage?await tmAll(env,`SELECT p.user_id AS id,p.name,p.role FROM members p WHERE p.role IN ${timeWriters} AND (p.role IN ${timeManagers} OR NOT EXISTS(SELECT 1 FROM workspaces WHERE state IN ('active','read_only')) OR EXISTS(SELECT 1 FROM member_disciplines d WHERE d.user_id=p.user_id AND d.discipline=?)) ORDER BY p.name`,job.discipline):[];
+ const result={job:{id:job.id,status:job.status,version:job.version,myTime:await timeState(env,m.user_id),assignedTos:jobAssignedIds(job)},intervals,states,serverNow:now,canManage,canManageCosts:manager,canWrite:['owner','administrator','admin','worker'].includes(m.role)};
+ if(compact){result.projection='dashboard';}else{
+  Object.assign(result,{summary:timeSummary(intervals,now,manager),candidates,lead:(await tmOne(env,'SELECT * FROM job_time_leads WHERE job_id=?',job.id))||null,reviews:await tmAll(env,'SELECT r.*,p.name AS author_name FROM job_time_reviews r LEFT JOIN members p ON p.user_id=r.created_by WHERE r.job_id=? ORDER BY r.created_at DESC',job.id)});
+  if(manager){result.rates=await tmAll(env,'SELECT * FROM job_time_rates WHERE user_id IN (SELECT value FROM json_each(?))',JSON.stringify(ids));result.history=await tmAll(env,'SELECT e.*,p.name AS actor_name FROM job_time_events e LEFT JOIN members p ON p.user_id=e.actor_id WHERE e.job_id=? ORDER BY e.at DESC,e.id DESC',job.id);}
+ }
  // Recheck the live grant after reading private rates/history. A role reduction
  // during an asynchronous read must not serialize an earlier manager snapshot.
  const live=await tmOne(env,'SELECT role FROM members WHERE user_id=?',m.user_id);

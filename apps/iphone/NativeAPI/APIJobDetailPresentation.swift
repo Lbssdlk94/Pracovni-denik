@@ -30,7 +30,7 @@ enum APIJobDetailAction: Equatable {
             }
         }
         if job["status"].string=="done" {return .report}
-        guard !job["cancelled"].bool else{return nil}
+        guard !job["cancelled"].bool,job["status"].string != "incomplete" else{return nil}
         return travelEnabled ? .travel : .arrive
     }
 }

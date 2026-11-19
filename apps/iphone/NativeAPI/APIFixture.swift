@@ -24,10 +24,41 @@ final class APIFixtureProtocol:URLProtocol {
         if path=="/api/auth/account"{return json(.object(["username":.s("fixture"),"version":.n(1)]))}
         if path=="/api/notifications/native/config"{return json(.object(["configured":.bool(false),"registered":.bool(false),"enabled":.bool(false),"userId":.s("fixture-owner")]))}
         if path=="/api/access-logout" || path=="/api/notifications/native"{return json(.object(["ok":.bool(true)]))}
+        if path=="/api/overview"{
+            if ProcessInfo.processInfo.arguments.contains("--native-api-overview-error-testing"){return json(.object(["error":.s("Přehled je dočasně nedostupný. Zkuste to znovu.")]),503)}
+            let query=URLComponents(url:request.url!,resolvingAgainstBaseURL:false)?.queryItems ?? []
+            let mode=query.first{$0.name=="mode"}?.value ?? "personal"
+            if mode=="company" && !["owner","administrator","admin"].contains(me["user"]["role"].string){return json(.object(["error":.s("Přehled je pouze pro správce")]),403)}
+            if records["fixture-dashboard-seeded"]==nil,ProcessInfo.processInfo.arguments.contains("--native-api-work-dashboard-testing"),let base=fixture["jobs"].array.first{
+                let kind=ProcessInfo.processInfo.arguments.contains("--native-api-travel-testing") ? "travel" : ProcessInfo.processInfo.arguments.contains("--native-api-break-testing") ? "break" : "work"
+                let job=base.merged(["jobType":.s("installation"),"completionPercent":.n(45)])
+                let row:APIValue = .object(["id":.s("dashboard-active"),"jobId":.s(job.id),"userId":me["user"]["id"],"userName":me["user"]["name"],"kind":.s(kind),"startAt":.number(Date().addingTimeInterval(-1800).timeIntervalSince1970*1000),"endAt":.null,"version":.n(1)])
+                records["/api/jobs/"+job.id]=job
+                records["/api/jobs/"+job.id+"/timeSnapshot"] = .object(["job":job,"states":.array([.object(["userId":me["user"]["id"],"name":me["user"]["name"],"version":.n(1),"active":row,"assigned":.bool(true)])]),"intervals":.array([row]),"canWrite":me["permissions"]["write"],"canManage":me["permissions"]["manage"],"canManageCosts":me["permissions"]["manage"],"serverNow":.number(Date().timeIntervalSince1970*1000)])
+                records["fixture-dashboard-seeded"] = .bool(true)
+            }
+            return json(APIDashboardFixture.dashboard(fixture:fixture,me:me,records:records,mode:mode))
+        }
+        if path=="/api/attendance/punch",method=="POST"{
+            let b=body(),op="attendance-operation:"+b["mutationId"].string
+            if let saved=records[op]{return json(.object(["shift":saved,"replayed":.bool(true)]))}
+            var data=APIDashboardFixture.attendance(me:me,records:records),shift=data["activeShift"]
+            if b["kind"].string=="arrival"{
+                guard shift.isNull else{return json(.object(["error":.s("Příchod již existuje")]),409)}
+                shift = .object(["id":b["mutationId"],"userId":me["user"]["id"],"userName":me["user"]["name"],"startAt":.number(Date().timeIntervalSince1970*1000),"endAt":.null,"version":.n(1)])
+                data["shifts"] = .array(data["shifts"].array+[shift]);data["activeShift"]=shift
+            }else{
+                guard shift["id"]==b["shiftId"],shift["version"]==b["version"] else{return json(.object(["error":.s("Směna se změnila")]),409)}
+                shift["endAt"] = .number(Date().timeIntervalSince1970*1000);shift["version"] = .n(shift["version"].int+1)
+                data["shifts"] = .array(data["shifts"].array.map{$0.id==shift.id ? shift : $0});data["activeShift"] = .null
+            }
+            records["fixture-attendance"]=data;records[op]=shift;return json(.object(["shift":shift]))
+        }
         if path=="/api/jobs"{
             let all=fixture["jobs"].array.map{records["/api/jobs/"+$0.id] ?? $0}
             var jobs=all
             let q=Dictionary(URLComponents(url:request.url!,resolvingAgainstBaseURL:false)!.queryItems?.map{($0.name,$0.value ?? "")} ?? [],uniquingKeysWith:{$1})
+            if let attention=q["attention"]{jobs=jobs.filter{APIDashboardFixture.matches($0,kind:attention,day:fixture["jobs"].array.first?["dueDate"].string ?? "")}}
             if let month=q["month"]{jobs=jobs.filter{$0["dueDate"].string.isEmpty || $0["dueDate"].string.hasPrefix(month+"-")}}
             if let day=q["day"]{jobs=jobs.filter{$0["dueDate"].string==(day=="undated" ? "" : day)}}
             let ranks=["in_progress":0,"on_way":1,"planned":2,"incomplete":3,"done":4];jobs.sort{(ranks[$0["status"].string] ?? 2)<(ranks[$1["status"].string] ?? 2)}
@@ -52,7 +83,7 @@ final class APIFixtureProtocol:URLProtocol {
         if path=="/api/zones"{return json(.object(["zones":.array([]),"version":.n(1)]))}
         if path=="/api/shafts"{return json(.object(["records":.array([])]))}
         if path=="/api/team"{return json(.object(["members":.array([me["user"]])]))}
-        if path=="/api/attendance"{return json(.object(["shifts":.array([.object(["id":.s("shift-1"),"userId":.s("fixture-owner"),"userName":.s("Luboš – ukázka"),"startAt":.number(Date().addingTimeInterval(-3600).timeIntervalSince1970*1000),"endAt":.null,"version":.n(1)])]),"activeShift":.null,"summary":.object([:]),"employees":.array([me["user"]]),"corrections":.array([]),"pendingCorrections":.array([])]))}
+        if path=="/api/attendance"{return json(APIDashboardFixture.attendance(me:me,records:records))}
         if path=="/api/vehicles"{return json(.object(["vehicles":.array([vehicle]),"driver":.object(["enabled":.bool(true),"vehicleId":vehicle["id"],"version":.n(1)]),"canManage":.bool(true),"canWrite":.bool(true)]))}
         if path=="/api/vehicles/vehicle-1"{return json(.object(["vehicle":vehicle,"entries":.array([.object(["id":.s("entry-1"),"kind":.s("fuel"),"date":.s("2026-11-06"),"costMinor":.n(36000),"litersMilli":.n(10000),"createdByName":.s("Luboš – ukázka"),"version":.n(1)])]),"receipts":.array([]),"consumption":.number(7.2),"canWrite":.bool(true)]))}
         let parts=path.split(separator:"/").map(String.init)
@@ -131,7 +162,7 @@ final class APIFixtureProtocol:URLProtocol {
         if parts.count==4 && parts[1]=="gardens" && parts[3]=="services"{return json(.object(["services":.array([])]))}
         return json(.object(["error":.s("Testovací server nemá tuto cestu: "+path)]),501)
     }
-    static func fixtureData()->APIValue{var raw=(try? JSONDecoder().decode(APIValue.self,from:Data(contentsOf:Bundle.main.url(forResource:"NativeFixture",withExtension:"json")!))) ?? .null;let f=DateFormatter();f.timeZone=TimeZone(identifier:"Europe/Prague");f.dateFormat="yyyy-MM-dd";let today=f.string(from:Date());raw["jobs"] = .array(raw["jobs"].array.map{$0.merged(["dueDate":.s(today),"gardenId":.s("garden-1"),"customerId":.s("customer-1"),"assignedTos":.array([.s("fixture-owner")]),"serviceApproval":.s("confirmed")])});var features=raw["context"]["features"].object;for k in ["offline","materials","vehicles","fleetFuel","fleetDriverSelection","fleetConsumption","fleetExpenses","photoUploads","protocolPhotos","drivePhotos","jobTravel","gardenHistory","service","plans","shafts","blowout","jobHandoffs"]{features[k] = .bool(true)};raw["context"]["features"] = .object(features);raw["context"]["workspace"]["workspaceId"] = .s("fixture-workspace");raw["context"]["workspace"]["role"]=raw["context"]["user"]["role"];if ProcessInfo.processInfo.arguments.contains("--native-api-reader-testing"){raw["context"]["user"]["role"] = .s("reader");raw["context"]["workspace"]["role"] = .s("reader");raw["context"]["permissions"]["write"] = .bool(false);raw["context"]["permissions"]["manage"] = .bool(false);raw["jobs"] = .array(raw["jobs"].array.map{$0.merged(["jobType":.s("installation")])})};return raw}
+    static func fixtureData()->APIValue{var raw=(try? JSONDecoder().decode(APIValue.self,from:Data(contentsOf:Bundle.main.url(forResource:"NativeFixture",withExtension:"json")!))) ?? .null;let f=DateFormatter();f.timeZone=TimeZone(identifier:"Europe/Prague");f.dateFormat="yyyy-MM-dd";let today=f.string(from:Date());raw["jobs"] = .array(raw["jobs"].array.map{$0.merged(["dueDate":.s(today),"gardenId":.s("garden-1"),"customerId":.s("customer-1"),"assignedTos":.array([.s("fixture-owner")]),"serviceApproval":.s("confirmed")])});var features=raw["context"]["features"].object;for k in ["offline","materials","vehicles","fleetFuel","fleetDriverSelection","fleetConsumption","fleetExpenses","photoUploads","protocolPhotos","drivePhotos","jobTravel","gardenHistory","service","plans","shafts","blowout","jobHandoffs"]{features[k] = .bool(true)};raw["context"]["features"] = .object(features);raw["context"]["workspace"]["workspaceId"] = .s("fixture-workspace");raw["context"]["workspace"]["role"]=raw["context"]["user"]["role"];if ProcessInfo.processInfo.arguments.contains("--native-api-worker-testing"){raw["context"]["user"]["role"] = .s("worker");raw["context"]["workspace"]["role"] = .s("worker");raw["context"]["permissions"]["manage"] = .bool(false)};if ProcessInfo.processInfo.arguments.contains("--native-api-reader-testing"){raw["context"]["user"]["role"] = .s("reader");raw["context"]["workspace"]["role"] = .s("reader");raw["context"]["permissions"]["write"] = .bool(false);raw["context"]["permissions"]["manage"] = .bool(false);raw["jobs"] = .array(raw["jobs"].array.map{$0.merged(["jobType":.s("installation")])})};if ProcessInfo.processInfo.arguments.contains("--native-api-no-jobs-testing"){raw["jobs"] = .array([])};return raw}
     static var customers:[APIValue]{[.object(["id":.s("customer-1"),"name":.s("Jan Kortus – ukázka"),"version":.n(1),"email":.s("test@example.invalid"),"phones":.array([.object(["id":.s("phone-1"),"number":.s("+420123456789"),"label":.s("Mobil")])]),"addresses":.array([.object(["id":.s("address-1"),"label":.s("Zahrada maminky"),"address":.s("Lipová 1488"),"city":.s("Blatná")])])])]}
     static var gardens:[APIValue]{[.object(["id":.s("garden-1"),"name":.s("Zahrada maminky"),"address":.s("Lipová 1488, Blatná"),"customerId":.s("customer-1"),"version":.n(1),"addressDetails":.object(["customerAddressId":.s("address-1"),"city":.s("Blatná")])]),.object(["id":.s("garden-2"),"name":.s("Zahrada u domu"),"address":.s("Nádražní 12, Písek"),"customerId":.s("customer-1"),"version":.n(1)])]}
     static var material:APIValue{.object(["id":.s("material-1"),"name":.s("Rotační tryska"),"sku":.s("RN 12"),"unit":.s("ks"),"currency":.s("CZK"),"priceMinor":.n(24500),"version":.n(1),"categoryId":.s("category-1"),"active":.bool(true)])}

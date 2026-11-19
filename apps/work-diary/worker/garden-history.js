@@ -1,4 +1,4 @@
-import {workspaceGardenScope,workspaceDisciplineSql} from './workspace-policy.js';
+import {workspaceGardenScope,workspaceDisciplineSql,workspaceJobScope} from './workspace-policy.js';
 import {workspaceWriteDiscipline} from './workspace-resources.js';
 // Garden access follows the existing team-wide garden API. Job/report/media access
 // remains narrower: only managers and the assigned technicians may read a job.
@@ -27,6 +27,8 @@ export async function handleGardenHistory(request,env,m,h){
  if(path==='/api/defects/people'&&method==='GET')return json({people:await all(env.DB,'SELECT user_id AS id,name FROM members ORDER BY name')});
  if(path==='/api/defects'&&method==='GET'){
   const clauses=['EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND '+workspaceDisciplineSql('d.discipline','actor','defects')+')',workspaceGardenScope()],args=[m.user_id,m.user_id],gardenId=url.searchParams.get('gardenId'),jobId=url.searchParams.get('jobId');if(m._workspace&&url.searchParams.get('discipline')&&url.searchParams.get('discipline')!=='all'){clauses.push('d.discipline=?');args.push(url.searchParams.get('discipline'));}if(gardenId){await gardenAccess(gardenId);clauses.push('d.garden_id=?');args.push(gardenId);}if(jobId){const j=await jobAccess(jobId);if(!j.garden_id)return json({defects:[],linkedIds:[]});clauses.push('d.garden_id=?');args.push(j.garden_id);}
+  const assignee=url.searchParams.get('assignee');if(assignee){validId(assignee);if(!manager&&assignee!==m.user_id)fail(403,'Můžete vybrat pouze vlastní zakázky.');clauses.push('EXISTS(SELECT 1 FROM jobs j WHERE j.garden_id=d.garden_id AND '+(m._workspace?'j.discipline=d.discipline AND ':'')+'j.deleted=0 AND '+workspaceJobScope()+" AND (j.assigned_to=? OR EXISTS(SELECT 1 FROM json_each(j.assigned_users) a WHERE a.value=?)))");args.push(m.user_id,assignee,assignee);}
+  if(url.searchParams.get('status')==='open')clauses.push("d.status<>'resolved'");
   const rows=await all(env.DB,select+(clauses.length?' WHERE '+clauses.join(' AND '):'')+' ORDER BY d.created_at DESC',...args);
   const linkedIds=jobId?(await all(env.DB,'SELECT defect_id FROM garden_defect_jobs WHERE job_id=?',jobId)).map(v=>v.defect_id):[];return json({defects:await Promise.all(rows.map(dto)),linkedIds});
  }

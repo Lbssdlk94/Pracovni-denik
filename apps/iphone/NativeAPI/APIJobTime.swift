@@ -21,6 +21,16 @@ enum APIWorkTimeLogic {
         result["states"] = .array(snapshot["states"].array.map{($0.merged(values[$0["userId"].string]?.object ?? [:]))})
         result["intervals"] = .array(intervals);return result
     }
+    @MainActor static func overviewProjection(_ source:APIValue,store:APIStore)->APIValue {
+        guard !source.isNull else{return .null}
+        var snapshot=source
+        let own:(APIValue)->Int={value in value["states"].array.first{$0["userId"].string==store.userID}?["version"].int ?? -1}
+        if let cached=store.vault?.state.cache["/api/jobs/"+source["job"].id+"/time"],own(cached)>own(source){snapshot=cached}
+        var result=project(snapshot,store:store)
+        let active=result["states"].array.first{$0["userId"].string==store.userID}?["active"]["jobId"].string ?? ""
+        if !active.isEmpty,active != "unavailable",active != result["job"].id,let target=store.vault?.state.cache["/api/jobs/"+active+"/time"]{result=project(target,store:store)}
+        return result
+    }
     @MainActor static func states(_ snapshot:APIValue,store:APIStore)->[APIValue]{project(snapshot,store:store)["states"].array}
     static func summary(_ rows:[APIValue],now:Date=Date(),financial:Bool=false)->APIValue{
         let keys=["workMs","travelMs","breakMs","otherMs"]+(financial ? ["workCostMinor","travelCostMinor","unpricedMs"] : [])

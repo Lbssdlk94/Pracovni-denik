@@ -9,7 +9,7 @@ struct APIRolePreviewPicker:View {
     var body:some View{Menu{
         Button("Moje role · "+APIRolePreview.name(store.actualRole)){select(nil)}
         ForEach(store.previewTargets,id:\.self){role in Button(APIRolePreview.name(role)){select(role)}}
-    }label:{Label(store.previewRole.map{"Náhled: "+APIRolePreview.name($0)} ?? "Zobrazit jako",systemImage:"eye").frame(minHeight:44)}.accessibilityIdentifier("role-preview-picker")}
+    }label:{Label(store.previewRole.map{"Náhled: "+APIRolePreview.name($0)} ?? "Zobrazit jako",systemImage:"eye").labelStyle(.iconOnly).frame(minWidth:44,minHeight:44)}.accessibilityIdentifier("role-preview-picker")}
     func select(_ role:String?){do{try store.setRolePreview(role)}catch{store.error=error.localizedDescription}}
 }
 struct APIRolePreviewBanner:View {

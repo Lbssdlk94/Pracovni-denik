@@ -4,6 +4,8 @@ struct APIJobActionBar: View {
     @ObservedObject var store: APIStore
     let job: APIValue
     var snapshot:APIValue = .null
+    var showPause=false
+    var includeProtocol=true
     @State private var departure = false
     @State private var statusRequest:APIJobStatusRequest?
     @State private var report = false
@@ -16,7 +18,7 @@ struct APIJobActionBar: View {
         return APIJobDetailAction.resolve(job:job,states:projected["states"].array,userID:store.userID,travelEnabled:store.enabled("jobTravel"))
     }
     private var canRecord:Bool {
-        mayWork && snapshot["canWrite"].bool && projected["states"].array.contains{$0["userId"].string==store.userID && $0["assigned"].bool}
+        mayWork && (job["serviceApproval"].isNull || job["serviceApproval"].string=="confirmed") && snapshot["canWrite"].bool && projected["states"].array.contains{$0["userId"].string==store.userID && $0["assigned"].bool}
     }
     var body: some View {
         Group {
@@ -46,7 +48,10 @@ struct APIJobActionBar: View {
         }else if store.enabled("attendance"),mayWork,snapshot.isNull {
             Label("Pracovní stav se načítá",systemImage:"clock").font(.footnote).foregroundStyle(.secondary).frame(maxWidth:.infinity,minHeight:44)
         }
-        if store.enabled("jobs"),personal != .report {
+        if showPause,canRecord,personal == .stop {
+            Button{timeAction=APIWorkTimeAction(kind:"break")}label:{Image(systemName:"pause")}.diaryBubble(.icon).accessibilityLabel("Přerušit práci")
+        }
+        if includeProtocol,store.enabled("jobs"),personal != .report {
             Button{report=true}label:{Image(systemName:"doc.text").frame(minWidth:28,minHeight:28)}.diaryBubble(.icon).accessibilityLabel("Servisní protokol")
         }
     }

@@ -219,8 +219,12 @@ struct APIEntityDetail: View {
         guard resource.entity == .jobs,store.enabled("attendance") else{return}
         let scope=store.scope
         if workScope != scope {workSnapshot = .null;workProblem=nil;workScope=scope}
+        let path="/api/jobs/"+initial.id+"/time"
+        if !refresh,let cached=store.vault?.state.cache[path],cached["projection"].string != "dashboard",Date().timeIntervalSince1970*1000>=cached["serverNow"].double,Date().timeIntervalSince1970*1000-cached["serverNow"].double<5000 {
+            workSnapshot=cached;workScope=scope;workProblem=nil;return
+        }
         do {
-            let result=try await store.get("/api/jobs/"+initial.id+"/time",refresh:refresh)
+            let result=try await store.get(path,refresh:refresh)
             guard !Task.isCancelled,scope==store.scope else{return}
             workSnapshot=result;workScope=scope;workProblem=nil
         } catch {

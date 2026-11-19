@@ -47,6 +47,10 @@ struct APIResource: Identifiable {
     var listPath: String {
         switch entity {
         case .jobs: return "/api/jobs?state=all&order=schedule"
+        case .defects:
+            var url=URLComponents(string:"/api/defects")!
+            let items=["status","assignee","discipline","gardenId"].compactMap{key -> URLQueryItem? in seed[key].string.isEmpty ? nil : URLQueryItem(name:key,value:seed[key].string)}
+            if !items.isEmpty{url.queryItems=items};return url.string!
         case .materials,.categories: return "/api/materials"
         case .entries: return "/api/vehicles/"+parent
         case .drivers: return "/api/vehicles/drivers"

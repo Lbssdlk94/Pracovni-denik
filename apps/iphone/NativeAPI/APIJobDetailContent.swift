@@ -62,7 +62,7 @@ struct APIJobDetailContent:View {
             }
             NavigationLink{notes}label:{APIJobSettingsRow(title:"Zadání a poznámky",symbol:"text.alignleft")}
             if store.enabled("jobHandoffs") {
-                NavigationLink{handoffs}label:{APIJobSettingsRow(title:"Předání kolegům",symbol:"person.2",detail:handoff["handoffs"].isNull ? nil : "\(handoff["handoffs"].array.count) kolegů")}
+                NavigationLink{handoffs}label:{APIJobSettingsRow(title:"Předání kolegům",symbol:"person.2",detail:handoff["handoffs"].isNull ? nil : "Počet: \(handoff["handoffs"].array.count)")}
             }
         }
     }
@@ -72,7 +72,7 @@ struct APIJobDetailContent:View {
                 NavigationLink{photos}label:{APIJobSettingsRow(title:"Fotodokumentace",symbol:"photo.on.rectangle")}
             }
             if store.enabled("defects"),!job["gardenId"].string.isEmpty {
-                NavigationLink{defectList}label:{APIJobSettingsRow(title:"Závady",symbol:"exclamationmark.triangle",detail:defectProblem==nil ? "\(defects.count) otevřených" : "Nelze ověřit")}
+                NavigationLink{defectList}label:{APIJobSettingsRow(title:"Závady",symbol:"exclamationmark.triangle",detail:defectProblem==nil ? "Počet otevřených: \(defects.count)" : "Nelze ověřit")}
             }
             if !job["gardenId"].string.isEmpty {
                 NavigationLink{APIEntityDetail(store:store,resource:APIResource(entity:.gardens),initial:.object(["id":job["gardenId"],"name":job["gardenName"]])).toolbar(.hidden,for:.tabBar)}label:{APIJobSettingsRow(title:"Historie zahrady",symbol:"leaf")}
@@ -179,7 +179,7 @@ struct APIJobSettingsRow:View {
             Spacer(minLength:4)
             Image(systemName:"chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.secondary).accessibilityHidden(true)
         }.padding(.horizontal,14).padding(.vertical,10).frame(minHeight:52).contentShape(Rectangle()).accessibilityElement(children:.combine)
-            .overlay(alignment:.bottom){Divider().padding(.leading,56)}
+            .overlay(alignment:.bottom){Rectangle().fill(Color(.separator)).frame(height:0.5).padding(.leading,56)}
     }
 }
 struct APIJobQuickLabel:View {

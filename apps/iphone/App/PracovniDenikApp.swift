@@ -18,7 +18,8 @@ struct PracovniDenikApp:App {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--native-job-detail-preview") {
             APIJobDetailPreviewHost(kind:ProcessInfo.processInfo.arguments.contains("--preview-travel") ? "travel" : ProcessInfo.processInfo.arguments.contains("--preview-paused") ? "break" : "work",appearance:ProcessInfo.processInfo.arguments.contains("--preview-dark") ? .dark : .light,largeText:ProcessInfo.processInfo.arguments.contains("--preview-large-text"),offline:ProcessInfo.processInfo.arguments.contains("--preview-offline"))
-        }else{APIRoot(store:store).diaryBubble()}
+        }else{APIRoot(store:store).diaryBubble().preferredColorScheme(ProcessInfo.processInfo.arguments.contains("--native-ui-dark-testing") ? .dark : nil)
+            .safeAreaInset(edge:.top,spacing:0){if ProcessInfo.processInfo.arguments.contains("--native-dashboard-capture-testing"){Text("NÁVRH · UKÁZKOVÁ DATA").font(.caption2).foregroundStyle(.secondary).padding(4)}}}
         #else
         APIRoot(store:store).diaryBubble()
         #endif
