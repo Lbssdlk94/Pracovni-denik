@@ -16,8 +16,15 @@ final class NativeAPIUITests:XCTestCase {
         let edit=app.buttons["Upravit odhad"],bar=app.buttons["job-primary-action"];XCTAssertTrue(edit.waitForExistence(timeout:10))
         // XCTest can report a scrolled control as hittable even when its center is
         // behind the safe-area action bar. Bring its whole frame into the content.
-        for _ in 0..<5{if edit.isHittable && edit.frame.minY>120 && edit.frame.maxY<bar.frame.minY-8{break};app.swipeUp()}
-        XCTAssertTrue(edit.isHittable);XCTAssertLessThan(edit.frame.maxY,bar.frame.minY-8);edit.tap()
+        let top=app.navigationBars.firstMatch.frame.maxY+16,bottom=bar.frame.minY-16
+        for _ in 0..<8{
+            let frame=edit.frame
+            if edit.isHittable && frame.minY>=top && frame.maxY<=bottom{break}
+            let movement:CGFloat=frame.maxY>bottom ? -min(140,frame.maxY-bottom+40) : min(140,top-frame.minY+40)
+            let start=app.coordinate(withNormalizedOffset:CGVector(dx:0.8,dy:0.5))
+            start.press(forDuration:0.1,thenDragTo:start.withOffset(CGVector(dx:0,dy:movement)),withVelocity:.slow,thenHoldForDuration:0.2)
+        }
+        XCTAssertTrue(edit.isHittable,app.debugDescription);XCTAssertGreaterThanOrEqual(edit.frame.minY,top);XCTAssertLessThanOrEqual(edit.frame.maxY,bottom);edit.tap()
         XCTAssertTrue(app.navigationBars["Dokončení zakázky"].waitForExistence(timeout:10),app.debugDescription)
         let slider=app.sliders["Odhad dokončení v procentech"];XCTAssertTrue(slider.waitForExistence(timeout:10));slider.adjust(toNormalizedSliderPosition:0.3)
         capture("odhad-dokonceni-api",app);app.buttons["Uložit odhad"].tap()
