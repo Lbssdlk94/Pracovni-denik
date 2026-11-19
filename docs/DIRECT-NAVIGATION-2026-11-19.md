@@ -24,3 +24,12 @@ Prohlížečový scénář ověřuje zachování původní stránky, přímý UR
 Databáze, serverové autorizace, licence, měsíční cache, ukládání fotografií a obsah zakázek se nemění. Současná revize zakázky a konflikty zůstávají povinné pro změny. Nezavádí se nekonečná cache ani obcházení ověření přístupu.
 
 Další případné dělení globální SwiftUI revize podle jednotlivých zdrojů je větší samostatná změna. Pravidelné obnovování pracovních dat a kontroly API nebyly bez rozlišení vypnuty. Zrychlení webu se nasazuje přes stávající Sites; nativní změny se připravují na GitHubu. V tomto úkolu se nevytváří další IPA.
+
+
+## Doplňkové kontroly
+
+Regresní prohlížečový test odhalil při offline přestávce nahrazení otevřeného detailu čekáním na síť a jeho následné zavření. Opravený přechod zachovává otevřený detail a pro nové offline otevření používá pouze dostupný seznamový snapshot v dosavadním autorizovaném kontextu. Nevytváří domnělé plné údaje, stavové změny vyžadují připojení a pracovní intervaly stále ověřuje původní offline klient. Osobní přestávka, restart PWA, následná synchronizace a samostatné ukončení byly znovu ověřeny na izolovaných datech.
+
+Přímý návrat z dokončovacího protokolu již nevyžaduje přítomnost seznamu `#jobs` pod detailem. Test přímého odkazu také ověřuje změnu stavu bez přesunu do seznamu, zavření během načítání bez následného znovuotevření a rychlé opětovné otevření pracovní doby. Kopie pracovní doby se při nové verzi zakázky nepovažuje automaticky za právě obnovenou.
+
+Kontrolní workflow iOS s `checks_only=true` nebyl spuštěn: automatická kontrola oprávnění jej odmítla s odkazem na předchozí pokyn nespouštět GitHub Actions. Commit a push zdrojových změn jsou povolené a provedené; nová IPA nevzniká. Přidaný XCTest a změny SwiftUI proto zatím nemají ověření v Xcode; čeká se na výslovné potvrzení tohoto kontrolního běhu. V aktuálním prostředí není Swift/Xcode ani Swift syntaktický parser.

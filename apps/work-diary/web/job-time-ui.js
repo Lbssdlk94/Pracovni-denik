@@ -48,7 +48,7 @@ export function createJobTimeUI({db,esc,getSession,toast,onChanged=async()=>{}})
  async function approveRow(row){await update('proposals','POST',{intervalId:row.id,userId:row.userId,version:row.version,kind:row.kind,startAt:row.startAt,endAt:row.endAt,reason:'Schválení zaznamenaného intervalu'});const review=data.reviews.find(r=>r.interval_id===row.id&&r.status==='pending');if(review)await update('reviews/'+encodeURIComponent(review.id),'POST',{decision:'approve'});}
  async function begin(kind){if(dirty&&editor&&kind!==editor&&!confirm('Zahodit rozepsané změny tohoto formuláře?'))return;if(!data)await refresh(navigator.onLine);if(!data)return;editor=kind;proposal=null;dirty=false;render();root.open=true;root.querySelector('form')?.scrollIntoView({block:'nearest',behavior:'smooth'});}
  function mount(node,record,{signal}={}){
-  epoch++;const who=jobCacheScope(getSession());if(job?.id!==record.id||dataScope!==who){selected=new Set([current()]);sms=null;data=null;lastReadAt=0;readFlight=null;}dataScope=who;root=node;job=record;editor='';dirty=false;
+  epoch++;const who=jobCacheScope(getSession());if(job?.id!==record.id||dataScope!==who){selected=new Set([current()]);sms=null;data=null;lastReadAt=0;readFlight=null;}if(job?.version!==record.version&&data?.job?.version!==record.version)lastReadAt=0;dataScope=who;root=node;job=record;editor='';dirty=false;
   node.addEventListener('change',e=>{const id=e.target.dataset.timeSelect;if(id){e.target.checked?selected.add(id):selected.delete(id);}},{signal});
   node.addEventListener('click',e=>{const b=e.target.closest('button,a');if(!b)return;
    if(b.hasAttribute('data-time-begin'))begin(b.dataset.timeBegin);

@@ -145,7 +145,7 @@ export function createJobsUI({onChanged=()=>{},onOpenGarden,gardenHistory,onOpen
    if(!online())throw new Error('Stav uložte s připojením k internetu.');
    const status=form.elements.status.value,incompleteReason=status==='incomplete'?form.elements.incompleteReason.value.trim():'';
    if(status==='incomplete'&&!incompleteReason)throw new Error('Napište důvod nedokončení.');
-   if(job.servicePeriodId&&status==='done'){guard.saved();if(!returnToDetail)await closeDialog(modal);try{await onOpenWork?.(id,{completing:true,...(returnToDetail?{onReturn:async()=>{if(who!==actor()||!allowed()||!document.querySelector('#jobs'))return;await load(false,true);await details(id,true,detailView);modal.scrollTop=detailScroll;}}:{})});}catch(error){toast(error.message,true);}return;}
+   if(job.servicePeriodId&&status==='done'){guard.saved();if(!returnToDetail)await closeDialog(modal);try{await onOpenWork?.(id,{completing:true,...(returnToDetail?{onReturn:async()=>{if(who!==actor()||!allowed())return;await load(false,true);await details(id,true,detailView);modal.scrollTop=detailScroll;}}:{})});}catch(error){toast(error.message,true);}return;}
    await db.request('/api/jobs/'+encodeURIComponent(id)+'/status',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({version:job.version,status,incompleteReason})});
    if(who!==actor()||guard.closed()||!allowed())return;guard.saved();if(!returnToDetail)await closeDialog(modal);toast('Stav zakázky je uložený.');await load(false,true);if(returnToDetail&&who===actor()&&allowed()){await details(id,true,detailView);modal.scrollTop=detailScroll;}
   }catch(e){if(!guard.closed()&&who===actor()&&form.isConnected){if([401,403,404].includes(e.status)){guard.saved();modal.close();data=null;toast(e.message,true);await load();}else form.querySelector('.form-message').textContent=e.message;}}
@@ -192,9 +192,11 @@ export function createJobsUI({onChanged=()=>{},onOpenGarden,gardenHistory,onOpen
   reconcile();if(!allowed())throw Error('Zakázky nejsou dostupné.');const sequence=++detailSequence;
   const who=jobCacheScope(getSession()),desktop=!modalOnly&&matchMedia('(min-width:1200px)').matches,full=db.peekCachedJob?.(id);
   if(full){if(desktop){showPanel(full);return;}return renderDetails(full,modalOnly,initialView);}
-  const snapshot=!desktop&&online()&&(sourceSnapshot?.id===id?sourceSnapshot:[...(data||[]),...upcoming].find(j=>j.id===id));
+  const snapshot=!desktop&&(sourceSnapshot?.id===id?sourceSnapshot:[...(data||[]),...upcoming].find(j=>j.id===id));
+  if(!online()&&modal.open&&modal.querySelector('[data-detail-job]')?.dataset.detailJob===id)return modal.querySelector('[data-detail-job]');
   if(!snapshot){let pending=null;if(modalOnly){showModal('Detail zakázky','<div data-jobs-dialog data-detail-loading role="status" aria-busy="true">Načítám zakázku…</div>');pending=modal.querySelector('[data-detail-loading]');}try{const job=await fresh(id);if(job&&sequence===detailSequence&&(!pending||pending.isConnected&&modal.open))return renderDetails(job,modalOnly,initialView);}catch(error){if(pending?.isConnected&&modal.open)modal.close();throw error;}return;}
-  const root=renderDetails(snapshot,modalOnly,initialView,true),status=root.querySelector('[data-detail-refresh]');status.hidden=false;status.textContent='Aktualizuji údaje…';
+  const root=renderDetails(snapshot,modalOnly,initialView,true),status=root.querySelector('[data-detail-refresh]');status.hidden=false;status.textContent=online()?'Aktualizuji údaje…':'Uložená kopie zakázky · změny stavu vyžadují připojení.';
+  if(!online()){const defects=root.querySelector('#job-garden-defects');if(defects)defects.textContent='';return root;}
   let interacted=false;const controller=new AbortController();for(const event of ['pointerdown','click','keydown','input','change'])modal.addEventListener(event,()=>interacted=true,{signal:controller.signal});for(const event of ['close','dialog-view-changing'])modal.addEventListener(event,()=>controller.abort(),{once:true,signal:controller.signal});
   fresh(id).then(job=>{
    if(!job||sequence!==detailSequence||who!==jobCacheScope(getSession())||!root.isConnected||!modal.contains(root))return;
