@@ -1,6 +1,6 @@
 # Pracovní deník pro iPhone a Apple Watch
 
-Připravované vydání **0.8.4 (13)** zahrnuje všechny dokončené změny větve `ui/ios-attendance-integration-2026-11-20`: nové dashboardy, kompaktní detail a přehled zakázek, bublinová tlačítka a propojenou osobní/týmovou docházku. [Rozsah a stav balíčku](../../docs/IPHONE-0.8.4-2026-11-20.md).
+Vydání **0.8.4 (13)** zahrnuje všechny dokončené změny větve `ui/ios-attendance-integration-2026-11-20`: nové dashboardy, kompaktní detail a přehled zakázek, bublinová tlačítka a propojenou osobní/týmovou docházku. [Rozsah a stav balíčku](../../docs/IPHONE-0.8.4-2026-11-20.md).
 
 Nativní základ **0.8.0 (9)** nahrazuje skrytý webový engine samostatným klientem SwiftUI. Telefon používá `URLSession` a současné REST API. Formuláře, validace, PDF, místní koncepty a synchronizační fronta jsou implementované ve Swiftu. Watch zůstává ve SwiftUI a komunikuje s telefonem přes WatchConnectivity. Server a společná databáze se nepřepisují do Swiftu.
 
@@ -10,9 +10,9 @@ Aktualizace **0.8.2 (11)** umožňuje vyplňovat deník realizace všem rolím v
 
 Role a moduly klient načítá při novém spuštění procesu a po výslovném přihlášení, změně firmy, oboru nebo hesla. Návrat z pozadí, obnovení pracovních dat, Apple Watch, uložení ani odeslání fronty už nepřidávají požadavek `/api/me`. Každý skutečný požadavek nadále autorizuje server. Chyba připojení nesmaže koncepty; odpověď 401 ukončí neplatnou relaci a ponechá neodeslanou práci zabezpečenou. [Změna a regresní testy](../../docs/IPHONE-SESSION-STARTUP-2026-11-07.md).
 
-**Stav vydání:** **0.8.2 (11)** úspěšně sestavena ze zdroje `bb7db04af270b02c53b893a51ea79f9238251077`, [běh 44469633898](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/44469633898), Xcode / SDK 27.1. Prošlo 72 unit + 13 UI testů, release device build, kontrola čistě nativního bundle, vložené Watch aplikace i její simulátor. [Stáhnout IPA, logy a náhledy](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/44469633898/artifacts/14503209578) (GitHub artefakt do 3. 12. 2026). Balíček je nepodepsaný a vyžaduje vlastní podepsání; fyzická zařízení a TestFlight/App Store nejsou ověřené ani publikované. Změny: [PR #26](https://github.com/Lbssdlk94/Pracovni-denik/pull/26).
+**Stav vydání:** **0.8.4 (13)** úspěšně sestavena ze zdroje `795d55d603078b0071e81db96db7cc730d84baca`, [běh 44733769829](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/44733769829). Prošlo 123 unit + 46 UI testů, release device build, kontrola nativního bundle a vložené Watch aplikace i její simulátor. [Stáhnout IPA, logy a snímky](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/44733769829/artifacts/14628686740) (do 4. 12. 2026). IPA vyžaduje vlastní podpis; fyzická zařízení a publikace do TestFlight/App Store nejsou tímto během ověřené. [Obsah, kontrolní součty a závislost nové docházky na serveru](../../docs/IPHONE-0.8.4-2026-11-20.md).
 
-Připravené rozšíření [uloženého adresáře zákazníků a zahrad](../../docs/OFFLINE-DIRECTORY-2026-11-19.md) doplňuje přednačtení, lokální hledání a základní detaily ve stávajícím šifrovaném vaultu. Je pouze na větvi `feat/offline-directory-2026-11-19`; nová IPA nebyla vytvořena a tato změna zatím neprošla Xcode ověřením.
+Rozšíření [uloženého adresáře zákazníků a zahrad](../../docs/OFFLINE-DIRECTORY-2026-11-19.md) doplňuje přednačtení, lokální hledání a základní detaily ve stávajícím šifrovaném vaultu. Je součástí vydání 0.8.3 i 0.8.4 a jejich ověřených sestavení Xcode.
 
 [Architektura, funkce, přechod, testy a omezení](../../docs/IPHONE-NATIVE-API-2026-11-06.md).
 

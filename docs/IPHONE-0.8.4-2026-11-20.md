@@ -14,7 +14,20 @@ Podrobná implementace a výsledky předchozích testů: [Docházka a Zakázky](
 
 ## Sestavení a ověření
 
-Vydávací sestavení bude spuštěno přes existující `iphone.yml`, `runner=macos-26`, `checks_only=false`, `sign_ipa=false`, `check_scope=all`. Balíček je určený k vlastnímu podepsání při instalaci, stejně jako předchozí vydání. Výsledek, odkaz a kontrolní součet budou doplněny po skutečném dokončení.
+Vydávací sestavení [44733769829](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/44733769829) pro zdroj `795d55d603078b0071e81db96db7cc730d84baca` skončilo **success**. Parametry: `runner=macos-26`, `checks_only=false`, `sign_ipa=false`, `check_scope=all`.
+
+- Xcode 26.6 / iOS SDK 26.5: **123 jednotkových + 46 UI testů bez chyb**; místní 4 kontroly politiky podpisu a 13 kontrol sestavení/simulátorů také prošly.
+- Release build pro fyzický iPhone prošel, včetně kontroly skutečného bundle bez HTML/JS a bez dynamického linkování WebKitu.
+- Vložená Watch aplikace má vlastní nativní binárku, ikony, privacy manifest a správnou vazbu na telefon. Sestavení/spuštění Watch simulátoru a tři snímky prošly.
+- Stažený archiv byl porovnán s SHA-256 poskytovaným GitHubem. Samotná IPA odpovídá kontrolnímu součtu v CI. Nezávisle byly zkontrolovány Info.plist telefonu i hodinek: **0.8.4 (13)**, původní bundle ID, nativní ARM architektury, ikony, soukromí a absence webového runtime.
+
+[Stáhnout artefakt s IPA, logy a snímky](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/44733769829/artifacts/14628686740). Artefakt `14628686740`, ZIP 46 022 388 B, dostupnost do 4. 12. 2026.
+
+- SHA-256 ZIP: `e99036bf5d230d512e5baf555785dffc3a236f1f71b3f450898ba69669a9000e`.
+- SHA-256 IPA: `fd73b436f02d54c3054ff3d94327da05895a809cec68c1219aea6b3176462777`.
+- IPA: 3 480 780 B; místní soubor `/workspace/artifacts/ios-0.8.4/PracovniDenik-0.8.4-UNSIGNED.ipa`, kontrolní součet `SHA256.txt`, podrobná inspekce `verification.json` ve stejném adresáři.
+
+IPA **není podepsaná**; použije se dosavadní vlastní podepsání při instalaci. Nevydává se do TestFlight/App Store. Dokumentační commit po dokončení nemění aplikaci, projekt ani workflow a nevyžaduje další sestavení.
 
 ## Aktivace a omezení
 
