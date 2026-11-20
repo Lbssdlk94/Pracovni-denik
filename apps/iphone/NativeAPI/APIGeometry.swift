@@ -58,7 +58,7 @@ struct APIZonesView:View {
     @State private var value:APIValue = .object(["zones":.array([])])
     @State private var version:APIValue = .n(0)
     @State private var problem:String?
-    var body:some View{Form{APIFieldsView(fields:[.array("zones","Zóny",[.text("name","Název",true),.text("color","Barva #RRGGBB",true)])],value:$value);if let problem{Text(problem)};Button("Uložit zóny"){Task{do{_ = try await store.write("/api/zones",method:"PUT",body:value.merged(["version":version]));await load();problem="Uloženo."}catch{problem=error.localizedDescription}}}}.navigationTitle("Zóny závlahy").task{await load()}}
+    var body:some View{Form{APISecondaryFormSections(fields:[.array("zones","Zóny",[.text("name","Název",true),.text("color","Barva #RRGGBB",true)])],value:$value);if let problem{Text(problem)};Button("Uložit zóny"){Task{do{_ = try await store.write("/api/zones",method:"PUT",body:value.merged(["version":version]));await load();problem="Uloženo."}catch{problem=error.localizedDescription}}}}.navigationTitle("Zóny závlahy").task{await load()}}
     func load()async{do{let r=try await store.get("/api/zones");version=r["version"];value = .object(["zones":r["zones"]])}catch{problem=error.localizedDescription}}
 }
 struct APIShaftEditor:View {
@@ -81,7 +81,7 @@ struct APIShaftEditor:View {
     @State private var close=false
     @State private var refs:[String:[APIValue]]=[:]
     private var key:String{"shaft:"+initial.id}
-    var body:some View{NavigationStack{Form{APIFieldsView(fields:[.text("name","Název šachty",true),.ref("gardenId","Zahrada","gardens"),.text("location","Přesné místo"),.field("notes","Poznámka",.notes)],value:$value,options:refs)
+    var body:some View{NavigationStack{Form{APISecondaryFormSections(fields:[.text("name","Název šachty",true),.ref("gardenId","Zahrada","gardens"),.text("location","Přesné místo"),.field("notes","Poznámka",.notes)],value:$value,options:refs)
         if let image,let ui=APIImage.thumbnail(image){APIShaftCanvas(image:ui,markers:Binding(get:{value["markers"]},set:{value["markers"]=$0}),editable:true)}
         if store.enabled("location"){Button("Uložit aktuální polohu šachty"){Task{if let point=await location.capture(){value["position"]=APILocation.json(point)}}}}
         if store.enabled("photoUploads"){PhotosPicker("Vybrat fotografii",selection:$picked,matching:.images)}

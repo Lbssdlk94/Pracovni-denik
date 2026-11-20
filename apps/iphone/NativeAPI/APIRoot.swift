@@ -61,18 +61,38 @@ struct APILogin:View {
     @State private var company="zavlahovy-denik.purplecedar.chatgpt.site"
     @State private var recovery=false
     var body:some View {
-        NavigationStack{ScrollView{VStack(alignment:.leading,spacing:22){Image("DiaryMark").resizable().frame(width:72,height:72).clipShape(RoundedRectangle(cornerRadius:18));Text("Pracovní deník").font(.largeTitle.bold());Text("Přihlaste se firemním účtem.").foregroundStyle(.secondary)
-            VStack(spacing:15){Picker("Firma",selection:$company){Text("Dr. Závlaha").tag("zavlahovy-denik.purplecedar.chatgpt.site");Text("Dr. Garden").tag("dr-garden.purplecedar.chatgpt.site")}.pickerStyle(.menu)
-                TextField("Přihlašovací jméno",text:$username).textContentType(.username).textInputAutocapitalization(.never).autocorrectionDisabled().frame(minHeight:44).accessibilityIdentifier("api-login-username")
-                SecureField("Heslo",text:$password).textContentType(.password).frame(minHeight:44).accessibilityIdentifier("api-login-password")
-                Button("Přihlásit se"){Task{if store.transport.origin.host != company{try? await store.switchInstallation(URL(string:"https://"+company+"/")!)};await store.login(username:username,password:password);password=""}}.diaryBubble(.primary).frame(minHeight:44).disabled(store.busy)
-            }.diaryCard()
-            Button("Zapomenuté heslo"){recovery=true}.frame(minHeight:44)
-            if store.busy{ProgressView("Ověřuji přihlášení…")};if let error=store.error{Text(error).foregroundStyle(DiaryStyle.warning)}
-        }.padding(24)}.background(DiaryStyle.background).navigationTitle(store.company).navigationBarTitleDisplayMode(.inline)}
+        NavigationStack {
+            Form {
+                Section {
+                    HStack(spacing:14) {
+                        Image("DiaryMark").resizable().frame(width:48,height:48).clipShape(RoundedRectangle(cornerRadius:12))
+                        VStack(alignment:.leading,spacing:4) {Text("Pracovní deník").font(.title2.bold());Text("Přihlaste se firemním účtem.").font(.subheadline).foregroundStyle(.secondary)}
+                    }.padding(.vertical,6)
+                }
+                Section("Firemní účet") {
+                    Picker("Firma",selection:$company){Text("Dr. Závlaha").tag("zavlahovy-denik.purplecedar.chatgpt.site");Text("Dr. Garden").tag("dr-garden.purplecedar.chatgpt.site")}
+                    TextField("Přihlašovací jméno",text:$username).textContentType(.username).textInputAutocapitalization(.never).autocorrectionDisabled().frame(minHeight:44).accessibilityIdentifier("api-login-username")
+                    SecureField("Heslo",text:$password).textContentType(.password).frame(minHeight:44).accessibilityIdentifier("api-login-password").submitLabel(.go).onSubmit{Task{await signIn()}}
+                }
+                Section {
+                    Button("Přihlásit se"){Task{await signIn()}}.frame(maxWidth:.infinity,minHeight:44).diaryBubble(.primary).disabled(store.busy)
+                    Button("Zapomenuté heslo"){recovery=true}.frame(minHeight:44)
+                }
+                if store.busy{Section{ProgressView("Ověřuji přihlášení…")}}
+                if let error=store.error{Section{Text(error).foregroundStyle(DiaryStyle.warning).accessibilityAddTraits(.updatesFrequently)}}
+            }.scrollContentBackground(.hidden).background(DiaryStyle.background).navigationTitle("Přihlášení").navigationBarTitleDisplayMode(.inline)
+        }
             .onAppear{company=store.transport.origin.host ?? company}
             .alert("Obnovení hesla",isPresented:$recovery){Button("Rozumím",role:.cancel){}}message:{Text("Požádejte administrátora firmy o nové dočasné heslo. Obnovení odkazem ani e-mailem není dostupné.")}
     }
+    private func signIn()async {
+        guard !store.busy else{return}
+        do {
+            if store.transport.origin.host != company{try await store.switchInstallation(URL(string:"https://"+company+"/")!)}
+            await store.login(username:username,password:password);password=""
+        } catch {store.error=error.localizedDescription}
+    }
+
 }
 struct APIHeader:ToolbarContent {
     @ObservedObject var store:APIStore

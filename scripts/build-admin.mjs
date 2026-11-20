@@ -7,7 +7,7 @@ await rm(path.join(root,'dist'),{recursive:true,force:true});await mkdir(path.jo
 const browser=await build({entryPoints:[path.join(web,'admin.js')],bundle:true,write:false,format:'esm',target:'es2022',minify:true,keepNames:true}),assets={};
 for(const file of await readdir(web)){if(file==='admin.js')continue;const b=await readFile(path.join(web,file));assets['/'+file]={data:b.toString('base64'),type:({'.html':'text/html; charset=utf-8','.css':'text/css; charset=utf-8','.png':'image/png','.svg':'image/svg+xml'})[path.extname(file)]||'application/octet-stream'};}
 // Both environments use the very same visual foundations from the tenant template.
-for(const file of ['design-tokens.css','work-diary-ui.css','approved-layout.css'])assets['/'+file]={data:(await readFile(path.join(root,'apps/work-diary/web',file))).toString('base64'),type:'text/css; charset=utf-8'};
+for(const file of ['design-tokens.css','work-diary-ui.css','approved-layout.css','secondary-ui.css','appearance.css'])assets['/'+file]={data:(await readFile(path.join(root,'apps/work-diary/web',file))).toString('base64'),type:'text/css; charset=utf-8'};
 assets['/work-diary-mark.svg']={data:(await readFile(path.join(root,'apps/work-diary/web/work-diary-mark.svg'))).toString('base64'),type:'image/svg+xml'};
 assets['/admin.js']={data:Buffer.from(browser.outputFiles[0].contents).toString('base64'),type:'text/javascript; charset=utf-8'};
 for(const asset of Object.values(assets)){

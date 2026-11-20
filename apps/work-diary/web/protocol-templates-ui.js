@@ -1,0 +1,37 @@
+import {protocolDefaultTemplates,protocolSections} from './protocol-model.js?v=workspace-roles-v1';
+import {attachFormDraft} from './form-drafts.js?v=draft-recovery-v1';
+const titles={work:'Provedené práce',materialItems:'Použitý materiál',material:'Poznámka k materiálu',defects:'Zjištěné závady',notes:'Poznámky',recommendations:'Doporučení pro příště',photos:'Fotodokumentace',time:'Práce a cesta',signature:'Podpis zákazníka'};
+export function createProtocolTemplatesUI({db,esc,getSession,showModal,modal,toast}){
+ const allowed=()=>getSession()?.permissions.manage&&getSession()?.features.jobs!==false;
+ function markup(){return allowed()?'<section class="storage-card"><h2>Šablony protokolů</h2><p>Činnosti, povinné údaje a sekce podle oboru a typu zakázky.</p><button type="button" class="btn" data-protocol-templates>Spravovat šablony</button><p class="form-message" role="alert" data-template-error></p></section>':'';}
+ function bind(){const button=document.querySelector('[data-protocol-templates]');if(!button||!allowed())return;button.onclick=async()=>{
+  const actor=getSession()?.user.id;button.disabled=true;
+  try{const config=await db.request('/api/protocol-templates');if(!button.isConnected||actor!==getSession()?.user.id||!allowed())return;list(config,actor);}
+  catch(e){if(button.isConnected)button.parentElement.querySelector('[data-template-error]').textContent=e.message;}
+  finally{button.disabled=false;}
+ };}
+ function list(config,actor){
+  if(actor!==getSession()?.user.id||!allowed())return;
+  showModal('Šablony protokolů',`<div class="protocol-template-list">${config.templates.map((t,i)=>`<button type="button" class="btn" data-template-index="${i}"><span>${esc(t.name)}<small> · ${t.active?'Aktivní':'Deaktivovaná'} · ${t.activities.length} činností</small></span><span aria-hidden="true">›</span></button>`).join('')}</div><p class="mini-empty">Úpravy nemění historicky uložené protokoly. Neaktivní činnosti se nenabízejí do nových protokolů.</p><button type="button" class="btn" data-template-new>＋ Vlastní šablona</button>`);
+  modal.classList.add('pd-secondary-dialog');
+  for(const b of modal.querySelectorAll('[data-template-index]'))b.onclick=()=>edit(config,structuredClone(config.templates[Number(b.dataset.templateIndex)]),actor);
+  modal.querySelector('[data-template-new]').onclick=()=>edit(config,{...protocolDefaultTemplates().find(t=>t.id==='custom'),id:crypto.randomUUID(),name:'Vlastní protokol'},actor);
+ }
+ function edit(config,initial,actor){
+  let value=structuredClone(initial),busy=false;
+  const check=(name,label,on)=>`<label><input type="checkbox" name="${name}" ${on?'checked':''}> ${label}</label>`;
+  showModal('Upravit šablonu',`<form id="protocol-template-form"><label class="field">Název<input name="name" required maxlength="100" value="${esc(value.name)}"></label><label class="field">Kategorie<select name="discipline">${[['irrigation','Závlaha'],['garden','Garden'],['both','Obojí']].map(([id,title])=>`<option value="${id}" ${id===value.discipline?'selected':''}>${title}</option>`).join('')}</select></label>${check('active','Aktivní šablona',value.active)}<fieldset class="protocol-template-section"><legend>Typy zakázek</legend>${[['service','Servis'],['installation','Realizace'],['survey','Zaměření']].map(([id,title])=>check('type-'+id,title,value.jobTypes.includes(id))).join('')}</fieldset><fieldset class="protocol-template-section"><legend>Sekce a povinné údaje</legend>${protocolSections.map(id=>`<div>${check('section-'+id,titles[id],value.sections.includes(id))}${!['signature','photos','time'].includes(id)?check('required-'+id,'Povinné: '+titles[id],value.required.includes(id)):''}</div>`).join('')}${check('signatureRequired','Vyžadovat podpis zákazníka',value.signatureRequired)}${check('photosRequired','Vyžadovat fotografie',value.photosRequired)}${check('customerNotes','Povolit zákaznické poznámky v PDF',value.customerNotes)}</fieldset><fieldset class="protocol-template-section"><legend>Přednastavené činnosti</legend><div class="protocol-template-activities"></div><button type="button" class="btn" data-activity-add>＋ Přidat činnost</button></fieldset><p class="form-message" role="alert"></p><div class="modal-actions"><button type="button" class="btn" data-template-back>Zpět</button><button type="submit" class="btn primary">Uložit šablonu</button></div></form>`);
+  const form=modal.querySelector('form');
+  const renderActivities=()=>{form.querySelector('.protocol-template-activities').innerHTML=value.activities.map((a,i)=>`<div class="protocol-template-activity"><input type="text" name="activity-title-${i}" aria-label="Název činnosti ${i+1}" maxlength="200" required value="${esc(a.title)}"><label><input type="checkbox" name="activity-active-${i}" ${a.active?'checked':''}> Nabízet</label></div>`).join('');};
+  const checked=name=>form.elements.namedItem(name)?.checked===true;
+  function read(){return {...value,name:form.elements.name.value.trim(),discipline:form.elements.discipline.value,active:checked('active'),jobTypes:['service','installation','survey'].filter(id=>checked('type-'+id)),sections:protocolSections.filter(id=>checked('section-'+id)),required:['date',...protocolSections.filter(id=>checked('required-'+id))],signatureRequired:checked('signatureRequired'),photosRequired:checked('photosRequired'),customerNotes:checked('customerNotes'),activities:value.activities.map((a,i)=>({...a,title:form.elements.namedItem('activity-title-'+i).value.trim(),active:checked('activity-active-'+i)}))};}
+  renderActivities();
+  const draft=attachFormDraft({db,form,key:'protocol-template:'+initial.id,version:config.version,read:()=>({template:read()}),restore:saved=>{value=saved.template;renderActivities();for(const [key,v]of Object.entries(value)){const field=form.elements.namedItem(key);if(field){if(field.type==='checkbox')field.checked=v;else field.value=v;}}for(const id of ['service','installation','survey'])form.elements.namedItem('type-'+id).checked=value.jobTypes.includes(id);for(const id of protocolSections){form.elements.namedItem('section-'+id).checked=value.sections.includes(id);const req=form.elements.namedItem('required-'+id);if(req)req.checked=value.required.includes(id);}}});
+  form.querySelector('[data-activity-add]').onclick=()=>{value=read();value.activities.push({id:crypto.randomUUID(),title:'',active:true});renderActivities();draft.changed();form.querySelector('.protocol-template-activity:last-child input').focus();};
+  form.querySelector('[data-template-back]').onclick=async()=>{await draft.flush();list(config,actor);};
+  form.onsubmit=async e=>{e.preventDefault();if(busy||!allowed()||actor!==getSession()?.user.id)return;busy=true;const buttons=[...modal.querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);try{
+   const next=read();const result=await db.request('/api/protocol-templates',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({version:config.version,templates:[...config.templates.filter(t=>t.id!==next.id),next]})});await draft.saved();if(form.isConnected&&actor===getSession()?.user.id&&allowed()){toast('Šablona byla uložená.');list(result,actor);}
+  }catch(error){if(form.isConnected)form.querySelector('.form-message').textContent=error.message+(error.status===409?' Rozepsaná kopie zůstává v zařízení. Zavřete formulář a načtěte aktuální šablony.':'');}finally{busy=false;buttons.forEach(b=>b.disabled=false);}};
+ }
+ return {markup,bind};
+}

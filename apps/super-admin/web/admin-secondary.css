@@ -1,0 +1,16 @@
+/* Platform console retains its separate authentication and authorization. */
+.admin-shell .admin-panel,.admin-shell .admin-stat{padding:16px;border-radius:20px}
+.admin-shell .topbar{gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.admin-shell .admin-appearance{min-height:44px;max-width:170px;border:1px solid var(--pd-border-strong);border-radius:12px;padding:8px 12px;background:var(--pd-surface);color:var(--pd-text);font:inherit}
+.admin-shell .admin-grid{gap:12px}
+.admin-shell .admin-columns{gap:16px}
+.admin-shell .admin-stat>strong{margin-top:12px}
+.admin-shell .admin-table-wrap{max-width:100%;overflow:auto}
+.admin-shell .admin-table th{top:0;background:var(--pd-surface);z-index:1}
+.admin-shell .admin-table td{vertical-align:middle}
+.admin-shell .admin-table :is(button,a){min-height:44px;display:inline-flex;align-items:center}
+#dialog{max-height:calc(100dvh - 24px);border-radius:24px;background:var(--pd-surface);color:var(--pd-text)}
+#dialog :is(input,select,textarea){max-width:100%;min-height:44px;box-sizing:border-box;border-radius:12px}
+#dialog :is(input[type=checkbox],input[type=radio]){min-height:0}
+#dialog .modal-actions{position:sticky;bottom:0;background:var(--pd-surface);padding-bottom:env(safe-area-inset-bottom)}
+@media(max-width:760px){.admin-shell .topbar>strong{flex:1 1 100%}.admin-shell .admin-appearance{flex:1}.admin-shell .main{padding-bottom:24px}.admin-shell .admin-columns{grid-template-columns:minmax(0,1fr)}#dialog{width:calc(100vw - 16px);padding:14px;box-sizing:border-box}}

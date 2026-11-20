@@ -24,7 +24,17 @@ struct APIActionEditor:View {
     private var key:String{"action:"+action.path}
     var body:some View {
         NavigationStack {
-            ScrollView{VStack(alignment:.leading,spacing:18){APIFieldsView(fields:action.fields,value:$value,options:options).diaryCard();if let message=action.confirmation{Text(message).font(.callout);Toggle("Údaje jsem zkontroloval/a",isOn:$confirmed)};if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}}.padding(18)}
+            Group {
+                if action.path.hasPrefix("/api/jobs/") {
+                    ScrollView{VStack(alignment:.leading,spacing:18){APIFieldsView(fields:action.fields,value:$value,options:options).diaryCard();if let message=action.confirmation{Text(message).font(.callout);Toggle("Údaje jsem zkontroloval/a",isOn:$confirmed)};if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}}.padding(18)}
+                } else {
+                    Form {
+                        APISecondaryFormSections(fields:action.fields,value:$value,options:options)
+                        if let message=action.confirmation { Section("Kontrola změny") { Text(message).font(.callout);Toggle("Údaje jsem zkontroloval/a",isOn:$confirmed) } }
+                        if let problem { Section { Text(problem).foregroundStyle(DiaryStyle.warning).accessibilityAddTraits(.updatesFrequently) } }
+                    }
+                }
+            }
                 .background(DiaryStyle.background).navigationTitle(action.title).navigationBarTitleDisplayMode(.inline)
                 .toolbar{ToolbarItem(placement:.cancellationAction){Button("Zavřít"){dismiss()}.disabled(saving)};ToolbarItem(placement:.confirmationAction){Button("Potvrdit"){Task{await save()}}.disabled(saving || action.confirmation != nil && !confirmed)}}
         }.editLease(store).task{value=action.value;do{if action.path.hasSuffix("/disciplines"){let current=try await store.get(action.path);value=value.merged(current["membership"].selecting(["version","disciplines"]).object)};for ref in Set(action.fields.compactMap(\.reference)+action.fields.flatMap{$0.children.compactMap(\.reference)}){options[ref]=try await APIDomainLogic.referenceRows(ref,store:store)}}catch{problem=error.localizedDescription}}
