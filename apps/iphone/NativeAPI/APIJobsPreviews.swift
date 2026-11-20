@@ -35,4 +35,8 @@ import SwiftUI
 #Preview("Zakázky · offline"){APIJobsPreviewHost(offline:true)}
 #Preview("Zakázky · prázdné"){APIJobsPreviewHost(empty:true)}
 
+struct APIJobsTestTextSize:ViewModifier {
+    @Environment(\.dynamicTypeSize) private var current
+    func body(content:Content)->some View{content.dynamicTypeSize(ProcessInfo.processInfo.arguments.contains("--native-jobs-large-text-testing") ? .accessibility3 : current)}
+}
 #endif

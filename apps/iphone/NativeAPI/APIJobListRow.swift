@@ -47,7 +47,7 @@ struct APIJobListRow:View {
     private var summary:some View {
         VStack(alignment:.leading,spacing:4){
             HStack(alignment:.firstTextBaseline,spacing:6){Text(APIJobsPresentation.title(current)).font(.headline).foregroundStyle(.primary).lineLimit(typeSize.isAccessibilitySize ? nil : 2);Spacer(minLength:2);statusBadge;Image(systemName:"chevron.right").font(.caption2).foregroundStyle(.secondary).accessibilityHidden(true)}
-            Text(typeTitle+" · "+APIJobsPresentation.appointment(current)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+            Text(typeTitle+(current["discipline"].string.isEmpty ? "" : current["discipline"].string=="garden" ? " · Garden" : " · Závlaha")+" · "+APIJobsPresentation.appointment(current)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             if !current["address"].string.isEmpty{Label(current["address"].string,systemImage:"mappin").font(.caption).foregroundStyle(.secondary).lineLimit(typeSize.isAccessibilitySize ? nil : 1)}
             HStack(spacing:6){crew;Spacer(minLength:0);if timeScope==store.scope,!snapshot.isNull{Text(hours).font(.caption).foregroundStyle(.secondary)};if !current["completionPercent"].isNull{Text(current["completionPercent"].string+" %").font(.caption.weight(.semibold)).foregroundStyle(DiaryStyle.accent)}}
             if !current["completionPercent"].isNull{ProgressView(value:min(100,max(0,current["completionPercent"].double)),total:100).tint(DiaryStyle.accent).accessibilityLabel("Dokončení zakázky").accessibilityValue(current["completionPercent"].string+" procent")}

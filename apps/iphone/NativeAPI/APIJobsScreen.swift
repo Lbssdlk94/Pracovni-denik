@@ -51,16 +51,25 @@ struct APIJobsScreen:View {
         VStack(spacing:8){
             Picker("Termín zakázek",selection:$period){ForEach(APIJobsPeriod.allCases.filter{$0 != .all || store.enabled("jobList")},id:\.self){Text($0.title).tag($0)}}.pickerStyle(.segmented).accessibilityIdentifier("jobs-period")
                 .onChange(of:period){_,value in if value != .all{applied.dateRange=false}}
-            let layout=typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment:.leading,spacing:8)) : AnyLayout(HStackLayout(spacing:8))
-            layout{
-                if store.manager{Picker("Tým",selection:$mine){Text("Moje").tag(true);Text("Celý tým").tag(false)}.pickerStyle(.segmented).accessibilityIdentifier("jobs-team").onChange(of:mine){_,value in if value{applied.worker=""}}}
-                HStack(spacing:4){
-                    if store.enabled("jobCalendar"){Button{calendar=true}label:{Image(systemName:"calendar")}.accessibilityLabel("Kalendář zakázek").accessibilityIdentifier("jobs-calendar")}
-                    if store.manager && store.enabled("jobMap") && store.enabled("location"){Button{map=true}label:{Image(systemName:"map")}.accessibilityLabel("Mapa zakázek").accessibilityIdentifier("jobs-map")}
-                    Button{filters=true}label:{Image(systemName:"line.3.horizontal.decrease").overlay(alignment:.topTrailing){if applied.count>0{Text(String(applied.count)).font(.caption2.bold()).padding(3).foregroundStyle(Color(.systemBackground)).background(DiaryStyle.actionFill,in:Circle()).offset(x:9,y:-7)}}}.accessibilityLabel("Filtry").accessibilityValue("Aktivní filtry: \(applied.count)").accessibilityIdentifier("jobs-filters")
-                }.buttonStyle(APIJobsCompactButtonStyle()).fixedSize(horizontal:true,vertical:false)
+            if typeSize.isAccessibilitySize {
+                VStack(alignment:.leading,spacing:8){if store.manager{teamPicker};filterButtons}
+            }else{
+                ViewThatFits(in:.horizontal){
+                    HStack(spacing:8){if store.manager{teamPicker.frame(minWidth:150)};filterButtons}
+                    VStack(alignment:.leading,spacing:8){if store.manager{teamPicker};filterButtons}
+                }
             }
         }
+    }
+    private var teamPicker:some View {
+        Picker("Tým",selection:$mine){Text("Moje").tag(true);Text("Celý tým").tag(false)}.pickerStyle(.segmented).accessibilityIdentifier("jobs-team").onChange(of:mine){_,value in if value{applied.worker=""}}
+    }
+    private var filterButtons:some View {
+        HStack(spacing:4){
+            if store.enabled("jobCalendar"){Button{calendar=true}label:{Image(systemName:"calendar")}.accessibilityLabel("Kalendář zakázek").accessibilityIdentifier("jobs-calendar")}
+            if store.manager && store.enabled("jobMap") && store.enabled("location"){Button{map=true}label:{Image(systemName:"map")}.accessibilityLabel("Mapa zakázek").accessibilityIdentifier("jobs-map")}
+            Button{filters=true}label:{Image(systemName:"line.3.horizontal.decrease").overlay(alignment:.topTrailing){if applied.count>0{Text(String(applied.count)).font(.caption2.bold()).padding(3).foregroundStyle(Color(.systemBackground)).background(DiaryStyle.actionFill,in:Circle()).offset(x:9,y:-7)}}}.accessibilityLabel("Filtry").accessibilityValue("Aktivní filtry: \(applied.count)").accessibilityIdentifier("jobs-filters")
+        }.buttonStyle(APIJobsCompactButtonStyle()).fixedSize(horizontal:true,vertical:false)
     }
     @ViewBuilder private var jobSections:some View {
         ForEach(APIJobsGroup.allCases){group in
