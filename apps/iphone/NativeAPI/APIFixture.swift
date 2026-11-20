@@ -56,6 +56,7 @@ final class APIFixtureProtocol:URLProtocol {
                 data["detail"]["shifts"]=data["shifts"];data["detail"]["ownToday"]["shifts"] = .array(data["shifts"].array.filter{$0["userId"]==me["user"]["id"]})
                 if b["kind"].string=="departure"{data["detail"]["intervals"] = .array(data["detail"]["intervals"].array.map{row in row["userId"]==me["user"]["id"] && row["endAt"].isNull ? row.merged(["endAt":shift["endAt"]]) : row});data["detail"]["states"] = .array(data["detail"]["states"].array.map{$0["userId"]==me["user"]["id"] ? $0.merged(["active":.null,"version":.n($0["version"].int+1)]) : $0})}
             }
+            if !data["detail"].isNull{data["detail"]["ownToday"]["state"]=data["detail"]["states"].array.first{$0["userId"]==me["user"]["id"]} ?? .null;data["detail"]["ownToday"]["intervals"] = .array(data["detail"]["intervals"].array.filter{$0["userId"]==me["user"]["id"]})}
             records["fixture-attendance"]=data;records[op]=shift;return json(.object(["shift":shift]))
         }
         if path=="/api/jobs"{

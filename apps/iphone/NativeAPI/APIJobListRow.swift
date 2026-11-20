@@ -50,6 +50,7 @@ struct APIJobListRow:View {
     private var summary:some View {
         VStack(alignment:.leading,spacing:4){
             HStack(alignment:.firstTextBaseline,spacing:6){Text(APIJobsPresentation.title(current)).font(.headline).foregroundStyle(.primary).lineLimit(typeSize.isAccessibilitySize ? nil : 2);Spacer(minLength:2);statusBadge;Image(systemName:"chevron.right").font(.caption2).foregroundStyle(.secondary).accessibilityHidden(true)}
+            if let subtitle=APIJobsPresentation.subtitle(current){Text(subtitle).font(.caption.weight(.medium)).foregroundStyle(.primary).lineLimit(typeSize.isAccessibilitySize ? nil : 1)}
             Text(typeTitle+(current["discipline"].string.isEmpty ? "" : current["discipline"].string=="garden" ? " · Garden" : " · Závlaha")+" · "+APIJobsPresentation.appointment(current)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             if !current["address"].string.isEmpty{Label(current["address"].string,systemImage:"mappin").font(.caption).foregroundStyle(.secondary).lineLimit(typeSize.isAccessibilitySize ? nil : 1)}
             summaryMetrics

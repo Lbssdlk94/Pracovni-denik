@@ -29,6 +29,14 @@ enum APIJobsPresentation {
     static func date(_ day:String)->String{let f=DateFormatter();f.calendar=calendar;f.locale=Locale(identifier:"cs_CZ");f.timeZone=calendar.timeZone;f.dateFormat="yyyy-MM-dd";guard let d=f.date(from:day)else{return "Bez termínu"};f.dateFormat="d. M.";return f.string(from:d)}
     static func appointment(_ job:APIValue)->String{let time=job["arrivalWindowStart"].string.isEmpty ? (job["plannedStart"].string.isEmpty ? job["startTime"].string : job["plannedStart"].string) : job["arrivalWindowStart"].string;return [date(job["dueDate"].string),time].filter{!$0.isEmpty}.joined(separator:" · ")}
     static func title(_ job:APIValue)->String{job["customerName"].string.isEmpty ? job.title : job["customerName"].string}
+    static func subtitle(_ job:APIValue)->String?{
+        var value=job["title"].string
+        if let range=value.range(of:job["customerName"].string,options:[.caseInsensitive,.diacriticInsensitive]),!job["customerName"].string.isEmpty{value.removeSubrange(range)}
+        value=value.trimmingCharacters(in:.whitespacesAndNewlines.union(.punctuationCharacters))
+        let words=normalize(value).components(separatedBy:CharacterSet.alphanumerics.inverted).filter{!$0.isEmpty}
+        if words.isEmpty || words.allSatisfy({["realizace","servis","zamerani","zavlaha","zavlahy","garden","zakazka"].contains($0)}){return nil}
+        return value
+    }
     static func normalize(_ text:String)->String{text.folding(options:[.diacriticInsensitive,.caseInsensitive],locale:Locale(identifier:"cs_CZ")).trimmingCharacters(in:.whitespacesAndNewlines)}
     static func matches(_ job:APIValue,filters:APIJobsFilters,period:APIJobsPeriod,query:String,now:Date,selected:String?=nil,rangeStart:String?=nil,rangeEnd:String?=nil,normalizedSearch:String?=nil,personalActiveID:String="")->Bool{
         let status=job["status"].string,due=job["dueDate"].string

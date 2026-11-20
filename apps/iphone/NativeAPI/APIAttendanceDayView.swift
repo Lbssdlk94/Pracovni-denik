@@ -39,7 +39,7 @@ struct APIAttendanceDayView:View {
             Section("Směny a původní podrobnosti") {
                 ForEach(day.shifts,id:\.id){shift in
                     VStack(alignment:.leading,spacing:8){
-                        Text(APIAttendanceView.date(shift["startAt"])+" · "+APIAttendanceView.time(shift["startAt"])+" – "+(shift["endAt"].isNull ? "dosud" : APIAttendanceView.date(shift["endAt"])+" · "+APIAttendanceView.time(shift["endAt"]))).font(.subheadline)
+                        Text(shiftTitle(shift)).font(.subheadline)
                         DisclosureGroup("Poloha a podrobnosti"){
                             if store.manager{APIDataPairs(value:shift["startPosition"],labels:["latitude":"Zeměpisná šířka","longitude":"Zeměpisná délka","accuracy":"Přesnost (m)"]);APIDataPairs(value:shift["endPosition"],labels:["latitude":"Odchod – šířka","longitude":"Odchod – délka"])}
                             Text("GPS příchodu: "+shift["startGpsStatus"].string);Text("GPS odchodu: "+shift["endGpsStatus"].string)
@@ -48,11 +48,16 @@ struct APIAttendanceDayView:View {
                     }
                 }
             }
-            if !corrections.isEmpty{Section("Historie oprav") {ForEach(corrections,id:\.id){c in VStack(alignment:.leading,spacing:5){Text(c["reason"].string).font(.headline);Text(c["status"].string=="approved" ? "Schváleno" : c["status"].string=="rejected" ? "Zamítnuto" : "Čeká na schválení");Text("Původně: "+APIAttendanceView.date(c["oldStartAt"])+" "+APIAttendanceView.time(c["oldStartAt"])+" – "+APIAttendanceView.time(c["oldEndAt"])).font(.caption);Text("Návrh: "+APIAttendanceView.date(c["startAt"])+" "+APIAttendanceView.time(c["startAt"])+" – "+APIAttendanceView.time(c["endAt"])).font(.caption);Text("Autor: "+c["createdBy"].string+" · "+APIAttendanceView.date(c["createdAt"])+" "+APIAttendanceView.time(c["createdAt"])).font(.caption);if !c["reviewedAt"].isNull{Text("Vyřídil: "+c["reviewedBy"].string+" · "+APIAttendanceView.date(c["reviewedAt"])+" "+APIAttendanceView.time(c["reviewedAt"])).font(.caption)}}}}}
+            if !corrections.isEmpty{Section("Historie oprav"){ForEach(corrections,id:\.id){APIAttendanceCorrectionRow(value:$0)}}}
         }.navigationTitle("Pracovní den").navigationBarTitleDisplayMode(.inline).scrollContentBackground(.hidden).background(DiaryStyle.background)
             .sheet(item:$localAction){APIAttendanceAction(store:store,action:$0)}
     }
     private var facts:some View{VStack(alignment:.leading,spacing:6){LabeledContent("Příchod",value:APIAttendanceView.time(day.first));LabeledContent("Odchod",value:day.last.isNull ? "Neukončeno" : APIAttendanceView.time(day.last));LabeledContent("Celková přítomnost",value:APIAttendanceLogic.hours(day.gross));LabeledContent("Přestávky",value:APIAttendanceLogic.hours(day.breaks));LabeledContent("Čistá pracovní doba",value:APIAttendanceLogic.hours(day.net))}.font(.subheadline)}
+    private func shiftTitle(_ shift:APIValue)->String {
+        let start=APIAttendanceView.date(shift["startAt"])+" · "+APIAttendanceView.time(shift["startAt"])
+        let end=shift["endAt"].isNull ? "dosud" : APIAttendanceView.date(shift["endAt"])+" · "+APIAttendanceView.time(shift["endAt"])
+        return start+" – "+end
+    }
     private func show(_ value:APIDomainAction){if let action{action(value)}else{localAction=value}}
     private func color(_ kind:String)->Color{switch kind{case "work":return DiaryStyle.accent;case "travel":return .blue;case "break":return .orange;case "other":return .purple;default:return .secondary}}
 }
@@ -60,4 +65,17 @@ struct APIAttendanceRepairView:View {
     @ObservedObject var store:APIStore
     let shift:APIValue
     var body:some View{APIAttendanceAction(store:store,action:APIAttendanceActions.correction(shift,remove:false))}
+}
+
+struct APIAttendanceCorrectionRow:View {
+    let value:APIValue
+    private func stamp(_ key:String)->String{value[key].isNull ? "Nezapsáno" : APIAttendanceView.date(value[key])+" "+APIAttendanceView.time(value[key])}
+    var body:some View{VStack(alignment:.leading,spacing:5){
+        Text(value["reason"].string).font(.headline)
+        Text(value["status"].string=="approved" ? "Schváleno" : value["status"].string=="rejected" ? "Zamítnuto" : "Čeká na schválení")
+        Text("Původně: "+stamp("oldStartAt")+" – "+stamp("oldEndAt")).font(.caption)
+        Text("Návrh: "+stamp("startAt")+" – "+stamp("endAt")).font(.caption)
+        Text("Autor: "+value["createdBy"].string+" · "+stamp("createdAt")).font(.caption)
+        if !value["reviewedAt"].isNull{Text("Vyřídil: "+value["reviewedBy"].string+" · "+stamp("reviewedAt")).font(.caption)}
+    }}
 }

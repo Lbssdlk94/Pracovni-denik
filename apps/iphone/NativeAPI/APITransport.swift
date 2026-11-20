@@ -72,6 +72,7 @@ final class APITransport {
         r.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         r.setValue("shared-directory-v1", forHTTPHeaderField: "x-workspace-client-version")
         r.setValue("v1", forHTTPHeaderField:"x-work-time-client")
+        r.setValue("v1", forHTTPHeaderField:"x-attendance-client")
         r.setValue(discipline, forHTTPHeaderField: "x-work-discipline")
         if let previewRole{r.setValue(previewRole,forHTTPHeaderField:"x-work-diary-preview-role")}
         r.setValue("PracovniDenik-iOS/0.8", forHTTPHeaderField: "User-Agent")

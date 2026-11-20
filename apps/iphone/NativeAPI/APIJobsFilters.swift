@@ -28,7 +28,7 @@ struct APIJobsFilterSheet:View {
                     }
                     Picker("Typ zakázky",selection:$draft.type){Text("Všechny typy").tag("");Text("Servis").tag("service");Text("Realizace").tag("installation");Text("Zaměření").tag("survey")}.accessibilityIdentifier("jobs-filter-type")
                     if !store.me["workspace"].isNull {
-                        Picker("Obor",selection:$draft.discipline){Text("Dostupné obory").tag("all");ForEach(store.me["workspace"]["disciplines"].array.map(\.string),id:\.self){Text($0=="garden" ? "Dr. Garden" : "Dr. Závlaha").tag($0)}}
+                        Picker("Obor",selection:$draft.discipline){Text(store.me["workspace"]["disciplines"].array.count>1 ? "Obojí" : "Dostupný obor").tag("all");ForEach(store.me["workspace"]["disciplines"].array.map(\.string),id:\.self){Text($0=="garden" ? "Dr. Garden" : "Dr. Závlaha").tag($0)}}
                     }
                     Picker("Zákazník",selection:$draft.customer){Text("Všichni zákazníci").tag("");ForEach(customers,id:\.id){Text($0.title).tag($0.id)};if !draft.customer.isEmpty,!customers.contains(where:{$0.id==draft.customer}){Text("Vybraný zákazník").tag(draft.customer)}}
                     Text("Nabídka zákazníků odpovídá dostupným načteným zakázkám.").font(.caption).foregroundStyle(.secondary)
