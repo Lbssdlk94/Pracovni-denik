@@ -22,4 +22,8 @@ Argumenty: `--preview-dark`, `--preview-travel`, `--preview-paused`, `--preview-
 
 Lokálně: 13 testů nastavení simulátorů a 4 testy pravidel podepisování prošly. Kontrola whitespace prošla. Linux nemá Xcode; kompilaci a nativní UI ověří macOS GitHub Actions s `checks_only=true`, `sign_ipa=false`. Tento režim výslovně přeskočí vytvoření IPA.
 
-Stav Xcode ověření a případná omezení budou doplněny po dokončení běhu.
+Ověřeno: běh [44603790579](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/44603790579) na revizi `e7b2b00` úspěšně dokončil **91 jednotkových a 21 UI testů**, kompilaci iPhonu i Apple Watch a kontrolu nepřítomnosti IPA. Xcode 26.6 / SDK 26.5.
+
+Následná větev `ui/ios-role-dashboards-2026-11-19` převzala tento detail, opravila horizontální oddělovače ve skupinách a sdílí osobní pracovní akce s novým dashboardem. Její běh [44616419970](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/44616419970) prošel s **97 jednotkovými a 30 UI testy**, včetně všech původních scénářů detailu. Nové snímky jsou skutečný SwiftUI simulátor; žádná IPA se nevytvářela. Podrobnosti serverového přehledu a omezení jsou v `IOS-ROLE-DASHBOARDS-2026-11-19.md`.
+
+Přímé fyzické testování iPhonu a ruční VoiceOver průchod nebyly provedeny. Dostupné číselné údaje v produkčním rozhraní pocházejí z API; ilustrační hodnoty jsou pouze v izolovaných Debug previews.
