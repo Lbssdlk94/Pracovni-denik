@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-20",
+  "source": "7672c7ada8a02ef5839c851b259b0616b683f282",
+  "backend": {
+    "tests": 446,
+    "passed": 446,
+    "failed": 0,
+    "duration_ms": 85444.060903,
+    "command": "node --test --test-isolation=none tests/*.test.js"
+  },
+  "compiled_worker_d1": {
+    "passed": true,
+    "migrations": 61,
+    "command": "node scripts/test-protocol-design-worker.mjs",
+    "isolated": true
+  },
+  "artifact_validation": {
+    "passed": true,
+    "command": "node scripts/validate-artifact.mjs --allow-unbound",
+    "production_deployed": false
+  },
+  "local_build_policy_tests": {
+    "passed": 17,
+    "failed": 0
+  },
+  "native_previous": {
+    "source": "41ef5a7bfc0e662be1bab80f0437925987defca4",
+    "run": 44776317228,
+    "compile_passed": true,
+    "unit_passed": 133,
+    "unit_failed": 0,
+    "ui_passed": 1,
+    "ui_failed": 5,
+    "fixes_in_later_source_not_retested": true
+  },
+  "native_latest": {
+    "run": 44779185288,
+    "job": 136437001492,
+    "started_steps": 0,
+    "conclusion": "failure",
+    "annotation": "The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings"
+  },
+  "release": {
+    "prepared_version": "0.8.5",
+    "prepared_build": 14,
+    "ipa_created": false,
+    "full_native_suite_pending": true
+  }
+}

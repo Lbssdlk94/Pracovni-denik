@@ -11,7 +11,7 @@ Použití a hranice architektury: [docs/PLATFORMA-A-PROVOZ.md](docs/PLATFORMA-A-
 
 ## iPhone a Apple Watch
 
-[Nativní SwiftUI klient 0.8 s přímým API — aktuální stav a ověření](docs/IPHONE-NATIVE-API-2026-11-06.md). Poslední sestavení prošlo, navazující dokončení zatím blokuje GitHub Billing & plans; PR #4 zůstává rozpracovaný.
+Poslední ověřená IPA: [iPhone a Apple Watch 0.8.4 (13)](docs/IPHONE-0.8.4-2026-11-20.md). Navazující [vydání 0.8.5 (14)](docs/IPHONE-0.8.5-2026-11-20.md) přidává [redesign servisního protokolu](docs/IOS-SERVICE-PROTOCOL-2026-11-20.md); závěrečné testy a vytvoření nové IPA nyní blokuje GitHub Billing & plans. Verze 0.8.5 ještě nemá vydaný artefakt.
 
 ## Vývoj
 
