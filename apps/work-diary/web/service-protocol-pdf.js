@@ -29,7 +29,7 @@ async function readPhoto(blob,signal){
 }
 export async function createServiceProtocolPDF(entry,{signal,onProgress=()=>{},loadPhoto}={}){
  const snapshot=entry.snapshot;if(!snapshot)throw Error('Nejdříve ověřte přístup k zakázce s internetem.');
- const j=snapshot.job,sourceReport=entry.pending?entry.payload?.report:snapshot.report,r=sourceReport?protocolCustomerReport(sourceReport):null;
+ const sourceReport=entry.pending?entry.payload?.report:snapshot.report,r=sourceReport?protocolCustomerReport(sourceReport):null,j={...snapshot.job,...(r?.protocolDetails?.identity||{})};
  if(!r)throw Error('Nejdříve uložte servisní protokol.');
  const embeddedFont=await font();signal?.throwIfAborted();
  const doc=new globalThis.jspdf.jsPDF({unit:'mm',format:'a4',compress:true});

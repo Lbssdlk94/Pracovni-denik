@@ -5,10 +5,11 @@ import CoreText
 struct APIWorkChargesEditor:View {
     @ObservedObject var store:APIStore
     @Binding var charges:APIValue
+    var suggestedHours:Double?=nil
     @State private var rate:APIValue = .null
     @State private var enabled=false
     var body:some View{DisclosureGroup("Práce a cesta"){
-        Toggle("Zahrnout práci a cestu",isOn:$enabled).onChange(of:enabled){_,on in if !on{charges = .null}else if charges.isNull{charges = .object(["rateId":rate["id"],"hours":.n(0),"kilometers":.n(0),"hourlyMinor":rate["hourlyMinor"],"travelRateMinor":rate["travelMinor"],"currency":.s("CZK")])}}
+        Toggle("Zahrnout práci a cestu",isOn:$enabled).onChange(of:enabled){_,on in if !on{charges = .null}else if charges.isNull{charges = .object(["rateId":rate["id"],"hours":.number(suggestedHours ?? 0),"kilometers":.n(0),"hourlyMinor":rate["hourlyMinor"],"travelRateMinor":rate["travelMinor"],"currency":.s("CZK")])}}
         if enabled{APIFieldsView(fields:[.field("hours","Počet hodin",.decimal,true),.field("kilometers","Kilometry",.decimal,true)],value:$charges);Text("Účtuje se každá započatá hodina a každých započatých 30 km.").font(.footnote);Text("Použité uložené sazby: "+APIFormat.money(charges["hourlyMinor"].isNull ? rate["hourlyMinor"] : charges["hourlyMinor"])+" / hod · "+APIFormat.money(charges["travelRateMinor"].isNull ? rate["travelMinor"] : charges["travelRateMinor"])+" / 30 km").font(.caption)}
     }.task{if let data=try? await store.get("/api/work-rates"){rate=data["rate"];enabled = !charges.isNull}}}
 }

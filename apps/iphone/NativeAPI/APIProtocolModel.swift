@@ -30,12 +30,13 @@ import UIKit
             baseline = .object(["version":snap["job"]["version"],"report":r]);let draft=store.draft(key,fallback:baseline);value=draft.value;operationID=draft.operationID
             if let queued=pending(store).first(where:{$0.body != nil}){submitted=queued.draftSnapshot}
             loaded=true
+            if modern,report["documentState"].string != "ready",report["protocolDetails"]["signature"]["status"].string != "signed",report["protocolDetails"]["timeSnapshot"]["versionHash"] != snapshot["protocol"]["time"]["versionHash"]{value["report"]["protocolDetails"]["timeSnapshot"]=snapshot["protocol"]["time"];value["report"]["protocolDetails"]["refreshTime"] = .bool(true)}
             if store.enabled("materials"){do{materials=try await APIDomainLogic.referenceRows("materials",store:store);categories=(try await store.get("/api/materials"))["categories"].array}catch{problem="Katalog není úplný: "+error.localizedDescription}}
         }catch{problem=error.localizedDescription}
     }
     func normalize(_ report:inout APIValue){
         if modern{
-            if report["protocolDetails"]["schema"].int != 1 {let t=snapshot["protocol"]["templates"].array.first{$0["active"].bool} ?? APIProtocolLogic.fallback;report["protocolDetails"] = .object(["schema":.n(1),"templateId":.s(t.id),"template":t,"activities":.array([]),"customWork":report["work"],"photos":.array([]),"timeSnapshot":snapshot["protocol"]["time"],"signature":.object(["status":.s(report["customerSignature"].string.isEmpty ? "missing" : "legacy")])])}
+            if report["protocolDetails"]["schema"].int != 1 {let t=snapshot["protocol"]["templates"].array.first{$0["active"].bool} ?? APIProtocolLogic.fallback;report["protocolDetails"] = .object(["schema":.n(1),"identity":snapshot["protocol"]["identity"],"templateId":.s(t.id),"template":t,"activities":.array([]),"customWork":report["work"],"photos":.array([]),"timeSnapshot":snapshot["protocol"]["time"],"signature":.object(["status":.s(report["customerSignature"].string.isEmpty ? "missing" : "legacy")])])}
             if report["protocolDetails"]["signature"]["status"].string=="signed"{report["protocolDetails"]["signature"]["localHash"] = .s(APIProtocolLogic.fingerprint(report))}
         }
     }
@@ -73,7 +74,8 @@ import UIKit
         if value != baseline{return APIProtocolLogic.missing(report,template:template).isEmpty ? "Připraveno k potvrzení" : "Rozpracováno"}
         let deliveries=snapshot["protocol"]["delivery"].array.filter{!$0["stale"].bool && $0["report_version"]==baseline["report"]["version"]}
         if deliveries.contains(where:{$0["state"].string=="sent" && !$0["sent_at"].isNull}){return "Odesláno zákazníkovi"}
-        if deliveries.contains(where:{["pending","approved"].contains($0["state"].string)}){return "Čeká na schválení"}
+        if deliveries.contains(where:{$0["state"].string=="pending"}){return "Čeká na schválení"}
+        if deliveries.contains(where:{$0["state"].string=="approved"}){return "Čeká na odeslání"}
         if report["documentState"].string=="ready",value==baseline{return "Potvrzeno"}
         return APIProtocolLogic.missing(report,template:template).isEmpty ? "Připraveno k potvrzení" : "Rozpracováno"
     }
