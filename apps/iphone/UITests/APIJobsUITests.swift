@@ -42,7 +42,7 @@ final class APIJobsUITests:XCTestCase {
     func testSwipeDoesNotExecuteAndContextMenuKeepsStateActions(){
         let app=launch();let job=app.buttons["native-job-fixture-progress"];job.swipeLeft()
         XCTAssertTrue(app.buttons["Zavolat"].firstMatch.waitForExistence(timeout:5));XCTAssertFalse(app.navigationBars["Pracovní akce"].exists)
-        app.navigationBars["Zakázky"].tap();job.press(forDuration:1.2);XCTAssertTrue(app.buttons["Otevřít detail"].waitForExistence(timeout:5));XCTAssertTrue(app.buttons["Přeplánovat"].exists);capture("jobs-context-menu",app)
+        app.segmentedControls["jobs-period"].buttons["Dnes"].tap();job.press(forDuration:1.2);XCTAssertTrue(app.buttons["Otevřít detail"].waitForExistence(timeout:5));XCTAssertTrue(app.buttons["Přeplánovat"].exists);capture("jobs-context-menu",app)
     }
     func testWorkerCannotUseTeamOrAdministrationAndOwnActionIsNative(){
         let app=launch(worker:true,dark:true);XCTAssertFalse(app.segmentedControls["jobs-team"].exists);XCTAssertFalse(app.buttons["Nová zakázka"].exists)
