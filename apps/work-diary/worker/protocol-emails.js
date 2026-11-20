@@ -29,7 +29,7 @@ export async function dispatchProtocolEmails(env,{id=null,send=fetch}={}){
 }
 async function subHashBytes(bytes){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');}
 export async function handleProtocolEmails(request,env,ctx,m,h){
- const {fail,json,body,validId,cleanText,boundedBytes}=h;if(m.role!=='owner')fail(403,'Prototyp výkazů e-mailem je dostupný pouze vlastníkovi.');
+ const {fail,json,body,validId,cleanText,boundedBytes}=h;if(m.role!=='owner')fail(403,'Výkazy e-mailem jsou dostupné pouze vlastníkovi.');
  const match=new URL(request.url).pathname.match(/^\/api\/jobs\/([-\w]{1,100})\/protocol-emails(?:\/([-\w]{1,100})(?:\/(pdf|approve|reject|retry))?)?$/);if(!match)fail(404,'Nenalezeno.');const [,jobId,id,action]=match,method=request.method;
  const job=await subOne(env.DB,'SELECT j.*,r.version report_version FROM jobs j LEFT JOIN service_reports r ON r.job_id=j.id WHERE j.id=? AND j.deleted=0',jobId);if(!job)fail(404,'Zakázka nebyla nalezena.');
  const list=async()=>({emailConfigured:await emailConfigured(env),requests:(await subAll(env.DB,'SELECT id,recipient,filename,sha256,job_version,report_version,state,created_at,reviewed_at,sent_at,last_error,attempts,next_attempt_at FROM protocol_emails WHERE job_id=? AND '+protocolOwnerGate+' ORDER BY created_at DESC LIMIT 30',jobId,m.user_id)).map(r=>({...r,stale:r.job_version!==job.version||r.report_version!==job.report_version}))});
