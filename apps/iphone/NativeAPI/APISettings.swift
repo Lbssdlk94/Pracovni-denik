@@ -4,6 +4,11 @@ struct APISettings:View {
     @ObservedObject var store:APIStore
     @AppStorage("diary-interface-appearance") private var appearance="system"
     @State private var problem:String?
+    private var versionLabel:String {
+        let version=Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? ""
+        let build=Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? ""
+        return "Pracovní deník · \(version) (\(build))"
+    }
     var body:some View{List{
         if store.canPreviewRoles{Section("Náhled deníku"){APIRolePreviewPicker(store:store);Text("Zobrazí menu a ovládání role s vašimi daty. V náhledu se změny neukládají.").font(.footnote)}}
         Section{Text(store.me["user"]["name"].string).font(.headline);Text(store.company).foregroundStyle(.secondary)}
@@ -25,7 +30,7 @@ struct APISettings:View {
             if store.enabled("backups"){Section("Zálohy a data"){NavigationLink("Úplné serverové zálohy"){APIBackupsView(store:store)};NavigationLink("Kontrola vazeb"){APIRecordLinksView(store:store)};NavigationLink("Technický stav"){APIHealthView(store:store)}}}
             Section("Dostupné moduly"){Text("Moduly této firmy nastavuje pouze provozovatel v Super Adminu.").font(.footnote);DisclosureGroup("Povolené funkce"){ForEach(store.me["features"].object.keys.sorted(),id:\.self){key in if store.enabled(key){Text(APIFeatureNames.name(key)).font(.caption)}}}}
         }
-        Section{Button("Odhlásit se",role:.destructive){Task{do{try await store.logout()}catch{problem=error.localizedDescription}}}.frame(minHeight:44);Text("Pracovní deník · "+(Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "")+" ("+(Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "")+")").font(.footnote).foregroundStyle(.secondary)}
+        Section{Button("Odhlásit se",role:.destructive){Task{do{try await store.logout()}catch{problem=error.localizedDescription}}}.frame(minHeight:44);Text(versionLabel).font(.footnote).foregroundStyle(.secondary)}
         if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}
     }.navigationTitle("Nastavení").listStyle(.insetGrouped).scrollContentBackground(.hidden).background(DiaryStyle.background)}
 }
