@@ -40,7 +40,7 @@ struct APIProtocolReview:View {
     @ObservedObject var model:APIProtocolModel
     let completing:Bool,edit:(String)->Void,pdf:()->Void,finish:()->Void
     @Environment(\.dismiss) private var dismiss
-    var body:some View{NavigationStack{List{Section("Souhrn protokolu"){Text(model.snapshot["job"]["customerName"].string).font(.headline);LabeledContent("Datum",value:model.report["date"].string);Text(model.modern ? APIProtocolLogic.work(model.report) : model.report["work"].string);APIProtocolMaterialTotals(lines:model.report["materialItems"]);APIProtocolTimeSection(time:model.report["protocolDetails"]["timeSnapshot"]);LabeledContent("Fotodokumentace",value:"\(model.report["photoIds"].array.count) fotografií");LabeledContent("Podpis",value:APIProtocolSignatureStatus.title(model.report["protocolDetails"]["signature"]["status"].string))}
+    var body:some View{NavigationStack{List{Section("Souhrn protokolu"){Text(APIProtocolExport.snapshot(model.snapshot,report:model.report)["job"]["customerName"].string).font(.headline);LabeledContent("Datum",value:model.report["date"].string);Text(model.modern ? APIProtocolLogic.work(model.report) : model.report["work"].string);APIProtocolMaterialTotals(lines:model.report["materialItems"]);APIProtocolTimeSection(time:model.report["protocolDetails"]["timeSnapshot"]);LabeledContent("Fotodokumentace",value:"\(model.report["photoIds"].array.count) fotografií");LabeledContent("Podpis",value:APIProtocolSignatureStatus.title(model.report["protocolDetails"]["signature"]["status"].string))}
         let missing=APIProtocolLogic.missing(model.report,template:model.template)
         if !missing.isEmpty{Section("Chybějící povinné údaje"){ForEach(missing,id:\.self){id in Button{edit(id)}label:{Label(id=="date" ? "Datum provedení" : id=="content" ? "Provedené práce, materiál nebo fotografie" : APIProtocolLogic.sections.first{$0.0==id}?.1 ?? id,systemImage:"exclamationmark.circle")}.frame(minHeight:44)}}}
         if completing{Text("Potvrzením dokončíte celou návštěvu podle původního schvalovacího procesu. Nejde o ukončení pouze vlastního pracovního intervalu.").font(.caption)}
@@ -54,6 +54,7 @@ struct APIProtocolShare:UIViewControllerRepresentable {
     func updateUIViewController(_ controller:UIActivityViewController,context:Context){}
 }
 enum APIProtocolExport {
+    static func report(_ report:APIValue,modern:Bool)->APIValue{var result=report;if modern{result["work"] = .s(APIProtocolLogic.work(report))};return result}
     static func snapshot(_ snapshot:APIValue,report:APIValue)->APIValue{var result=snapshot;result["job"]=snapshot["job"].merged(report["protocolDetails"]["identity"].object);return result}
     static func photoIDs(_ report:APIValue)->[String]{report["photoIds"].array.map(\.string).filter{id in report["protocolDetails"]["photos"].array.first{$0.id==id}?["includePDF"].bool ?? true}}
     static func customerReport(_ report:APIValue)->APIValue{var r=report;if report["protocolDetails"]["schema"].int==1 && report["protocolDetails"]["signature"]["status"].string != "signed"{r["customerSignature"] = .s("")};if !report["protocolDetails"]["customerNotes"].bool{r["notes"] = .s("")};return r}

@@ -47,7 +47,7 @@ enum APIProtocolPDF {
             page();text(report["protocolDetails"]["template"]["name"].string.isEmpty ? "SERVISNÍ PROTOKOL" : report["protocolDetails"]["template"]["name"].string.uppercased(),true)
             text(snapshot["job"]["title"].string,true);text("Datum provedení: "+report["date"].string)
             let billing=report["billingDetails"].isNull ? snapshot["billingPreview"] : report["billingDetails"]
-            for (key,label) in [("company","Dodavatel"),("customer","Zákazník")] {let b=billing[key];text(label,true);text([b["name"].string,b["address"].string,b["companyId"].string.isEmpty ? "" : "IČO: "+b["companyId"].string,b["taxId"].string.isEmpty ? "" : "DIČ: "+b["taxId"].string,b["email"].string,b["phone"].string,b["bankAccount"].string].filter{!$0.isEmpty}.joined(separator:"\n"))}
+            for (key,label) in [("company","Dodavatel"),("customer","Zákazník")] {var b=billing[key];if key=="customer",b["name"].string.isEmpty{b["name"]=snapshot["job"]["customerName"];if b["address"].string.isEmpty{b["address"]=snapshot["job"]["address"]}};text(label,true);text([b["name"].string,b["address"].string,b["companyId"].string.isEmpty ? "" : "IČO: "+b["companyId"].string,b["taxId"].string.isEmpty ? "" : "DIČ: "+b["taxId"].string,b["email"].string,b["phone"].string,b["bankAccount"].string].filter{!$0.isEmpty}.joined(separator:"\n"))}
             text("Místo: "+snapshot["job"]["address"].string)
             var totals:[String:Int]=[:]
             for f in APISchemas.service where f.id != "date"{if !report[f.id].string.isEmpty{text(f.title,true);text(report[f.id].string)}}
