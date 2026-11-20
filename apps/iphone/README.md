@@ -1,5 +1,7 @@
 # Pracovní deník pro iPhone a Apple Watch
 
+Připravované vydání **0.8.4 (13)** zahrnuje všechny dokončené změny větve `ui/ios-attendance-integration-2026-11-20`: nové dashboardy, kompaktní detail a přehled zakázek, bublinová tlačítka a propojenou osobní/týmovou docházku. [Rozsah a stav balíčku](../../docs/IPHONE-0.8.4-2026-11-20.md).
+
 Nativní základ **0.8.0 (9)** nahrazuje skrytý webový engine samostatným klientem SwiftUI. Telefon používá `URLSession` a současné REST API. Formuláře, validace, PDF, místní koncepty a synchronizační fronta jsou implementované ve Swiftu. Watch zůstává ve SwiftUI a komunikuje s telefonem přes WatchConnectivity. Server a společná databáze se nepřepisují do Swiftu.
 
 Připravená aktualizace **0.8.1 (10)** sjednocuje postupové tlačítko zakázky, hlavní akce nad spodní navigací, nahrávání do úložiště aplikace bez Disku, miniatury, kompresi fotografií a mazání denních zápisů vlastníkem/administrátorem. [Změny a skutečný stav ověření](../../docs/IPHONE-FIELD-UPDATE-2026-11-18.md). Sestavení Xcode a testy prošly; dostupná IPA vyžaduje vlastní podpis.
