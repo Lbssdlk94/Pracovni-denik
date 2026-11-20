@@ -4,6 +4,7 @@ struct APIJobListRow:View {
     @ObservedObject var store:APIStore
     let job:APIValue
     let open:(APIValue)->Void
+    var accessibilityPrefix="native-job-"
     @State private var statusRequest:APIJobStatusRequest?
     @State private var departure=false
     @State private var report=false
@@ -29,17 +30,17 @@ struct APIJobListRow:View {
     private var mayRecord:Bool{mayWork && assigned && (current["serviceApproval"].isNull || current["serviceApproval"].string=="confirmed")}
     var body:some View {
         VStack(alignment:.leading,spacing:4){
-            Button{open(current)}label:{summary}.buttonStyle(.plain).accessibilityIdentifier("native-job-"+job.id)
+            Button{open(current)}label:{summary}.buttonStyle(.plain).accessibilityIdentifier(accessibilityPrefix+job.id)
             actionRow
         }.padding(.horizontal,12).padding(.vertical,8)
             .background{RoundedRectangle(cornerRadius:20).fill(DiaryStyle.surface).contentShape(RoundedRectangle(cornerRadius:20)).onTapGesture{open(current)}}
             .contentShape(RoundedRectangle(cornerRadius:20))
-            .contextMenu{menu}
+            .contextMenu{menu.buttonStyle(.automatic)}
             .swipeActions(edge:.trailing,allowsFullSwipe:false){
-                if let url=APIFormat.navigation(current["address"].string){Button{openURL(url)}label:{Label("Navigovat",systemImage:"location")}.tint(DiaryStyle.accent)}
-                if let phone=APIJobsPresentation.phone(current){Button{openURL(phone)}label:{Label("Zavolat",systemImage:"phone")}.tint(.blue)}
+                if let url=APIFormat.navigation(current["address"].string){Button{openURL(url)}label:{Label("Navigovat",systemImage:"location")}.buttonStyle(.automatic).tint(DiaryStyle.accent)}
+                if let phone=APIJobsPresentation.phone(current){Button{openURL(phone)}label:{Label("Zavolat",systemImage:"phone")}.buttonStyle(.automatic).tint(.blue)}
             }
-            .swipeActions(edge:.leading,allowsFullSwipe:false){if mayRecord,let personal{Button{performPrimary()}label:{Label(shortTitle(personal),systemImage:personal.symbol)}.tint(DiaryStyle.accent)}}
+            .swipeActions(edge:.leading,allowsFullSwipe:false){if mayRecord,let personal{Button{performPrimary()}label:{Label(shortTitle(personal),systemImage:personal.symbol)}.buttonStyle(.automatic).tint(DiaryStyle.accent)}}
             .sheet(item:$statusRequest){request in APIJobStatusEditor(store:store,job:current,initialStatus:request.targetStatus)}
             .sheet(isPresented:$departure){APIDepartureEditor(store:store,job:current)}
             .sheet(item:$work){request in APIJobRowWorkSheet(store:store,job:current,kind:request.kind)}
@@ -52,7 +53,7 @@ struct APIJobListRow:View {
             Text(typeTitle+(current["discipline"].string.isEmpty ? "" : current["discipline"].string=="garden" ? " · Garden" : " · Závlaha")+" · "+APIJobsPresentation.appointment(current)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             if !current["address"].string.isEmpty{Label(current["address"].string,systemImage:"mappin").font(.caption).foregroundStyle(.secondary).lineLimit(typeSize.isAccessibilitySize ? nil : 1)}
             HStack(spacing:6){crew;Spacer(minLength:0);if timeScope==store.scope,!snapshot.isNull{Text(hours).font(.caption).foregroundStyle(.secondary)};if !current["completionPercent"].isNull{Text(current["completionPercent"].string+" %").font(.caption.weight(.semibold)).foregroundStyle(DiaryStyle.accent)}}
-            if !current["completionPercent"].isNull{ProgressView(value:min(100,max(0,current["completionPercent"].double)),total:100).tint(DiaryStyle.accent).accessibilityLabel("Dokončení zakázky").accessibilityValue(current["completionPercent"].string+" procent")}
+            if !current["completionPercent"].isNull{ProgressView(value:min(100,max(0,current["completionPercent"].double)),total:100).tint(DiaryStyle.accent).accessibilityHidden(true)}
         }.frame(maxWidth:.infinity,alignment:.leading).contentShape(Rectangle()).accessibilityElement(children:.combine)
     }
     private var typeTitle:String{["installation":"Realizace","service":"Servis","survey":"Zaměření"][current["jobType"].string] ?? "Zakázka"}
@@ -81,7 +82,7 @@ struct APIJobListRow:View {
             Spacer(minLength:0)
             if store.enabled("attendance"),let personal,(mayRecord || personal == .report){Button{performPrimary()}label:{Label(shortTitle(personal),systemImage:personal.symbol).font(.caption.weight(.semibold)).fixedSize(horizontal:false,vertical:true)}.buttonStyle(APIJobsCompactButtonStyle(primary:true)).accessibilityLabel(personal.title).accessibilityIdentifier("job-row-primary-"+job.id)}
             else if !store.enabled("attendance"),mayWork,let legacy=APIJobWorkflow.primary(current,travelEnabled:store.enabled("jobTravel")){Button{if legacy == .departure{departure=true}else{statusRequest=APIJobStatusRequest(targetStatus:legacy.targetStatus)}}label:{Label(legacy.title,systemImage:legacy.symbol).font(.caption.weight(.semibold))}.buttonStyle(APIJobsCompactButtonStyle())}
-            Menu{menu}label:{Image(systemName:"ellipsis")}.buttonStyle(APIJobsCompactButtonStyle()).accessibilityLabel("Další akce zakázky").accessibilityIdentifier("job-row-menu-"+job.id)
+            Menu{menu.buttonStyle(.automatic)}label:{Image(systemName:"ellipsis")}.buttonStyle(APIJobsCompactButtonStyle()).accessibilityLabel("Další akce zakázky").accessibilityIdentifier("job-row-menu-"+job.id)
         }
     }
     @ViewBuilder private var menu:some View {

@@ -55,7 +55,7 @@ final class APIJobsUITests:XCTestCase {
         let app=launch();let search=app.searchFields.firstMatch;search.tap();search.typeText("petrik")
         app.buttons["jobs-map"].tap();XCTAssertTrue(app.navigationBars["Mapa zakázek"].waitForExistence(timeout:10));XCTAssertTrue(app.maps.firstMatch.exists)
         let pin=app.descendants(matching:.any)["map-job-fixture-progress"].firstMatch;XCTAssertTrue(pin.waitForExistence(timeout:15));capture("jobs-filtered-map",app);pin.tap()
-        let row=app.buttons["native-job-fixture-progress"];XCTAssertTrue(row.waitForExistence(timeout:10));row.tap();XCTAssertTrue(app.navigationBars["Detail zakázky"].waitForExistence(timeout:10))
+        let row=app.buttons["map-job-card-fixture-progress"];XCTAssertTrue(row.waitForExistence(timeout:10));row.tap();XCTAssertTrue(app.navigationBars["Detail zakázky"].waitForExistence(timeout:10))
     }
     func testLargeTextKeepsControlsWithinTheScreen(){
         let app=launch(extra:["--native-jobs-large-text-testing"])

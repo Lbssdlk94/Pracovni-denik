@@ -45,7 +45,7 @@ struct APIJobsScreen:View {
                 if period == .today && query.isEmpty && applied.count==0{APIUpcomingVisits(store:store,mine:mine)}
             }
             if let problem=model.problem{Section{Text(problem).font(.caption).foregroundStyle(DiaryStyle.warning);Button("Zkusit znovu"){Task{await load(refresh:true)}}.diaryBubble()}.listRowBackground(Color.clear)}
-        }.listStyle(.insetGrouped).listSectionSpacing(10).scrollContentBackground(.hidden).background(DiaryStyle.background)
+        }.listStyle(.insetGrouped).listSectionSpacing(6).contentMargins(.top,0,for:.scrollContent).scrollContentBackground(.hidden).background(DiaryStyle.background)
             .navigationTitle("Zakázky").navigationBarTitleDisplayMode(.inline)
             .searchable(text:$query,placement:.navigationBarDrawer(displayMode:.always),prompt:"Hledat zakázku nebo zákazníka")
             .toolbar{APIHeader(store:store);if store.manager && !store.isRolePreview{ToolbarItem(placement:.topBarTrailing){Button{let r=APIResource(entity:.jobs);store.route=APIRoute(resource:r,value:r.initial(store),isNew:true)}label:{Image(systemName:"plus")}.accessibilityLabel("Nová zakázka")}}}
@@ -86,8 +86,8 @@ struct APIJobsScreen:View {
                 Section {
                     if group != .done || doneExpanded{ForEach(rows,id:\.id){job in APIJobListRow(store:store,job:job,open:{detailJob=$0}).listRowInsets(EdgeInsets(top:3,leading:0,bottom:3,trailing:0)).listRowSeparator(.hidden).listRowBackground(Color.clear)}}
                 }header:{
-                    if group == .done{Button{withAnimation{doneExpanded.toggle()}}label:{HStack{Text("Dokončené · \(rows.count)");Spacer();Image(systemName:doneExpanded ? "chevron.up" : "chevron.down")}.frame(minHeight:44)}.buttonStyle(.plain).accessibilityIdentifier("jobs-completed").accessibilityValue(doneExpanded ? "Rozbaleno" : "Sbaleno")}
-                    else{Text(group.title+" · \(rows.count)")}
+                    if group == .done{Button{withAnimation{doneExpanded.toggle()}}label:{HStack{Text("Dokončené · \(rows.count)");Spacer();Image(systemName:doneExpanded ? "chevron.up" : "chevron.down")}.frame(minHeight:44).contentShape(Rectangle())}.buttonStyle(.plain).accessibilityIdentifier("jobs-completed").accessibilityValue(doneExpanded ? "Rozbaleno" : "Sbaleno")}
+                    else{Text(group.title+" · \(rows.count)").font(.subheadline.weight(.semibold)).foregroundStyle(.primary)}
                 }
             }
         }
