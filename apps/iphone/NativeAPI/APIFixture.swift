@@ -45,12 +45,16 @@ final class APIFixtureProtocol:URLProtocol {
             var data=APIDashboardFixture.attendance(me:me,records:records),shift=data["activeShift"]
             if b["kind"].string=="arrival"{
                 guard shift.isNull else{return json(.object(["error":.s("Příchod již existuje")]),409)}
-                shift = .object(["id":b["mutationId"],"userId":me["user"]["id"],"userName":me["user"]["name"],"startAt":.number(Date().timeIntervalSince1970*1000),"endAt":.null,"version":.n(1)])
+                shift = .object(["id":b["mutationId"],"userId":me["user"]["id"],"userName":me["user"]["name"],"startAt":b["at"].isNull ? .number(Date().timeIntervalSince1970*1000) : b["at"],"endAt":.null,"version":.n(1)])
                 data["shifts"] = .array(data["shifts"].array+[shift]);data["activeShift"]=shift
             }else{
                 guard shift["id"]==b["shiftId"],shift["version"]==b["version"] else{return json(.object(["error":.s("Směna se změnila")]),409)}
-                shift["endAt"] = .number(Date().timeIntervalSince1970*1000);shift["version"] = .n(shift["version"].int+1)
+                shift["endAt"] = b["at"].isNull ? .number(Date().timeIntervalSince1970*1000) : b["at"];shift["version"] = .n(shift["version"].int+1)
                 data["shifts"] = .array(data["shifts"].array.map{$0.id==shift.id ? shift : $0});data["activeShift"] = .null
+            }
+            if !data["detail"].isNull {
+                data["detail"]["shifts"]=data["shifts"];data["detail"]["ownToday"]["shifts"] = .array(data["shifts"].array.filter{$0["userId"]==me["user"]["id"]})
+                if b["kind"].string=="departure"{data["detail"]["intervals"] = .array(data["detail"]["intervals"].array.map{row in row["userId"]==me["user"]["id"] && row["endAt"].isNull ? row.merged(["endAt":shift["endAt"]]) : row});data["detail"]["states"] = .array(data["detail"]["states"].array.map{$0["userId"]==me["user"]["id"] ? $0.merged(["active":.null,"version":.n($0["version"].int+1)]) : $0})}
             }
             records["fixture-attendance"]=data;records[op]=shift;return json(.object(["shift":shift]))
         }
@@ -86,7 +90,23 @@ final class APIFixtureProtocol:URLProtocol {
         if path=="/api/zones"{return json(.object(["zones":.array([]),"version":.n(1)]))}
         if path=="/api/shafts"{return json(.object(["records":.array([])]))}
         if path=="/api/team"{return json(.object(["members":.array([me["user"]])]))}
-        if path=="/api/attendance"{return json(APIDashboardFixture.attendance(me:me,records:records))}
+        if path=="/api/attendance" {
+            if ProcessInfo.processInfo.arguments.contains("--native-api-attendance-redesign-testing") {
+                let q=Dictionary((URLComponents(url:request.url!,resolvingAgainstBaseURL:false)?.queryItems ?? []).map{($0.name,$0.value ?? "")},uniquingKeysWith:{$1})
+                if !["owner","administrator","admin"].contains(me["user"]["role"].string),let user=q["userId"],user != me["user"]["id"].string{return json(.object(["error":.s("Pouze vlastní docházka")]),403)}
+                let data=records["fixture-attendance"] ?? APIAttendanceFixture.example(me:me,before:ProcessInfo.processInfo.arguments.contains("--native-api-before-day-testing"),overnight:ProcessInfo.processInfo.arguments.contains("--native-api-overnight-testing"))
+                records["fixture-attendance"]=data;return json(APIAttendanceFixture.filtered(data,me:me,query:q))
+            }
+            return json(APIDashboardFixture.attendance(me:me,records:records))
+        }
+        if path=="/api/attendance/activities",method=="POST" {
+            let input=body(),id="attendance-activity:"+input["operationId"].string
+            if let saved=records[id]{return json(saved.merged(["replayed":.bool(true)]))}
+            var data=records["fixture-attendance"] ?? APIAttendanceFixture.example(me:me)
+            let result=APIAttendanceFixture.activity(input,me:me,data:&data)
+            guard !result.isNull else{return json(.object(["error":.s("Pracovní stav se změnil")]),409)}
+            records["fixture-attendance"]=data;records[id]=result;return json(result)
+        }
         if path=="/api/vehicles"{return json(.object(["vehicles":.array([vehicle]),"driver":.object(["enabled":.bool(true),"vehicleId":vehicle["id"],"version":.n(1)]),"canManage":.bool(true),"canWrite":.bool(true)]))}
         if path=="/api/vehicles/vehicle-1"{return json(.object(["vehicle":vehicle,"entries":.array([.object(["id":.s("entry-1"),"kind":.s("fuel"),"date":.s("2026-11-06"),"costMinor":.n(36000),"litersMilli":.n(10000),"createdByName":.s("Luboš – ukázka"),"version":.n(1)])]),"receipts":.array([]),"consumption":.number(7.2),"canWrite":.bool(true)]))}
         let parts=path.split(separator:"/").map(String.init)

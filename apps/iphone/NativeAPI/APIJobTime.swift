@@ -8,14 +8,35 @@ enum APIWorkTimeLogic {
     @MainActor static func project(_ snapshot:APIValue,store:APIStore)->APIValue{
         var intervals=snapshot["intervals"].array
         var values=Dictionary(uniqueKeysWithValues:snapshot["states"].array.map{($0["userId"].string,$0)})
-        for(path,data)in store.vault?.state.cache ?? [:] where path.hasSuffix("/time"){
+        for(path,data)in store.vault?.state.cache ?? [:] where path.hasSuffix("/time") || path=="/api/attendance/state"{
             for state in data["states"].array where state["version"].int>(values[state["userId"].string]?["version"].int ?? -1){values[state["userId"].string]=state}
         }
-        for operation in store.outbox.filter({$0.path.hasSuffix("/time/actions") && $0.state=="pending"}).sorted(by:{($0.body?["at"].double ?? 0)<($1.body?["at"].double ?? 0)}){
+        if let ledger=store.vault?.state.cache["/api/attendance/state"] {
+            for row in ledger["intervals"].array where snapshot["attendanceProjection"].bool || row["jobId"].string==snapshot["job"].id && !snapshot["job"].id.isEmpty {
+                if let i=intervals.firstIndex(where:{$0.id==row.id}){if row["version"].int>=intervals[i]["version"].int{intervals[i]=intervals[i].merged(row.object)}}else{intervals.append(row)}
+            }
+        }
+        let pending=store.outbox.filter{($0.path.hasSuffix("/time/actions") || $0.path=="/api/attendance/activities" || $0.path=="/api/attendance/punch") && $0.state=="pending"}.sorted{($0.body?["at"].double ?? 0)<($1.body?["at"].double ?? 0)}
+        for operation in pending {
+            if operation.path.hasPrefix("/api/attendance/"),let input=operation.body {
+                let id=store.userID;var state=values[id] ?? .object(["userId":.s(id),"name":store.me["user"]["name"],"version":.n(0)])
+                if operation.path.hasSuffix("/punch"),input["kind"].string != "departure"{continue}
+                if operation.path.hasSuffix("/activities"),state["version"] != input["version"]{continue}
+                let old=state["active"]
+                if !old.isNull,let i=intervals.firstIndex(where:{$0.id==old.id}){intervals[i]["endAt"]=input["at"];intervals[i]["pending"] = .bool(true)}
+                let action=input["action"].string,kind=action=="resume" ? input["resumeKind"].string : action
+                if operation.path.hasSuffix("/punch") || kind.isEmpty || kind=="stop"{state["active"] = .null}
+                else {
+                    let row=APIValue.object(["id":.s(input["operationId"].string+"_interval"),"userId":.s(id),"userName":store.me["user"]["name"],"jobId":action=="resume" ? input["resumeJobId"] : .null,"kind":.s(kind),"startAt":input["at"],"endAt":.null,"shiftId":input["shiftId"],"pending":.bool(true),"version":.n(1)])
+                    state["active"]=row
+                    if snapshot["attendanceProjection"].bool || !row["jobId"].string.isEmpty && row["jobId"].string==snapshot["job"].id{intervals.append(row)}
+                }
+                if !old.isNull || operation.path.hasSuffix("/activities"){state["version"] = .n(state["version"].int+1)};state["pending"] = .bool(true);values[id]=state;continue
+            }
             guard let input=operation.body else{continue};let source=operation.path.split(separator:"/")[2],target=input["targetJobId"].string.isEmpty ? String(source) : input["targetJobId"].string,kind=input["action"].string=="move" ? "work" : input["action"].string
             for(index,worker)in input["workers"].array.enumerated(){let id=worker["userId"].string;var state=values[id] ?? .object(["userId":.s(id),"name":.s(id),"version":worker["version"]]);guard state["version"]==worker["version"]else{continue};let same=state["active"]["jobId"].string==target && state["active"]["kind"].string==kind
                 if !state["active"].isNull && !same,let position=intervals.firstIndex(where:{$0.id==state["active"].id}){intervals[position]["endAt"]=input["at"];intervals[position]["pending"] = .bool(true)}
-                if kind=="stop"{state["active"] = .null}else if state["active"]["jobId"].string != target || state["active"]["kind"].string != kind{state["active"] = .object(["id":.s(input["operationId"].string+"_"+String(index)),"jobId":.s(target),"kind":.s(kind),"startAt":input["at"],"userId":.s(id),"userName":state["name"]])};if !same && kind != "stop" && target==snapshot["job"].id{var row=state["active"];row["userName"]=state["name"];row["pending"] = .bool(true);row["approval"] = .s("pending");intervals.append(row)};state["version"] = .n(worker["version"].int+1);state["pending"] = .bool(true);values[id]=state}
+                if kind=="stop"{state["active"] = .null}else if state["active"]["jobId"].string != target || state["active"]["kind"].string != kind{state["active"] = .object(["id":.s(input["operationId"].string+"_"+String(index)),"jobId":.s(target),"kind":.s(kind),"startAt":input["at"],"userId":.s(id),"userName":state["name"]])};if !same && kind != "stop" && (snapshot["attendanceProjection"].bool || target==snapshot["job"].id){var row=state["active"];row["userName"]=state["name"];row["pending"] = .bool(true);row["approval"] = .s("pending");intervals.append(row)};state["version"] = .n(worker["version"].int+1);state["pending"] = .bool(true);values[id]=state}
         }
         var result=snapshot
         result["states"] = .array(snapshot["states"].array.map{($0.merged(values[$0["userId"].string]?.object ?? [:]))})

@@ -22,82 +22,22 @@ final class APILocation:NSObject,ObservableObject,@preconcurrency CLLocationMana
     static func json(_ location:CLLocation?)->APIValue{location.map{.object(["latitude":.number($0.coordinate.latitude),"longitude":.number($0.coordinate.longitude),"accuracy":.number(max(0,$0.horizontalAccuracy))])} ?? .null}
 }
 enum APIAttendanceWorkflow {
-    @MainActor static func punch(store:APIStore,activeShift:APIValue,location:APILocation,operationID:String)async throws {
+    @MainActor static func punch(store:APIStore,activeShift:APIValue,location:APILocation,operationID:String,offline:Bool=false,at:Double?=nil)async throws {
         try store.requireLiveRole()
-        guard store.online else{throw APIError.local("Příchod a odchod zaznamenejte s připojením, aby se uložil správný čas.")}
+        guard store.online || offline else{throw APIError.local("Příchod a odchod zaznamenejte s připojením, aby se uložil správný čas.")}
         let scope=store.scope
         store.beginEdit();defer{store.endEdit()}
-        let position=store.enabled("location") ? await location.capture() : nil
+        let position=store.enabled("location") && store.online ? await location.capture() : nil
         guard scope==store.scope else{throw APIError.local("Účet nebo oprávnění se změnily.")}
         var input=APIValue.object(["mutationId":.s(operationID),"kind":.s(activeShift.isNull ? "arrival" : "departure"),"gpsStatus":.s(store.enabled("location") ? location.status : "disabled"),"position":APILocation.json(position)])
+        if offline{input["at"] = .number(at ?? Date().timeIntervalSince1970*1000)}
         if !activeShift.isNull{input["shiftId"]=activeShift["id"];input["version"]=activeShift["version"]}
-        _ = try await store.write("/api/attendance/punch",method:"POST",body:input)
+        _ = try await store.write("/api/attendance/punch",method:"POST",body:input,offline:offline,operationID:operationID,dependsOn:offline ? store.outbox.filter{$0.state=="pending" && ($0.path.hasPrefix("/api/attendance/") || $0.path.hasSuffix("/time/actions"))}.map(\.id) : [])
     }
 }
-struct APIAttendanceView:View {
-    @ObservedObject var store:APIStore
-    @StateObject private var location=APILocation()
-    @State private var month=""
-    @State private var selectedUser=""
-    @State private var dayFilter:String?
-    @State private var activeOnly=false
-    @State private var data:APIValue = .null
-    @State private var problem:String?
-    @State private var busy=false
-    @State private var punchID=UUID().uuidString
-    @State private var action:APIDomainAction?
-    init(store:APIStore,initialUser:String?=nil,initialDay:String?=nil,initialActiveOnly:Bool=false){
-        self.store=store;_month=State(initialValue:String(store.today.prefix(7)));_selectedUser=State(initialValue:initialUser ?? store.userID);_dayFilter=State(initialValue:initialDay);_activeOnly=State(initialValue:initialActiveOnly)
-    }
-    private var visibleShifts:[APIValue]{data["shifts"].array.filter{shift in
-        if activeOnly && !shift["endAt"].isNull{return false}
-        guard let day=dayFilter else{return true}
-        let formatter=DateFormatter();formatter.timeZone=TimeZone(identifier:"Europe/Prague");formatter.dateFormat="yyyy-MM-dd"
-        guard let date=formatter.date(from:day)else{return false}
-        let start=date.timeIntervalSince1970*1000
-        var calendar=Calendar(identifier:.gregorian);calendar.timeZone=formatter.timeZone
-        let end=calendar.date(byAdding:.day,value:1,to:date)!.timeIntervalSince1970*1000
-        return shift["startAt"].double<end && (shift["endAt"].isNull || shift["endAt"].double>start)
-    }}
-    private var key:String{month+selectedUser+store.scope+store.revision.uuidString}
-    var body:some View{List{
-        Section("Moje dnešní docházka"){
-            Text(data["activeShift"].isNull ? "Práce není zahájená" : "V práci od "+Self.time(data["activeShift"]["startAt"]))
-            Button(data["activeShift"].isNull ? "Zaznamenat příchod" : "Zaznamenat odchod"){Task{await punch()}}.diaryBubble(.primary).disabled(busy).frame(minHeight:44)
-        }
-        Section{TextField("Měsíc RRRR-MM",text:$month).textInputAutocapitalization(.never);if store.manager{Picker("Pracovník",selection:$selectedUser){Text("Všichni").tag("all");ForEach(Array(data["employees"].array.enumerated()),id:\.offset){_,p in Text(p["name"].string).tag(p.id)}}}}
-        if !data["allocations"].object.isEmpty{Section{DisclosureGroup("Rozdělení pracovní doby"){
-            ForEach(data["allocations"].object.keys.sorted(),id:\.self){id in
-                let value=data["allocations"][id]
-                VStack(alignment:.leading,spacing:6){
-                    Text(data["employees"].array.first{$0.id==id}?["name"].string ?? (id==store.userID ? "Moje pracovní doba" : id)).font(.headline)
-                    ForEach(["attendanceMs","workMs","travelMs","breakMs","otherMs","unallocatedMs"],id:\.self){key in
-                        Text((["attendanceMs":"Celkem docházka","workMs":"Práce na zakázkách","travelMs":"Doprava","breakMs":"Přestávky","otherMs":"Ostatní činnost","unallocatedMs":"Zatím nerozřazeno"][key] ?? key)+": "+APIWorkTimeLogic.hours(Int64(value[key].double))).font(.caption)
-                    }
-                }
-            }
-            Text("Zakázkové hodiny jsou rozdělením docházky, nepřičítají se podruhé.").font(.footnote)
-        }}}
-        if dayFilter != nil || activeOnly{Section{Text(dayFilter.map{APIJobDetailPresentation.date($0)} ?? "Otevřené směny");Button("Zobrazit celý měsíc"){dayFilter=nil;activeOnly=false}}}
-        Section("Pracovní dny"){
-            ForEach(Array(visibleShifts.enumerated()),id:\.offset){_,shift in
-                NavigationLink{List{Text(shift["userName"].string).font(.headline);Text(Self.date(shift["startAt"]));Text(Self.time(shift["startAt"])+"–"+(shift["endAt"].isNull ? "dosud" : Self.time(shift["endAt"])));DisclosureGroup("Poloha a podrobnosti"){if store.manager{APIDataPairs(value:shift["startPosition"],labels:["latitude":"Zeměpisná šířka","longitude":"Zeměpisná délka","accuracy":"Přesnost (m)"]);APIDataPairs(value:shift["endPosition"],labels:["latitude":"Odchod – šířka","longitude":"Odchod – délka"])};Text("GPS příchodu: "+shift["startGpsStatus"].string);Text("GPS odchodu: "+shift["endGpsStatus"].string)};Button("Navrhnout opravu"){action=correction(shift,remove:false)};Button("Požádat o smazání",role:.destructive){action=correction(shift,remove:true)}}.navigationTitle("Pracovní den")} label:{VStack(alignment:.leading,spacing:5){Text(Self.date(shift["startAt"])).font(.headline);Text(Self.time(shift["startAt"])+"–"+(shift["endAt"].isNull ? "dosud" : Self.time(shift["endAt"]))).font(.subheadline);if store.manager{Text(shift["userName"].string).font(.caption).foregroundStyle(.secondary)}}.padding(.vertical,6)}
-            }
-            Button("Doplnit chybějící den"){action=correction(.object(["id":.s(UUID().uuidString),"version":.n(0),"userId":.s(store.userID)]),remove:false)}
-        }
-        if store.manager && !data["pendingCorrections"].array.isEmpty{Section("Čeká na schválení"){ForEach(Array(data["pendingCorrections"].array.enumerated()),id:\.offset){_,c in VStack(alignment:.leading){Text(c["userName"].string).font(.headline);Text(c["reason"].string);HStack{Button("Schválit"){action=review(c,approve:true)};Button("Zamítnout"){action=review(c,approve:false)}}}}}}
-        if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}
-    }.navigationTitle("Docházka").listStyle(.insetGrouped).scrollContentBackground(.hidden).background(DiaryStyle.background)
-        .task(id:key){await load()}.refreshable{await store.resume(refreshViews:false);await load()}
-        .onChange(of:data["activeShift"]["id"].string+"|"+data["activeShift"]["version"].string){_,_ in if !busy{punchID=UUID().uuidString}}
-        .sheet(item:$action){APIAttendanceAction(store:store,action:$0)}
-    }
-    static func time(_ value:APIValue)->String{guard !value.isNull else{return ""};let f=DateFormatter();f.timeZone=TimeZone(identifier:"Europe/Prague");f.dateFormat="HH:mm";return f.string(from:Date(timeIntervalSince1970:value.double/1000))}
-    static func date(_ value:APIValue)->String{let f=DateFormatter();f.timeZone=TimeZone(identifier:"Europe/Prague");f.dateFormat="d. M. yyyy";return f.string(from:Date(timeIntervalSince1970:value.double/1000))}
-    func load()async{do{data=try await store.get("/api/attendance?month="+month+"&userId="+(selectedUser.isEmpty ? store.userID : selectedUser));problem=nil}catch{problem=error.localizedDescription}}
-    func punch()async{guard !busy else{return};busy=true;defer{busy=false};do{try await APIAttendanceWorkflow.punch(store:store,activeShift:data["activeShift"],location:location,operationID:punchID);punchID=UUID().uuidString}catch{problem=error.localizedDescription}}
-    func correction(_ shift:APIValue,remove:Bool)->APIDomainAction{APIDomainAction(title:remove ? "Žádost o smazání" : "Oprava docházky",path:"/api/attendance/corrections",fields:[.field("reason","Důvod",.notes,true)],value:.object(["id":.s(UUID().uuidString),"kind":.s(remove ? "delete" : "edit"),"shiftId":.s(shift.id),"version":shift["version"],"userId":shift["userId"],"startAt":shift["startAt"].isNull ? .number(Date().timeIntervalSince1970*1000) : shift["startAt"],"endAt":shift["endAt"],"reason":.s("")]))}
-    func review(_ c:APIValue,approve:Bool)->APIDomainAction{APIDomainAction(title:approve ? "Schválit opravu" : "Zamítnout opravu",path:"/api/attendance/corrections/"+c.id+"/review",fields:[.field("note","Poznámka správce",.notes)],value:.object(["decision":.s(approve ? "approve" : "reject"),"kind":c["kind"],"note":.s("")]),confirmation:c["userName"].string+"\n"+c["reason"].string)}
+enum APIAttendanceActions {
+    static func correction(_ shift:APIValue,remove:Bool)->APIDomainAction{APIDomainAction(title:remove ? "Žádost o smazání" : "Oprava docházky",path:"/api/attendance/corrections",fields:[.field("reason","Důvod",.notes,true)],value:.object(["id":.s(UUID().uuidString),"kind":.s(remove ? "delete" : "edit"),"shiftId":.s(shift.id),"version":shift["version"],"userId":shift["userId"],"startAt":shift["startAt"].isNull ? .number(Date().timeIntervalSince1970*1000) : shift["startAt"],"endAt":shift["endAt"],"reason":.s("")]))}
+    static func review(_ c:APIValue,approve:Bool)->APIDomainAction{APIDomainAction(title:approve ? "Schválit opravu" : "Zamítnout opravu",path:"/api/attendance/corrections/"+c.id+"/review",fields:[.field("note","Poznámka správce",.notes)],value:.object(["decision":.s(approve ? "approve" : "reject"),"kind":c["kind"],"note":.s("")]),confirmation:c["userName"].string+"\n"+c["reason"].string)}
 }
 struct APIAttendanceAction:View {
     @ObservedObject var store:APIStore
@@ -109,5 +49,5 @@ struct APIAttendanceAction:View {
     @State private var closed=true
     @State private var problem:String?
     var correction:Bool{action.path=="/api/attendance/corrections" && action.value["kind"].string=="edit"}
-    var body:some View{NavigationStack{Form{if correction{DatePicker("Příchod",selection:$start);Toggle("Směna má odchod",isOn:$closed);if closed{DatePicker("Odchod",selection:$end)}};APIFieldsView(fields:action.fields,value:$value);if let message=action.confirmation{Text(message)};if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)};Button("Potvrdit"){Task{do{var body=value;if correction{body["startAt"] = .number((start.timeIntervalSince1970*1000).rounded());body["endAt"] = closed ? .number((end.timeIntervalSince1970*1000).rounded()) : .null};_=try await store.write(action.path,method:action.method,body:body);dismiss()}catch{problem=error.localizedDescription}}}}.navigationTitle(action.title).toolbar{ToolbarItem(placement:.cancellationAction){Button("Zavřít"){dismiss()}}}}.task{value=action.value;start=Date(timeIntervalSince1970:value["startAt"].double/1000);end=value["endAt"].isNull ? Date() : Date(timeIntervalSince1970:value["endAt"].double/1000);closed = !value["endAt"].isNull}}
+    var body:some View{NavigationStack{Form{if correction{DatePicker("Příchod",selection:$start);Toggle("Směna má odchod",isOn:$closed);if closed{DatePicker("Odchod",selection:$end)}};APIFieldsView(fields:action.fields,value:$value);if let message=action.confirmation{Text(message)};if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)};Button("Potvrdit"){Task{do{var body=value;if correction{body["startAt"] = .number((start.timeIntervalSince1970*1000).rounded());body["endAt"] = closed ? .number((end.timeIntervalSince1970*1000).rounded()) : .null};_=try await store.write(action.path,method:action.method,body:body,offline:correction,operationID:correction ? body["id"].string : nil);dismiss()}catch{problem=error.localizedDescription}}}}.environment(\.locale,Locale(identifier:"cs_CZ")).environment(\.timeZone,APIAttendanceLogic.calendar.timeZone).navigationTitle(action.title).toolbar{ToolbarItem(placement:.cancellationAction){Button("Zavřít"){dismiss()}}}}.task{value=action.value;start=Date(timeIntervalSince1970:value["startAt"].double/1000);end=value["endAt"].isNull ? Date() : Date(timeIntervalSince1970:value["endAt"].double/1000);closed = !value["endAt"].isNull}}
 }

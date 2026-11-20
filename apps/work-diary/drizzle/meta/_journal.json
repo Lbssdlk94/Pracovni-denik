@@ -414,6 +414,13 @@
       "when": 1795095930710,
       "tag": "0058_job_completion",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "6",
+      "when": 1795167379652,
+      "tag": "0059_attendance_activities",
+      "breakpoints": true
     }
   ]
 }

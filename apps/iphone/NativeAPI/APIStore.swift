@@ -184,6 +184,7 @@ final class APIStore: ObservableObject {
             if e.isTransient,(!list || monthly && jobMonthsAuthorized),let vault, vault.offlineAllowed(), let cached = vault.state.cache[cacheKey] {
                 if e.status==0{online=false}else{error="Server tuto část dočasně nenačetl. Zobrazují se poslední uložená data."}
                 if list{return cached.merged(["_jobCache":cached["_jobCache"].merged(["stale":.bool(true),"offline":.bool(!online)])])}
+                if path.hasPrefix("/api/attendance?"){return cached.merged(["_attendanceCache":.object(["stale":.bool(true)])])}
                 return cached
             }
             throw e
@@ -266,6 +267,11 @@ final class APIStore: ObservableObject {
         if !result["job"].id.isEmpty,!result["report"].isNull{acknowledged["job"]["protocolStatus"]=result["report"]["documentState"].string=="ready" ? .s("ready") : .s("draft")}
         jobMonthsChanged(path:path,result:acknowledged)
         guard let vault else{return}
+        if path.hasPrefix("/api/attendance/"),!result["state"].isNull {
+            let old=vault.state.cache["/api/attendance/state"] ?? .null
+            let rows=Array(APIAttendanceLogic.unique(old["intervals"].array+result["intervals"].array).sorted{$0["startAt"].double>$1["startAt"].double}.prefix(512))
+            vault.state.cache["/api/attendance/state"] = .object(["states":.array([result["state"]]),"intervals":.array(rows)])
+        }
         let roots:[String:String]=["jobs":"job","customers":"customer","defects":"defect","vehicles":"vehicle","subscriptions":"subscription"]
         let parts=path.split(separator:"/");guard parts.count>=2,let singular=roots[String(parts[1])]else{return}
         if parts.count>=4,parts[1]=="jobs",parts[3]=="time",!result["intervals"].isNull{vault.state.cache["/api/jobs/"+String(parts[2])+"/time"]=result}
