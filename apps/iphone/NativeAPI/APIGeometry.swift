@@ -36,7 +36,7 @@ struct APIJobsMap:View {
             if store.manager{
                 Map{ForEach(groups){group in
                     Annotation(group.points.count>1 ? "\(group.points.count) zakázky" : group.points[0].job["customerName"].string,coordinate:group.position){
-                        Button{selected=group}label:{Image(systemName:group.points.allSatisfy(\.confirmed) ? "mappin.circle.fill" : "questionmark.circle.fill").font(.largeTitle).foregroundStyle(group.points.allSatisfy(\.confirmed) ? DiaryStyle.accent : DiaryStyle.warning)}
+                        Button{selected=group}label:{Image(systemName:group.points.allSatisfy(\.confirmed) ? "mappin.circle.fill" : "questionmark.circle.fill").font(.largeTitle).foregroundStyle(group.points.allSatisfy(\.confirmed) ? DiaryStyle.accent : DiaryStyle.warning)}.accessibilityLabel(group.points.count>1 ? "Zakázky na místě" : group.points[0].job["customerName"].string).accessibilityIdentifier("map-job-"+group.points[0].job.id)
                     }
                 }}.mapControls{MapCompass();MapScaleView()}
                 DisclosureGroup("Upřesnění míst · \(rows.count) zakázek"){

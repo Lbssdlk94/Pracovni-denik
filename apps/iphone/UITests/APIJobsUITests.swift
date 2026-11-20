@@ -48,4 +48,10 @@ final class APIJobsUITests:XCTestCase {
     func testCalendarUsesNativeDateSelection(){
         let app=launch();app.buttons["jobs-calendar"].tap();XCTAssertTrue(app.navigationBars["Kalendář zakázek"].waitForExistence(timeout:10));XCTAssertTrue(app.datePickers.firstMatch.exists);capture("jobs-calendar",app);app.buttons["Zobrazit"].tap();XCTAssertTrue(app.buttons["native-job-fixture-next"].waitForExistence(timeout:10));XCTAssertFalse(app.buttons["native-job-fixture-progress"].exists)
     }
+    func testFilteredMapOpensTheSameCompactJobAndDetail(){
+        let app=launch();let search=app.searchFields.firstMatch;search.tap();search.typeText("petrik")
+        app.buttons["jobs-map"].tap();XCTAssertTrue(app.navigationBars["Mapa zakázek"].waitForExistence(timeout:10));XCTAssertTrue(app.maps.firstMatch.exists)
+        let pin=app.buttons["map-job-fixture-progress"];XCTAssertTrue(pin.waitForExistence(timeout:15));capture("jobs-filtered-map",app);pin.tap()
+        let row=app.buttons["native-job-fixture-progress"];XCTAssertTrue(row.waitForExistence(timeout:10));row.tap();XCTAssertTrue(app.navigationBars["Detail zakázky"].waitForExistence(timeout:10))
+    }
 }

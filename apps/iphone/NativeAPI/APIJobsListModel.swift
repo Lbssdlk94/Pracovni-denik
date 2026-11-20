@@ -18,6 +18,8 @@ import SwiftUI
         defer{if id==ticket{loading=false}}
         if scope != binding || key != requestKey{rows=[];cache = .null;problem=nil}
         scope=binding;requestKey=key
+        let preserved=rows
+        let startedOnline=store.online
         var found:[String:APIValue]=[:],metadata:[APIValue]=[]
         do{
             var requests=paths
@@ -42,15 +44,26 @@ import SwiftUI
                     }
                     guard !Task.isCancelled,ticket==id,binding==store.scope else{return}
                     for job in page["jobs"].array{if found[job.id]==nil || job["version"].int >= found[job.id]!["version"].int{found[job.id]=job}}
-                    rows=Array(found.values)
+                    var visible=Dictionary(preserved.map{($0.id,$0)},uniquingKeysWith:{$1});visible.merge(found){_,new in new};rows=Array(visible.values)
                     if !page["_jobCache"].isNull{metadata.append(page["_jobCache"])}
                     else{metadata.append(.object(["at":.number(Date().timeIntervalSince1970*1000),"offline":.bool(false),"stale":.bool(false)]))}
-                    cache=Self.freshness(metadata,offline:!store.online)
+                    cache=Self.freshness(metadata,offline:!store.online).merged(["stale":.bool(!preserved.isEmpty || metadata.contains{$0["stale"].bool})])
                     cursor=page["nextCursor"].string
                     if !cursor.isEmpty,!seen.insert(cursor).inserted{throw APIError.local("Stránkování se změnilo. Obnovte seznam zakázek.")}
                 }while !cursor.isEmpty
             }
             guard ticket==id,binding==store.scope else{return}
+            if startedOnline && !store.online{
+                // A connection may fail after the first month has loaded. Include
+                // other already-authorized months without another network request.
+                await store.prepareJobMonths()
+                guard ticket==id,binding==store.scope,!Task.isCancelled else{return}
+                for month in APIJobMonthCache.months(containing:store.today){
+                    var c=URLComponents(string:paths[0])!;c.queryItems=(c.queryItems ?? []).filter{$0.name != "month"}+[URLQueryItem(name:"month",value:month)]
+                    if let page=store.cachedJobList(c.string!){for job in page["jobs"].array{if found[job.id]==nil || job["version"].int>=found[job.id]!["version"].int{found[job.id]=job}};metadata.append(page["_jobCache"])}
+                }
+            }
+            rows=Array(found.values);cache=Self.freshness(metadata,offline:!store.online)
             complete=store.online
             if !store.online{problem=found.isEmpty ? "Tento výběr není uložený. Po připojení jej obnovte." : "Offline jsou dostupné pouze ověřené uložené měsíce. Starší nebo další zakázky mohou chybět.";complete=false}
             else{problem=nil}

@@ -55,8 +55,8 @@ struct APIJobListRow:View {
     private var typeTitle:String{["installation":"Realizace","service":"Servis","survey":"Zaměření"][current["jobType"].string] ?? "Zakázka"}
     private var hours:String{
         let rows=projected["intervals"].array.filter{store.manager || $0["userId"].string==store.userID}
-        let value=APIWorkTimeLogic.summary(rows)["total"]["workMs"].double
-        return APIWorkTimeLogic.hours(Int64(value))+(store.manager ? " celkem" : " moje")
+        let value=rows.filter{$0["kind"].string=="work"}.reduce(Int64(0)){$0+APIWorkTimeLogic.duration($1)}
+        return APIWorkTimeLogic.hours(value)+(store.manager ? " celkem" : " moje")
     }
     private var statusBadge:some View{
         let status=current["status"].string
@@ -121,10 +121,30 @@ struct APIJobRowWorkSheet:View {
     @State private var problem:String?
     @State private var retry=UUID()
     @Environment(\.dismiss) private var dismiss
-    var body:some View{
-        Group{if !snapshot.isNull{APIWorkTimeActionEditor(store:store,job:store.currentJob(job),snapshot:snapshot,kind:kind,selected:[store.userID])}
-            else{NavigationStack{VStack(spacing:16){if let problem{Text(problem);Button("Zkusit znovu"){retry=UUID()}}else{ProgressView("Načítám pracovní stav…")}}.padding().navigationTitle("Pracovní akce").toolbar{ToolbarItem(placement:.cancellationAction){Button("Zavřít"){dismiss()}}}}}
-            .task(id:store.scope+retry.uuidString){let scope=store.scope;do{let value=try await store.get("/api/jobs/"+job.id+"/time",refresh:true);guard scope==store.scope,!Task.isCancelled else{return};guard value["canWrite"].bool,!store.isRolePreview,value["states"].array.contains(where:{$0["userId"].string==store.userID && $0["assigned"].bool})else{throw APIError.local("K této pracovní akci nemáte oprávnění.")};snapshot=value;problem=nil}catch{problem=error.localizedDescription}}
+    var body:some View {
+        Group {
+            if !snapshot.isNull {
+                APIWorkTimeActionEditor(store:store,job:store.currentJob(job),snapshot:snapshot,kind:kind,selected:[store.userID])
+            }else{loadingView}
+        }.task(id:store.scope+retry.uuidString){await load()}
+    }
+    private var loadingView:some View {
+        NavigationStack {
+            VStack(spacing:16){
+                if let problem{Text(problem);Button("Zkusit znovu"){retry=UUID()}}
+                else{ProgressView("Načítám pracovní stav…")}
+            }.padding().navigationTitle("Pracovní akce")
+                .toolbar{ToolbarItem(placement:.cancellationAction){Button("Zavřít"){dismiss()}}}
+        }
+    }
+    private func load()async {
+        let scope=store.scope
+        do {
+            let value=try await store.get("/api/jobs/"+job.id+"/time",refresh:true)
+            guard scope==store.scope,!Task.isCancelled else{return}
+            guard value["canWrite"].bool,!store.isRolePreview,value["states"].array.contains(where:{$0["userId"].string==store.userID && $0["assigned"].bool}) else{throw APIError.local("K této pracovní akci nemáte oprávnění.")}
+            snapshot=value;problem=nil
+        }catch{guard scope==store.scope,!Task.isCancelled else{return};problem=error.localizedDescription}
     }
 }
 struct APIUpcomingVisits:View {
