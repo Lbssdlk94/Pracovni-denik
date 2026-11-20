@@ -20,7 +20,7 @@ import UIKit
     var report:APIValue{value["report"]}
     var modern:Bool{snapshot["protocol"]["schema"].int==1}
     var template:APIValue{let d=report["protocolDetails"];return !d["template"].isNull ? d["template"] : snapshot["protocol"]["templates"].array.first{$0.id==d["templateId"].string} ?? APIProtocolLogic.fallback}
-    func pending(_ store:APIStore)->[APIMutation]{store.outbox.filter{$0.path.hasPrefix("/api/jobs/"+jobID+"/service")}}
+    func pending(_ store:APIStore)->[APIMutation]{store.outbox.filter{$0.path.components(separatedBy:"?").first == "/api/jobs/"+jobID+"/service"}}
     func load(store:APIStore,jobID:String)async {
         guard !loaded else{return};self.jobID=jobID;scope=store.scope
         do{

@@ -18,4 +18,15 @@ final class APIProtocolLogicTests:XCTestCase {
         XCTAssertGreaterThan(pdf.pageCount,0);for required in ["Kontrola sekci","CUSTOM-TEMPLATE","HISTORICAL-CUSTOMER","ACTUAL-WORKER","verze 7"]{XCTAssertTrue(text.contains(required),required)};for privateText in ["INTERNAL-SECRET","CHANGED-CUSTOMER"]{XCTAssertFalse(text.contains(privateText),privateText)}
     }
     @MainActor func testOfflineEditedDraftSurvivesQueueAndAdoptsNewVersion()async throws{APIFixtureProtocol.reset();APIFixtureProtocol.records["protocol-redesign-fixture"] = .bool(true);let store=APIStore(fixture:true);await store.restore();let first=APIProtocolModel();await first.load(store:store,jobID:"fixture-progress");store.online=false;first.value["report"]["protocolDetails"]["customWork"] = .s("Prvni");first.persist(store);await first.save(store:store,finalize:false);XCTAssertEqual(store.outbox.count,1);first.value["report"]["protocolDetails"]["customWork"] = .s("Druha");first.persist(store);let restored=APIProtocolModel();await restored.load(store:store,jobID:"fixture-progress");XCTAssertEqual(restored.report["protocolDetails"]["customWork"],.s("Druha"));store.online=true;await store.sync();restored.syncChanged(store:store);restored.task?.cancel();await restored.save(store:store,finalize:false);XCTAssertTrue(store.outbox.isEmpty);XCTAssertEqual(restored.report["protocolDetails"]["customWork"],.s("Druha"));XCTAssertEqual(restored.value,restored.baseline)}
+    @MainActor func testOfflinePhotoAndReportSynchronizeInDependencyOrder()async throws{
+        APIFixtureProtocol.reset();APIFixtureProtocol.records["protocol-redesign-fixture"] = .bool(true);let store=APIStore(fixture:true);await store.restore();let model=APIProtocolModel();await model.load(store:store,jobID:"fixture-progress")
+        store.online=false;let photo="protocol-offline-photo",photoPath="/api/jobs/fixture-progress/service/photos/"+photo
+        try await store.upload(photoPath,bytes:Data([255,216,255,1]),type:"image/jpeg",offline:true,id:photo)
+        model.value["report"]["protocolDetails"]["customWork"] = .s("Offline prace s fotografii");model.value["report"]["photoIds"] = .array([.s(photo)]);model.persist(store);await model.save(store:store,finalize:false)
+        XCTAssertEqual(store.outbox.count,2);let report=try XCTUnwrap(model.pending(store).first);XCTAssertEqual(report.dependsOn,[photo]);let body=try XCTUnwrap(report.body);XCTAssertEqual(body["report"]["photoIds"],.array([.s(photo)]))
+        APIFixtureProtocol.forcedStatus[photoPath]=503;store.online=true;await store.sync();XCTAssertEqual(store.outbox.count,2);XCTAssertNil(APIFixtureProtocol.records["/api/jobs/fixture-progress/report"])
+        APIFixtureProtocol.forcedStatus.removeValue(forKey:photoPath);await store.sync();model.syncChanged(store:store);model.task?.cancel()
+        XCTAssertTrue(store.outbox.isEmpty);XCTAssertEqual(model.value,model.baseline);XCTAssertEqual(model.report["photoIds"],.array([.s(photo)]));XCTAssertNotNil(APIFixtureProtocol.records[photoPath])
+    }
+
 }
