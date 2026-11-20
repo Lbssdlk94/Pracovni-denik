@@ -108,4 +108,14 @@ final class APIJobsPresentationTests:XCTestCase {
         // The 'all team' manager request has no assignee and preserves all 650.
         XCTAssertEqual(model.rows.count,650);XCTAssertFalse(model.complete);XCTAssertTrue(model.cache["offline"].bool)
     }
+    @MainActor func testTransientServerFallbackKeepsItsOriginalTimestampAndIsAlwaysStale()async throws{
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start()
+        let path="/api/jobs?state=all&order=schedule&month="+String(store.today.prefix(7))
+        _ = try await store.get(path,refresh:true)
+        let stamp=store.vault?.state.cache[path]?["_jobCache"]["at"] ?? .null
+        XCTAssertGreaterThan(stamp.double,0)
+        APIFixtureProtocol.lock.withLock{APIFixtureProtocol.forcedStatus["/api/jobs"]=503}
+        let fallback=try await store.get(path,refresh:true)
+        XCTAssertEqual(fallback["_jobCache"]["at"],stamp);XCTAssertTrue(fallback["_jobCache"]["stale"].bool);XCTAssertTrue(store.online)
+    }
 }

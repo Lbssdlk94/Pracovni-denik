@@ -28,6 +28,12 @@ on:
         required: false
         type: boolean
         default: false
+      check_scope:
+        description: 'Checks-only selection; release builds always run the full suite'
+        required: false
+        type: choice
+        default: all
+        options: [all, jobs, unit]
 permissions:
   contents: read
 concurrency:
@@ -64,11 +70,23 @@ jobs:
         run: cd apps/iphone && xcodegen generate
       - name: Simulator build and tests
         shell: bash
+        env:
+          DIARY_CHECKS_ONLY: ${{ inputs.checks_only }}
+          DIARY_CHECK_SCOPE: ${{ inputs.check_scope || 'all' }}
         run: |
           set -o pipefail
           mkdir -p build
           UDID="$DIARY_PHONE_SIMULATOR_ID"
-          xcodebuild -project apps/iphone/PracovniDenik.xcodeproj -scheme PracovniDenik -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build/simulator -resultBundlePath build/Tests.xcresult test CODE_SIGNING_ALLOWED=NO | tee build/simulator.log
+          DIARY_TEST_OPTIONS=()
+          if [[ "$DIARY_CHECKS_ONLY" == true ]]; then
+            case "$DIARY_CHECK_SCOPE" in
+              all) ;;
+              jobs) DIARY_TEST_OPTIONS+=('-only-testing:PracovniDenikTests' '-only-testing:PracovniDenikUITests/APIJobsUITests') ;;
+              unit) DIARY_TEST_OPTIONS+=('-only-testing:PracovniDenikTests') ;;
+              *) echo 'Unsupported checks-only selection'; exit 2 ;;
+            esac
+          fi
+          xcodebuild -project apps/iphone/PracovniDenik.xcodeproj -scheme PracovniDenik -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build/simulator -resultBundlePath build/Tests.xcresult test "${DIARY_TEST_OPTIONS[@]}" CODE_SIGNING_ALLOWED=NO | tee build/simulator.log
       - name: Export iPhone UI previews
         if: always()
         run: |
@@ -90,6 +108,7 @@ jobs:
           cd ../..
           shasum -a 256 build/PracovniDenik-UNSIGNED-REQUIRES-SIGNING.ipa > build/IPA-SHA256.txt
       - name: Apple Watch simulator build and previews
+        if: inputs.checks_only != true || inputs.check_scope != 'unit'
         shell: bash
         run: |
           set -euo pipefail

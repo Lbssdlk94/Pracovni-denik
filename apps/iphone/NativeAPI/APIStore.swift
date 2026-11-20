@@ -174,14 +174,18 @@ final class APIStore: ObservableObject {
             let result = try await transport.request(path)
             guard ticket == generation else { throw APIError.local("Přístup se změnil. Obnovte obrazovku.") }
             guard !monthly || monthTicket==jobMonthEpoch else{throw APIError.local("Plán se mezitím změnil. Obnovte přehled.")}
-            if list{if monthly{vault?.state.cache[cacheKey]=result.merged(["jobs":.array(result["jobs"].array.map(APIJobMonthCache.lean))]);try? vault?.persist();scheduleJobMonths()}}
+            if list{if monthly{vault?.state.cache[cacheKey]=result.merged(["jobs":.array(result["jobs"].array.map(APIJobMonthCache.lean)),"_jobCache":.object(["at":.number(Date().timeIntervalSince1970*1000),"offline":.bool(false),"stale":.bool(false)])]);try? vault?.persist();scheduleJobMonths()}}
             else{vault?.state.cache[cacheKey] = result; try vault?.persist()}
             return result
         } catch let e as APIError {
             guard ticket==generation else{throw APIError.local("Účet se změnil.")}
             if e.status == 401 { lock(); throw e }
             if e.status == 403 || e.status == 404 && path.hasPrefix("/api/jobs/") { if list || path.hasPrefix("/api/jobs/"){beginJobMonthChange();purgeJobMonthCopies();jobMonthsAuthorized=false;revision=UUID()};vault?.state.cache.removeValue(forKey:cacheKey);try? vault?.persist();throw e }
-            if e.isTransient,(!list || monthly && jobMonthsAuthorized),let vault, vault.offlineAllowed(), let cached = vault.state.cache[cacheKey] {if e.status==0{online=false}else{error="Server tuto část dočasně nenačetl. Zobrazují se poslední uložená data."};return cached}
+            if e.isTransient,(!list || monthly && jobMonthsAuthorized),let vault, vault.offlineAllowed(), let cached = vault.state.cache[cacheKey] {
+                if e.status==0{online=false}else{error="Server tuto část dočasně nenačetl. Zobrazují se poslední uložená data."}
+                if list{return cached.merged(["_jobCache":cached["_jobCache"].merged(["stale":.bool(true),"offline":.bool(!online)])])}
+                return cached
+            }
             throw e
         }
     }

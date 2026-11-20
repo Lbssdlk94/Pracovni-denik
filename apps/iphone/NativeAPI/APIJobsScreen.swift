@@ -95,12 +95,13 @@ struct APIJobsScreen:View {
     private var freshness:some View {
         HStack(alignment:.firstTextBaseline,spacing:5){
             Image(systemName:!store.online ? "wifi.slash" : model.cache["stale"].bool ? "clock.arrow.circlepath" : "arrow.clockwise")
-            Text(!store.online ? "Offline · uložená data" : model.cache.isNull ? "Načítání" : model.cache["stale"].bool ? "Uložená kopie · "+APIAttendanceView.time(model.cache["at"]) : "Synchronizováno v "+APIAttendanceView.time(model.cache["at"]))
+            Text(!store.online ? "Offline · uložená data" : model.cache.isNull ? "Načítání" : model.cache["stale"].bool ? "Uložená kopie · "+updatedTime : "Synchronizováno v "+updatedTime)
             if !store.outbox.isEmpty{Text("· čeká: \(store.outbox.count)")}
             Spacer(minLength:0)
             if !model.loading{Text("\(jobs.count)\(model.complete ? "" : "+") zakázek")}
         }.font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true).accessibilityElement(children:.combine)
     }
+    private var updatedTime:String{model.cache["at"].double>0 ? APIAttendanceView.time(model.cache["at"]) : "čas neznámý"}
     private func load(refresh:Bool=false)async{await model.load(store:store,filters:applied,period:period,mine:mine,refresh:refresh)}
 }
 
