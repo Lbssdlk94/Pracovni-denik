@@ -4,7 +4,7 @@ final class APIAttendanceUITests:XCTestCase {
     override func setUp(){super.setUp();continueAfterFailure=false}
     private func launch(worker:Bool=false,extra:[String]=[])->XCUIApplication{
         let app=XCUIApplication();app.launchArguments=["--native-api-testing","--native-api-attendance-redesign-testing","--native-dashboard-capture-testing"]+(worker ? ["--native-api-worker-testing"] : [])+extra;app.launch()
-        XCTAssertTrue(app.staticTexts["native-overview-title"].waitForExistence(timeout:15));app.tabBars.buttons["Docházka"].tap();XCTAssertTrue(app.buttons["attendance-month"].waitForExistence(timeout:15));return app
+        XCTAssertTrue(app.staticTexts["native-overview-title"].waitForExistence(timeout:15));app.tabBars.buttons["Docházka"].tap();XCTAssertTrue(app.navigationBars["Docházka"].waitForExistence(timeout:15));XCTAssertTrue(app.staticTexts["attendance-live-clock"].waitForExistence(timeout:15));return app
     }
     private func label(_ expected:String,_ element:XCUIElement){expectation(for:NSPredicate(format:"label == %@",expected),evaluatedWith:element);waitForExpectations(timeout:15)}
     private func capture(_ name:String,_ app:XCUIApplication){let a=XCTAttachment(screenshot:app.screenshot());a.name=name;a.lifetime = .keepAlways;add(a)}
@@ -26,7 +26,7 @@ final class APIAttendanceUITests:XCTestCase {
         let worker=app.buttons["attendance-person-attendance-marek"];reveal(worker,app);capture("attendance-manager-team",app);worker.tap();XCTAssertTrue(app.navigationBars["Docházka"].waitForExistence(timeout:10));XCTAssertEqual(app.webViews.count,0)
     }
     func testCalendarAndPreviousMonth(){
-        let app=launch();let before=app.buttons["attendance-month"].label;app.buttons["Předchozí měsíc"].tap();XCTAssertNotEqual(app.buttons["attendance-month"].label,before);app.buttons["attendance-month"].tap();XCTAssertTrue(app.navigationBars["Vybrat měsíc"].waitForExistence(timeout:10));XCTAssertTrue(app.datePickers.firstMatch.exists);capture("attendance-month-picker",app);app.buttons["Zobrazit"].tap()
+        let app=launch();reveal(app.buttons["attendance-month"],app);let before=app.buttons["attendance-month"].label;app.buttons["Předchozí měsíc"].tap();XCTAssertNotEqual(app.buttons["attendance-month"].label,before);app.buttons["attendance-month"].tap();XCTAssertTrue(app.navigationBars["Vybrat měsíc"].waitForExistence(timeout:10));XCTAssertTrue(app.datePickers.firstMatch.exists);capture("attendance-month-picker",app);app.buttons["Zobrazit"].tap()
     }
     func testDayDetailContainsTimelineAndDirectJobNavigation(){
         let app=launch(worker:true);let day=app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH %@","attendance-day-")).firstMatch;reveal(day,app);day.tap();XCTAssertTrue(app.navigationBars["Pracovní den"].waitForExistence(timeout:10));capture("attendance-day-detail",app)
