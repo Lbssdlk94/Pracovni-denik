@@ -34,7 +34,7 @@ struct APIProtocolEditor:View {
             if !model.snapshot["history"].array.isEmpty{Section{DisclosureGroup("Historie protokolu"){ForEach(Array(model.snapshot["history"].array.enumerated()),id:\.offset){_,row in Text(APIAttendanceView.date(row["created_at"])+" · "+APIAttendanceView.time(row["created_at"])+" · "+row["created_by"].string).font(.caption)}}}}
             if !model.pending(store).isEmpty{NavigationLink("Otevřít čekající změny"){APIOutboxView(store:store)}}
         }
-        if let error=model.problem{Section{Text(error).foregroundStyle(DiaryStyle.warning).accessibilityIdentifier("protocol-error");if writable{Button("Uložit / zkusit znovu"){Task{await model.save(store:store,finalize:false)}}}}
+        if let error=model.problem{Section{Text(error).foregroundStyle(DiaryStyle.warning).accessibilityIdentifier("protocol-error");if writable{Button("Uložit / zkusit znovu"){Task{await model.save(store:store,finalize:false)}}}}}
     }.listStyle(.insetGrouped).listSectionSpacing(10).contentMargins(.top,0,for:.scrollContent).scrollContentBackground(.hidden).background(DiaryStyle.background).navigationTitle(model.template["name"].string.isEmpty ? "Servisní protokol" : model.template["name"].string).navigationBarTitleDisplayMode(.inline)
         .onChange(of:scrollTarget){_,id in if let id{withAnimation{proxy.scrollTo(id,anchor:.top)};scrollTarget=nil}}
         .toolbar{ToolbarItem(placement:.cancellationAction){Button("Zavřít",systemImage:"xmark"){model.persist(store);dismiss()}.labelStyle(.iconOnly).disabled(model.busy)};ToolbarItem(placement:.topBarTrailing){Menu{
