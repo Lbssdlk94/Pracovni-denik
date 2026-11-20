@@ -28,9 +28,9 @@ struct APIAttendanceView:View {
     }
     private var month:String{APIAttendanceLogic.month(selectedMonth)}
     private var user:String{store.manager && team ? employee : store.userID}
-    private var key:String{month+user+discipline+store.scope+store.revision.uuidString}
+    private var key:String{month+user+discipline+store.scope+String(store.online)+store.revision.uuidString}
     private var projected:APIValue{model.projected(store:store)}
-    private func scopedShifts(_ data:APIValue)->[APIValue]{let allowed=Set(data["detail"]["people"].array.map(\.id));return data["detail"]["shifts"].array.filter{team ? allowed.contains($0["userId"].string) : $0["userId"].string==store.userID}}
+    private func scopedShifts(_ data:APIValue)->[APIValue]{let allowed=Set(data["detail"]["people"].array.map(\.id));return data["detail"]["shifts"].array.filter{team ? allowed.contains($0["userId"].string) && (user=="all" || $0["userId"].string==user) : $0["userId"].string==store.userID}}
     private func days(_ data:APIValue,now:Date=Date())->[APIAttendanceDay]{APIAttendanceLogic.days(shifts:scopedShifts(data),intervals:data["detail"]["intervals"].array,from:APIAttendanceLogic.monthDate(month),to:APIAttendanceLogic.calendar.date(byAdding:.month,value:1,to:APIAttendanceLogic.monthDate(month))!,now:now)}
     var body:some View {
         let data=projected,records=days(data),totals=APIAttendanceLogic.total(records)
@@ -47,7 +47,7 @@ struct APIAttendanceView:View {
                     monthControl
                 }.listRowBackground(Color.clear).listRowSeparator(.hidden).listRowInsets(.init(top:4,leading:0,bottom:4,trailing:0))
                 if team{Section{teamStats(data,records:records);teamPeople(data)}.listRowBackground(Color.clear).listRowSeparator(.hidden).listRowInsets(.init(top:4,leading:0,bottom:4,trailing:0))}
-                else{Section{APIAttendanceMetrics(items:[("Odpracováno",APIAttendanceLogic.hours(totals.confirmed),"clock"),("Pracovních dnů",String(totals.days),"calendar.badge.checkmark"),("Průměr za den",APIAttendanceLogic.hours(totals.average),"chart.line.uptrend.xyaxis"),("Na zakázkách",data["detail"]["activitySchema"].int==1 ? APIAttendanceLogic.hours(totals.work) : "Nedostupné","list.clipboard")]);Text("Souhrny obsahují jen uzavřené a odeslané směny. Otevřený den je průběžný.").font(.caption).foregroundStyle(.secondary)}.listRowBackground(Color.clear).listRowSeparator(.hidden).listRowInsets(.init(top:4,leading:0,bottom:4,trailing:0))}
+                else{Section{APIAttendanceMetrics(items:[(data["detail"]["activitySchema"].int==1 ? "Odpracováno" : "Uzavřená přítomnost",APIAttendanceLogic.hours(totals.confirmed),"clock"),("Pracovních dnů",String(totals.days),"calendar.badge.checkmark"),(data["detail"]["activitySchema"].int==1 ? "Průměr za den" : "Průměr přítomnosti",APIAttendanceLogic.hours(totals.average),"chart.line.uptrend.xyaxis"),("Na zakázkách",data["detail"]["activitySchema"].int==1 ? APIAttendanceLogic.hours(totals.work) : "Nedostupné","list.clipboard")]);Text("Souhrny obsahují jen uzavřené a odeslané směny. Otevřený den je průběžný.").font(.caption).foregroundStyle(.secondary)}.listRowBackground(Color.clear).listRowSeparator(.hidden).listRowInsets(.init(top:4,leading:0,bottom:4,trailing:0))}
                 Section{APIAttendanceChart(store:store,data:data,month:selectedMonth,user:user,allowedUsers:team ? Set(data["detail"]["people"].array.map(\.id)) : [store.userID],week:$chartWeek)}.listRowBackground(Color.clear).listRowInsets(.init(top:0,leading:0,bottom:0,trailing:0))
                 Section("Pracovní dny") {
                     let filtered=records.filter{(dayFilter==nil || APIJobsPresentation.day($0.day)==dayFilter) && (!activeOnly || $0.open)}
@@ -62,7 +62,7 @@ struct APIAttendanceView:View {
             if let error=problem ?? model.problem{Section{Text(error).foregroundStyle(DiaryStyle.warning);Button("Zkusit znovu"){Task{await load(refresh:true)}}}}
         }.listStyle(.insetGrouped).listSectionSpacing(10).scrollContentBackground(.hidden).background(DiaryStyle.background)
             .navigationTitle("Docházka").navigationBarTitleDisplayMode(.inline)
-            .toolbar{APIHeader(store:store);ToolbarItem(placement:.topBarTrailing){Menu{Button("Vybrat měsíc",systemImage:"calendar"){calendar=true};if store.manager{Button("Export měsíční docházky",systemImage:"square.and.arrow.up"){export=true}}}label:{Image(systemName:"calendar")}.buttonStyle(.automatic).accessibilityLabel("Období a export").accessibilityIdentifier("attendance-period-menu")}}
+            .toolbar{APIHeader(store:store);ToolbarItem(placement:.topBarTrailing){Menu{Button("Vybrat měsíc",systemImage:"calendar"){calendar=true};if store.manager{Button("Export měsíční docházky",systemImage:"square.and.arrow.up"){export=true}.disabled(data["detail"]["activitySchema"].int != 1)}}label:{Image(systemName:"calendar")}.buttonStyle(.automatic).accessibilityLabel("Období a export").accessibilityIdentifier("attendance-period-menu")}}
             .task(id:key){await load()}.refreshable{await store.resume(refreshViews:false);await load(refresh:true)}
             .sheet(isPresented:$calendar){APIAttendanceMonthPicker(month:$selectedMonth)}
             .sheet(item:$action){APIAttendanceAction(store:store,action:$0)}
@@ -82,7 +82,7 @@ struct APIAttendanceView:View {
         }.font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("attendance-freshness")
     }
     private func teamFilters(_ data:APIValue)->some View {
-        VStack(spacing:6){Picker("Pracovník",selection:$employee){Text("Všichni pracovníci").tag("all");ForEach(data["employees"].array,id:\.id){Text($0.title).tag($0.id)}};Picker("Kategorie",selection:$discipline){Text("Všechny kategorie").tag("all");Text("Dr. Závlaha").tag("irrigation");Text("Dr. Garden").tag("garden");Text("Obojí").tag("both")}}.pickerStyle(.menu)
+        VStack(spacing:6){Picker("Pracovník",selection:$employee){Text("Všichni pracovníci").tag("all");ForEach(data["employees"].array,id:\.id){Text($0.title).tag($0.id)}};if data["detail"]["activitySchema"].int==1{Picker("Kategorie",selection:$discipline){Text("Všechny kategorie").tag("all");Text("Dr. Závlaha").tag("irrigation");Text("Dr. Garden").tag("garden");Text("Obojí").tag("both")}}}.pickerStyle(.menu)
     }
     private func teamStats(_ data:APIValue,records:[APIAttendanceDay])->some View {
         let detail=data["detail"],today=APIAttendanceLogic.calendar.startOfDay(for:Date()),next=APIAttendanceLogic.calendar.date(byAdding:.day,value:1,to:today)!
@@ -95,7 +95,7 @@ struct APIAttendanceView:View {
         let detail=data["detail"],today=APIAttendanceLogic.calendar.startOfDay(for:Date()),next=APIAttendanceLogic.calendar.date(byAdding:.day,value:1,to:today)!
         let records=APIAttendanceLogic.days(shifts:scopedShifts(data),intervals:detail["intervals"].array,from:today,to:next)
         VStack(alignment:.leading,spacing:10){Text("Dnešní docházka týmu").font(.headline)
-            ForEach(detail["people"].array,id:\.id){person in
+            ForEach(detail["people"].array.filter{user=="all" || $0.id==user},id:\.id){person in
                 let day=records.first{$0.userID==person.id},state=detail["states"].array.first{$0["userId"].string==person.id}?["active"] ?? .null
                 NavigationLink{APIAttendanceView(store:store,initialUser:person.id,initialMonth:month)}label:{APIAttendancePersonRow(person:person,day:day,state:state)}.buttonStyle(.plain).accessibilityIdentifier("attendance-person-"+person.id)
             }
@@ -103,18 +103,18 @@ struct APIAttendanceView:View {
     }
     @ViewBuilder private func reviewSections(_ data:APIValue)->some View {
         if store.manager,!data["pendingCorrections"].array.isEmpty{Section("Čeká na schválení") {ForEach(data["pendingCorrections"].array,id:\.id){c in VStack(alignment:.leading,spacing:8){Text(c["userName"].string).font(.headline);Text(c["reason"].string);HStack{Button("Schválit"){action=APIAttendanceActions.review(c,approve:true)};Button("Zamítnout"){action=APIAttendanceActions.review(c,approve:false)}}}}}}
-        if store.manager{Section{Button("Export měsíční docházky",systemImage:"square.and.arrow.up"){export=true}.buttonStyle(.automatic).frame(minHeight:44)}}
+        if store.manager{Section{Button("Export měsíční docházky",systemImage:"square.and.arrow.up"){export=true}.disabled(data["detail"]["activitySchema"].int != 1).buttonStyle(.automatic).frame(minHeight:44)}}
     }
     private func load(refresh:Bool=false)async{await model.load(store:store,month:month,user:user,discipline:team ? discipline : "all",refresh:refresh)}
     private func punch(_ data:APIValue)async {
-        guard !busy else{return};busy=true;defer{busy=false};if punchAt==nil{punchAt=Date().timeIntervalSince1970*1000}
+        guard !busy else{return};busy=true;defer{busy=false};if punchAt==nil{punchAt=(Date().timeIntervalSince1970*1000).rounded()}
         do{try await APIAttendanceWorkflow.punch(store:store,activeShift:data["activeShift"],location:location,operationID:punchID,offline:data["detail"]["activitySchema"].int==1,at:punchAt);punchID=UUID().uuidString;punchAt=nil;problem=nil}catch{problem=error.localizedDescription}
     }
     private func activity(_ kind:String,data:APIValue)async {
         guard !busy,store.writer,!store.isRolePreview else{return};busy=true;defer{busy=false}
         let state=data["detail"]["states"].array.first{$0["userId"].string==store.userID} ?? .null,active=state["active"],shift=data["activeShift"]
         let prior=data["detail"]["intervals"].array.filter{$0["userId"].string==store.userID && $0["endAt"]==active["startAt"]}.max{$0["startAt"].double<$1["startAt"].double}
-        let id=UUID().uuidString,body=APIValue.object(["operationId":.s(id),"action":.s(kind),"at":.number(Date().timeIntervalSince1970*1000),"version":state["version"].isNull ? .n(0) : state["version"],"shiftId":shift["id"],"shiftVersion":shift["version"],"resumeKind":prior?["kind"] ?? .s(""),"resumeJobId":prior?["jobId"] ?? .null])
+        let id=UUID().uuidString,body=APIValue.object(["operationId":.s(id),"action":.s(kind),"at":.number((Date().timeIntervalSince1970*1000).rounded()),"version":state["version"].isNull ? .n(0) : state["version"],"shiftId":shift["id"],"shiftVersion":shift["version"],"resumeKind":prior?["kind"] ?? .s(""),"resumeJobId":prior?["jobId"] ?? .null])
         do{_ = try await store.write("/api/attendance/activities",method:"POST",body:body,offline:true,operationID:id,dependsOn:store.outbox.filter{$0.state=="pending" && ($0.path.hasPrefix("/api/attendance/") || $0.path.hasSuffix("/time/actions"))}.map(\.id));problem=nil}catch{problem=error.localizedDescription}
     }
     static func time(_ value:APIValue)->String{value.isNull ? "" : APIAttendanceLogic.label(APIAttendanceLogic.date(value.double),format:"HH:mm")}

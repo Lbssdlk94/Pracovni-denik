@@ -48,7 +48,8 @@ enum APIAttendanceLogic {
                         slices.append(APIAttendanceSlice(start:start,end:end,kind:kind,job:row["job"],pending:pending,confirmed:confirmed))
                     }
                     if shifts.contains(where:{$0["endAt"].isNull && calendar.startOfDay(for:date($0["startAt"].double))<calendar.startOfDay(for:now)}){issues.insert("Neukončená docházka z předchozího dne; může jít o směnu přes půlnoc")}
-                    if shifts.contains(where:{$0["endAt"].isNull && limit-$0["startAt"].double>16*3600000}){issues.insert("Dlouhá otevřená směna vyžaduje kontrolu")}
+                    if shifts.contains(where:{($0["endAt"].isNull ? limit : $0["endAt"].double)-$0["startAt"].double>16*3600000}){issues.insert("Dlouhá směna vyžaduje kontrolu")}
+                    if shifts.contains(where:{!$0["endAt"].isNull && $0["endAt"].double<=$0["startAt"].double}){issues.insert("Neplatné pořadí příchodu a odchodu")}
                     output.append(APIAttendanceDay(day:day,userID:user,name:shifts.first?["userName"].string ?? "",shifts:shifts,slices:slices,issues:issues.sorted()))
                 }
             }

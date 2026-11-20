@@ -1,6 +1,5 @@
 -- Existing interval ledger gains attendance-only breaks/explicit other activities.
 -- No new ledger; all existing rows, IDs, versions and guards are preserved.
---> statement-breakpoint
 DROP TRIGGER job_time_no_overlap_insert;
 --> statement-breakpoint
 DROP TRIGGER job_time_no_overlap_update;

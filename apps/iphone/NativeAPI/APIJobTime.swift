@@ -27,7 +27,7 @@ enum APIWorkTimeLogic {
                 let action=input["action"].string,kind=action=="resume" ? input["resumeKind"].string : action
                 if operation.path.hasSuffix("/punch") || kind.isEmpty || kind=="stop"{state["active"] = .null}
                 else {
-                    let row=APIValue.object(["id":.s(input["operationId"].string+"_interval"),"userId":.s(id),"userName":store.me["user"]["name"],"jobId":action=="resume" ? input["resumeJobId"] : .null,"kind":.s(kind),"startAt":input["at"],"endAt":.null,"shiftId":input["shiftId"],"pending":.bool(true),"version":.n(1)])
+                    let row=APIValue.object(["id":.s(input["operationId"].string+"_interval"),"userId":.s(id),"userName":store.me["user"]["name"],"jobId":action=="resume" ? input["resumeJobId"] : kind=="break" && old["jobId"].string != "unavailable" ? old["jobId"] : .null,"kind":.s(kind),"startAt":input["at"],"endAt":.null,"shiftId":input["shiftId"],"pending":.bool(true),"version":.n(1)])
                     state["active"]=row
                     if snapshot["attendanceProjection"].bool || !row["jobId"].string.isEmpty && row["jobId"].string==snapshot["job"].id{intervals.append(row)}
                 }
@@ -114,7 +114,7 @@ struct APIJobTimeView:View {
                             let active=state["active"],here=active["jobId"].string==job.id,kind=here ? active["kind"].string : "stopped"
                             VStack(alignment:.leading,spacing:8){
                                 if mayManage && state["assigned"].bool{Toggle(state["name"].string,isOn:Binding(get:{selection.contains(state["userId"].string)},set:{if $0{selection.insert(state["userId"].string)}else{selection.remove(state["userId"].string)}}))}else{Text(state["name"].string).font(.headline)}
-                                Label(here ? APIWorkTimeLogic.titles[kind] ?? kind : active.isNull ? "Práce ukončena" : "Na jiné zakázce",systemImage:kind=="travel" ? "location.fill" : kind=="break" ? "pause.circle.fill" : kind=="work" ? "circle.fill" : "checkmark.circle")
+                                Label(here ? APIWorkTimeLogic.titles[kind] ?? kind : active.isNull ? "Práce ukončena" : active["jobId"].string.isEmpty ? "Jiná pracovní činnost" : "Na jiné zakázce",systemImage:kind=="travel" ? "location.fill" : kind=="break" ? "pause.circle.fill" : kind=="work" ? "circle.fill" : "checkmark.circle")
                                     .font(.subheadline.weight(.semibold)).foregroundStyle(kind=="work" ? Color.green : kind=="travel" ? Color.blue : kind=="break" ? Color.orange : Color.secondary)
                                 if here{Text("Od "+Date(timeIntervalSince1970:active["startAt"].double/1000).formatted(date:.abbreviated,time:.shortened)+" · "+APIWorkTimeLogic.hours(APIWorkTimeLogic.duration(active,now:context.date))).font(.caption)}
                                 if state["pending"].bool{Text("Čeká na odeslání").font(.caption)}

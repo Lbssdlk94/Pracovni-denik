@@ -272,6 +272,20 @@ final class APIStore: ObservableObject {
             let rows=Array(APIAttendanceLogic.unique(old["intervals"].array+result["intervals"].array).sorted{$0["startAt"].double>$1["startAt"].double}.prefix(512))
             vault.state.cache["/api/attendance/state"] = .object(["states":.array([result["state"]]),"intervals":.array(rows)])
         }
+        if path=="/api/attendance/punch",!result["shift"].id.isEmpty {
+            let shift=result["shift"]
+            for key in Array(vault.state.cache.keys) where key.hasPrefix("/api/attendance?") {
+                var cached=vault.state.cache[key] ?? .null
+                cached["activeShift"]=shift["endAt"].isNull ? shift : .null
+                cached["shifts"] = .array(APIAttendanceLogic.unique(cached["shifts"].array+[shift]))
+                if !cached["detail"].isNull {
+                    cached["detail"]["shifts"] = .array(APIAttendanceLogic.unique(cached["detail"]["shifts"].array+[shift]))
+                    cached["detail"]["ownToday"]["shifts"] = .array(APIAttendanceLogic.unique(cached["detail"]["ownToday"]["shifts"].array+[shift]))
+                    if !result["state"].isNull{cached["detail"]["ownToday"]["state"]=result["state"]}
+                }
+                vault.state.cache[key]=cached
+            }
+        }
         let roots:[String:String]=["jobs":"job","customers":"customer","defects":"defect","vehicles":"vehicle","subscriptions":"subscription"]
         let parts=path.split(separator:"/");guard parts.count>=2,let singular=roots[String(parts[1])]else{return}
         if parts.count>=4,parts[1]=="jobs",parts[3]=="time",!result["intervals"].isNull{vault.state.cache["/api/jobs/"+String(parts[2])+"/time"]=result}

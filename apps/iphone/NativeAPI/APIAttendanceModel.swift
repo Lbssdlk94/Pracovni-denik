@@ -16,6 +16,7 @@ import SwiftUI
     }
     func projected(store:APIStore)->APIValue {
         var value=data,detail=data["detail"]
+        if detail.isNull{detail = .object(["people":store.manager ? data["employees"] : .array([store.me["user"]]),"shifts":data["shifts"],"intervals":.array([])])}
         let states=detail["states"].array
         let own=detail["ownToday"]["state"].merged(["userId":.s(store.userID),"name":store.me["user"]["name"]])
         let seed=APIValue.object(["attendanceProjection":.bool(true),"job":.null,"states":.array(states.filter{$0["userId"].string != store.userID}+[own]),"intervals":.array(APIAttendanceLogic.unique(detail["intervals"].array+detail["ownToday"]["intervals"].array))])

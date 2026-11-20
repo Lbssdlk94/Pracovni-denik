@@ -1,4 +1,4 @@
-import {attendanceDetail,attendanceActivity} from './attendance-detail.js';
+import {attendanceDetail,attendanceActivity,attendancePublicIntervals} from './attendance-detail.js';
 import {timeAttendanceSummary,timeState,timeIntervalDTO} from './job-time.js';
 import {attendanceMonthBounds,attendanceDuration,attendanceDayBounds,attendanceOverview} from '../web/attendance-model.js';
 export async function handleAttendance(request,env,m,helpers,features){
@@ -8,7 +8,7 @@ export async function handleAttendance(request,env,m,helpers,features){
  const dto=row=>({id:row.id,userId:row.user_id,userName:row.user_name,startAt:row.start_at,endAt:row.end_at,version:row.version,startGpsStatus:row.start_gps_status,endGpsStatus:row.end_gps_status,corrected:!!row.last_correction_id,...(manager?{startPosition:row.start_position?JSON.parse(row.start_position):null,endPosition:row.end_position?JSON.parse(row.end_position):null,recordedStartAt:row.recorded_start_at,recordedEndAt:row.recorded_end_at}:{})});
  const correction=row=>({id:row.id,kind:row.kind,shiftId:row.shift_id,userId:row.user_id,userName:row.user_name,baseVersion:row.base_version,oldStartAt:row.old_start_at,oldEndAt:row.old_end_at,startAt:row.proposed_start_at,endAt:row.proposed_end_at,reason:row.reason,status:row.status,createdAt:row.created_at,createdBy:row.created_by,reviewedAt:row.reviewed_at,reviewedBy:row.reviewed_by,reviewNote:row.review_note});
  let includeActivity=request.headers.get('x-attendance-client')==='v1';
- const punchResult=async(shift,replayed=false)=>({shift:dto(shift),...(includeActivity?{state:await timeState(env,m.user_id,m),intervals:shift.end_at==null?[]:(await all(env.DB,'SELECT * FROM job_time_intervals WHERE shift_id=? AND user_id=? AND end_at=?',shift.id,m.user_id,shift.end_at)).map(r=>timeIntervalDTO(r))}:{}),...(replayed?{replayed:true}:{})});
+ const punchResult=async(shift,replayed=false)=>({shift:dto(shift),...(includeActivity?{state:await timeState(env,m.user_id,m),intervals:shift.end_at==null?[]:await attendancePublicIntervals(env,m,await all(env.DB,'SELECT * FROM job_time_intervals WHERE shift_id=? AND user_id=? AND end_at=?',shift.id,m.user_id,shift.end_at))}:{}),...(replayed?{replayed:true}:{})});
  const conflict=()=>fail(409,'Záznam se změnil, směna se překrývá s jinou nebo už existuje čekající oprava. Obnovte docházku a zkontrolujte údaje.');
  const scoped=()=>{const userId=url.searchParams.get('userId')||m.user_id;if(!manager&&userId!==m.user_id)fail(403,'Můžete zobrazit pouze vlastní docházku.');if(userId!=='all')validId(userId);else if(!manager)fail(403,'Přehled týmu je pouze pro správce.');return userId;};
  if(path==='/api/attendance/activities'&&method==='POST'){return json(await attendanceActivity(env,m,await body(request,5000),fail));}

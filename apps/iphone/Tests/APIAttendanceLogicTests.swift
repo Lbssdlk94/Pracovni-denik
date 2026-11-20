@@ -46,4 +46,40 @@ final class APIAttendanceLogicTests:XCTestCase {
         XCTAssertTrue(csv.hasPrefix("\u{FEFF}"));XCTAssertTrue(csv.contains("'=CMD"));XCTAssertTrue(csv.contains("Průběžné hodiny"));XCTAssertTrue(csv.contains("\"0.0000\";\"2.0000\""))
     }
     func testCzechCalendarUsesMondayAndMonthBoundaries(){XCTAssertEqual(APIAttendanceLogic.calendar.firstWeekday,2);XCTAssertEqual(APIAttendanceLogic.month(APIAttendanceLogic.monthDate("2026-11")),"2026-11")}
+    @MainActor func testPendingBreakPreservesJobAssociationAndDoesNotStopColleagues()async throws {
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start()
+        let sample=APIAttendanceFixture.example(me:store.me)
+        APIFixtureProtocol.lock.withLock{APIFixtureProtocol.records["fixture-attendance"]=sample}
+        let model=APIAttendanceModel();await model.load(store:store,month:String(store.today.prefix(7)),user:store.userID,discipline:"all")
+        let own=sample["detail"]["ownToday"]["state"],shift=sample["activeShift"],op="attendance-offline-break"
+        store.online=false
+        _ = try await store.write("/api/attendance/activities",method:"POST",body:.object(["operationId":.s(op),"action":.s("break"),"at":.number((Date().timeIntervalSince1970*1000).rounded()),"version":own["version"],"shiftId":shift["id"],"shiftVersion":shift["version"]]),offline:true,operationID:op)
+        let projected=model.projected(store:store),states=projected["detail"]["states"].array,active=states.first{$0["userId"].string==store.userID}!["active"]
+        XCTAssertEqual(active["kind"].string,"break");XCTAssertEqual(active["jobId"].string,"fixture-progress")
+        XCTAssertEqual(APIJobDetailAction.resolve(job:.object(["id":.s("fixture-progress"),"status":.s("in_progress")]),states:states,userID:store.userID,travelEnabled:true),.resume)
+        XCTAssertEqual(states.first{$0["userId"].string=="attendance-marek"}?["active"]["kind"].string,"break")
+        XCTAssertEqual(store.outbox.count,1)
+    }
+    @MainActor func testCapturedPunchIsAnIntegerAndQueueSurvivesEncryptedRestartWithoutDuplicates()async throws {
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start();store.online=false
+        let captured=Date().timeIntervalSince1970*1000
+        try await APIAttendanceWorkflow.punch(store:store,activeShift:.null,location:APILocation(),operationID:"captured-punch",offline:true,at:captured)
+        let operation=try XCTUnwrap(store.outbox.first),at=operation.body!["at"].double
+        XCTAssertEqual(at,at.rounded());XCTAssertEqual(at,captured.rounded())
+        let directory=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString,isDirectory:true);defer{try? FileManager.default.removeItem(at:directory)}
+        let key=Data(repeating:41,count:32),vault=try APIVault(scope:store.scope,directory:directory,keyMaterial:key)
+        try vault.enqueue(operation)
+        let restored=try APIVault(scope:store.scope,directory:directory,keyMaterial:key);try restored.enqueue(operation)
+        XCTAssertEqual(restored.state.outbox.count,1);XCTAssertEqual(restored.state.outbox.first?.body?["at"].double,at)
+        var changed=operation.body!;changed["at"] = .number(at+1000)
+        let duplicate=APIMutation(id:operation.id,path:operation.path,method:operation.method,body:changed,bytes:nil,contentType:operation.contentType,headers:operation.headers,scope:operation.scope,dependsOn:[],draftKey:nil)
+        XCTAssertThrowsError(try restored.enqueue(duplicate));XCTAssertEqual(restored.state.outbox.count,1)
+    }
+    @MainActor func testDeniedAttendanceReloadClearsVisibleData()async {
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start();let model=APIAttendanceModel()
+        await model.load(store:store,month:String(store.today.prefix(7)),user:store.userID,discipline:"all");XCTAssertFalse(model.data.isNull)
+        APIFixtureProtocol.lock.withLock{APIFixtureProtocol.forcedStatus["/api/attendance"]=403}
+        await model.load(store:store,month:String(store.today.prefix(7)),user:store.userID,discipline:"all",refresh:true);XCTAssertTrue(model.data.isNull);XCTAssertNotNil(model.problem)
+    }
+
 }

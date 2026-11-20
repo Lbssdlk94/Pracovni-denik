@@ -40,7 +40,7 @@ enum APIAttendanceFixture {
         let old=state["active"],kind=input["action"].string=="resume" ? input["resumeKind"].string : input["action"].string
         if let i=intervals.firstIndex(where:{$0.id==old.id}){intervals[i]["endAt"]=input["at"];intervals[i]["version"] = .n(intervals[i]["version"].int+1)}
         if kind=="stop" || kind.isEmpty{state["active"] = .null}else{
-            let row=APIValue.object(["id":.s(input["operationId"].string+"_interval"),"userId":.s(user),"userName":me["user"]["name"],"kind":.s(kind),"jobId":input["action"].string=="resume" ? input["resumeJobId"] : .null,"startAt":input["at"],"endAt":.null,"version":.n(1),"shiftId":input["shiftId"]]);state["active"]=row;intervals.append(row)
+            let row=APIValue.object(["id":.s(input["operationId"].string+"_interval"),"userId":.s(user),"userName":me["user"]["name"],"kind":.s(kind),"jobId":input["action"].string=="resume" ? input["resumeJobId"] : kind=="break" ? old["jobId"] : .null,"startAt":input["at"],"endAt":.null,"version":.n(1),"shiftId":input["shiftId"]]);state["active"]=row;intervals.append(row)
         }
         state["version"] = .n(state["version"].int+1);states[position]=state;data["detail"]["states"] = .array(states);data["detail"]["intervals"] = .array(intervals);data["detail"]["ownToday"]["state"]=state;data["detail"]["ownToday"]["intervals"] = .array(intervals.filter{$0["userId"].string==user})
         return .object(["state":state,"intervals":.array(intervals.filter{$0["userId"].string==user})])

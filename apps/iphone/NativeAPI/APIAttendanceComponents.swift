@@ -4,18 +4,19 @@ import Charts
 struct APIAttendanceLiveCard:View {
     @ObservedObject var store:APIStore
     let data:APIValue,busy:Bool,punch:()->Void,activity:(String)->Void
+    @Environment(\.dynamicTypeSize) private var size
     private var shift:APIValue{data["activeShift"]}
     private var personal:APIValue{data["detail"]["states"].array.first{$0["userId"].string==store.userID}?["active"] ?? .null}
-    private var writable:Bool{store.writer && !store.isRolePreview && !busy}
+    private var writable:Bool{store.writer && !store.isRolePreview && !busy && (store.online || store.enabled("offline"))}
     var body:some View {
         VStack(alignment:.leading,spacing:12){
-            HStack{Text("Pracovní den").font(.headline);Spacer();Text(shift.isNull ? "Mimo práci" : personal["kind"].string=="break" ? "Přestávka" : "V práci").font(.caption.weight(.semibold)).padding(.horizontal,8).padding(.vertical,4).background(DiaryStyle.surface.opacity(0.6),in:Capsule())}
+            HStack{Text("Pracovní den").font(.headline);Spacer();Text(shift.isNull ? "Mimo práci" : personal["kind"].string=="break" ? "Přestávka" : "V práci").font(.caption.weight(.semibold)).padding(.horizontal,8).padding(.vertical,4).background(DiaryStyle.surface.opacity(0.6),in:Capsule());if !shift.isNull,data["detail"]["activitySchema"].int==1{activityMenu}}
             TimelineView(.periodic(from:.now,by:1)){context in
                 let start=APIAttendanceLogic.calendar.startOfDay(for:context.date),end=APIAttendanceLogic.calendar.date(byAdding:.day,value:1,to:start)!
                 let day=APIAttendanceLogic.days(shifts:data["detail"]["shifts"].array.filter{$0["userId"].string==store.userID},intervals:data["detail"]["intervals"].array,from:start,to:end,now:context.date).first
                 VStack(spacing:7){
-                    Text(APIDashboardLogic.clock(day?.net ?? 0)).font(.system(.largeTitle,design:.rounded,weight:.bold)).monospacedDigit().foregroundStyle(DiaryStyle.accent).minimumScaleFactor(0.6).lineLimit(1).accessibilityLabel("Dnes odpracováno").accessibilityValue(APIAttendanceLogic.hours(day?.net ?? 0)).accessibilityIdentifier("attendance-live-clock")
-                    Text(day?.open==true ? "Dnes průběžně · neuzavřeno" : "Dnes odpracováno").font(.caption).foregroundStyle(.secondary)
+                    Text(APIDashboardLogic.clock(day?.net ?? 0)).font(.system(.largeTitle,design:.rounded,weight:.bold)).monospacedDigit().foregroundStyle(DiaryStyle.accent).minimumScaleFactor(0.6).lineLimit(1).accessibilityLabel(data["detail"]["activitySchema"].int==1 ? "Dnes odpracováno" : "Dnešní přítomnost").accessibilityValue(APIAttendanceLogic.hours(day?.net ?? 0)).accessibilityIdentifier("attendance-live-clock")
+                    Text(data["detail"]["activitySchema"].int != 1 ? "Přítomnost · rozdělení není dostupné" : day?.open==true ? "Dnes průběžně · neuzavřeno" : "Dnes odpracováno").font(.caption).foregroundStyle(.secondary)
                     ViewThatFits(in:.horizontal){HStack(spacing:20){clockFacts(day)};VStack(alignment:.leading,spacing:6){clockFacts(day)}}
                 }.frame(maxWidth:.infinity)
             }
@@ -25,17 +26,25 @@ struct APIAttendanceLiveCard:View {
                 }.padding(10).background(DiaryStyle.warning.opacity(0.12),in:RoundedRectangle(cornerRadius:14)).accessibilityIdentifier("attendance-unclosed-warning")
             }
             if !shift.isNull,data["detail"]["activitySchema"].int==1 {
-                Button{activity(personal["kind"].string=="break" ? "resume" : "break")}label:{Label(personal["kind"].string=="break" ? "Ukončit přestávku" : "Zahájit přestávku",systemImage:personal["kind"].string=="break" ? "play.circle" : "pause.circle").frame(maxWidth:.infinity)}.diaryBubble(.secondary).disabled(!writable).accessibilityIdentifier("attendance-break")
-                Menu {
-                    if personal["kind"].string=="break"{Button("Ukončit přestávku bez obnovení zakázky"){activity("stop")}}
-                    else if personal["kind"].string=="other"{Button("Ukončit ostatní činnost"){activity("stop")}}
-                    else{Button("Zahájit ostatní pracovní činnost"){activity("other")}}
-                }label:{Label("Další pracovní činnosti",systemImage:"ellipsis").frame(maxWidth:.infinity)}.diaryBubble().disabled(!writable)
-            }
-            Button(action:punch){Text(shift.isNull ? "Zahájit pracovní den" : "Zaznamenat odchod").frame(maxWidth:.infinity)}.diaryBubble(.primary).disabled(!writable || !store.online && data["detail"]["activitySchema"].int != 1).accessibilityIdentifier("attendance-punch")
+                if size.isAccessibilitySize{VStack(spacing:8){pauseButton;punchButton}}
+                else{HStack(spacing:8){pauseButton;punchButton}}
+            }else{punchButton}
             if busy{ProgressView("Ukládám docházku…")}
             if !store.online{Text("Průběžný čas vychází z uložených údajů. Čekající změny se potvrdí po synchronizaci.").font(.caption).foregroundStyle(.secondary)}
         }.padding(16).background(DiaryStyle.soft,in:RoundedRectangle(cornerRadius:24))
+    }
+    private var pauseButton:some View {
+        Button{activity(personal["kind"].string=="break" ? "resume" : "break")}label:{Label(personal["kind"].string=="break" ? "Ukončit přestávku" : "Přestávka",systemImage:personal["kind"].string=="break" ? "play.circle" : "pause.circle").frame(maxWidth:.infinity)}.diaryBubble(.secondary).disabled(!writable).accessibilityLabel(personal["kind"].string=="break" ? "Ukončit přestávku" : "Zahájit přestávku").accessibilityIdentifier("attendance-break")
+    }
+    private var punchButton:some View {
+        Button(action:punch){Text(shift.isNull ? "Zahájit pracovní den" : "Zaznamenat odchod").frame(maxWidth:.infinity)}.diaryBubble(.primary).disabled(!writable || !store.online && data["detail"]["activitySchema"].int != 1).accessibilityIdentifier("attendance-punch")
+    }
+    private var activityMenu:some View {
+        Menu {
+            if personal["kind"].string=="break"{Button("Ukončit přestávku bez obnovení zakázky"){activity("stop")}}
+            else if personal["kind"].string=="other"{Button("Ukončit ostatní činnost"){activity("stop")}}
+            else{Button("Zahájit ostatní pracovní činnost"){activity("other")}}
+        }label:{Image(systemName:"ellipsis")}.diaryBubble(.icon).disabled(!writable).accessibilityLabel("Další pracovní činnosti")
     }
     @ViewBuilder private func clockFacts(_ day:APIAttendanceDay?)->some View {
         VStack{Text("Příchod").foregroundStyle(.secondary);Text((day?.first.isNull==false ? APIAttendanceView.time(day!.first) : "—")).fontWeight(.semibold)}

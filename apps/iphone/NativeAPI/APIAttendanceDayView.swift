@@ -15,26 +15,29 @@ struct APIAttendanceDayView:View {
                 Text(APIAttendanceLogic.label(day.day,format:"EEEE d. MMMM yyyy").capitalized).font(.title3.bold())
                 if store.manager{Text(day.name).font(.headline)}
                 Text(APIAttendanceLogic.hours(day.net)).font(.largeTitle.bold()).monospacedDigit().foregroundStyle(DiaryStyle.accent)
-                Text(day.open ? "Čistá pracovní doba · průběžně, neuzavřeno" : "Čistá pracovní doba · uzavřeno").font(.caption).foregroundStyle(.secondary)
+                Text(data["detail"]["activitySchema"].int != 1 ? "Celková přítomnost · rozdělení není dostupné" : day.open ? "Čistá pracovní doba · průběžně, neuzavřeno" : "Čistá pracovní doba · uzavřeno").font(.caption).foregroundStyle(.secondary)
                 facts
                 if !day.issues.isEmpty{ForEach(day.issues,id:\.self){Label($0,systemImage:"exclamationmark.triangle").foregroundStyle(DiaryStyle.warning).font(.subheadline)}}
                 if !store.online{Label("Offline · uložený přehled dne",systemImage:"wifi.slash").font(.caption)}
             }
             Section("Rozdělení pracovního dne") {
                 if data["detail"]["activitySchema"].int != 1{Text("Server neposkytuje podrobné intervaly. Nezařazený čas automaticky nepovažujeme za jinou činnost.").font(.caption)}
-                Chart(totals,id:\.0){kind,value in BarMark(x:.value("Čas",value/3600000),y:.value("Den","Den")).foregroundStyle(color(kind))}.chartXAxis(.hidden).chartYAxis(.hidden).frame(height:22).accessibilityLabel("Grafické rozdělení pracovního dne")
+                if data["detail"]["activitySchema"].int==1{Chart(totals,id:\.0){kind,value in BarMark(x:.value("Čas",value/3600000),y:.value("Den","Den")).foregroundStyle(color(kind))}.chartXAxis(.hidden).chartYAxis(.hidden).frame(height:22).accessibilityLabel("Grafické rozdělení pracovního dne")
                 ForEach(totals,id:\.0){kind,value in HStack{Label(APIAttendanceLogic.kindTitles[kind] ?? kind,systemImage:kind=="break" ? "pause.circle.fill" : "circle.fill").foregroundStyle(color(kind));Spacer();Text(APIAttendanceLogic.hours(value)).monospacedDigit()}.font(.subheadline)}
+                }
                 Text("Zakázkové hodiny, přejezdy a ostatní činnosti jsou částmi docházky. Nepřičítají se k ní podruhé.").font(.caption).foregroundStyle(.secondary)
             }
-            Section("Časová osa") {
+            if data["detail"]["activitySchema"].int==1{Section("Časová osa") {
                 ForEach(day.slices){slice in
                     VStack(alignment:.leading,spacing:5){
                         Text(APIAttendanceView.time(.number(slice.start))+" – "+APIAttendanceView.time(.number(slice.end))).font(.caption).monospacedDigit().foregroundStyle(.secondary)
                         if !slice.job.id.isEmpty{NavigationLink{APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:slice.job)}label:{Label(slice.job.title,systemImage:"list.clipboard")}.accessibilityIdentifier("attendance-timeline-job-"+slice.job.id)}
                         else{Label(APIAttendanceLogic.kindTitles[slice.kind] ?? "Nepřiřazený čas",systemImage:slice.kind=="break" ? "pause.circle" : "clock")}
+                        if !slice.job.id.isEmpty{Text(APIAttendanceLogic.kindTitles[slice.kind] ?? slice.kind).font(.caption).foregroundStyle(.secondary)}
                         Text(APIAttendanceLogic.hours(slice.milliseconds)+(slice.pending ? " · čeká na synchronizaci" : slice.confirmed ? "" : " · průběžně")).font(.caption)
                     }.padding(.vertical,4)
                 }
+            }
             }
             Section("Směny a původní podrobnosti") {
                 ForEach(day.shifts,id:\.id){shift in
@@ -52,7 +55,7 @@ struct APIAttendanceDayView:View {
         }.navigationTitle("Pracovní den").navigationBarTitleDisplayMode(.inline).scrollContentBackground(.hidden).background(DiaryStyle.background)
             .sheet(item:$localAction){APIAttendanceAction(store:store,action:$0)}
     }
-    private var facts:some View{VStack(alignment:.leading,spacing:6){LabeledContent("Příchod",value:APIAttendanceView.time(day.first));LabeledContent("Odchod",value:day.last.isNull ? "Neukončeno" : APIAttendanceView.time(day.last));LabeledContent("Celková přítomnost",value:APIAttendanceLogic.hours(day.gross));LabeledContent("Přestávky",value:APIAttendanceLogic.hours(day.breaks));LabeledContent("Čistá pracovní doba",value:APIAttendanceLogic.hours(day.net))}.font(.subheadline)}
+    private var facts:some View{VStack(alignment:.leading,spacing:6){LabeledContent("Příchod",value:APIAttendanceView.time(day.first));LabeledContent("Odchod",value:day.last.isNull ? "Neukončeno" : APIAttendanceView.time(day.last));LabeledContent("Celková přítomnost",value:APIAttendanceLogic.hours(day.gross));if data["detail"]["activitySchema"].int==1{LabeledContent("Přestávky",value:APIAttendanceLogic.hours(day.breaks));LabeledContent("Čistá pracovní doba",value:APIAttendanceLogic.hours(day.net))}}.font(.subheadline)}
     private func shiftTitle(_ shift:APIValue)->String {
         let start=APIAttendanceView.date(shift["startAt"])+" · "+APIAttendanceView.time(shift["startAt"])
         let end=shift["endAt"].isNull ? "dosud" : APIAttendanceView.date(shift["endAt"])+" · "+APIAttendanceView.time(shift["endAt"])

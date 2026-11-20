@@ -8,7 +8,15 @@ final class APIAttendanceUITests:XCTestCase {
     }
     private func label(_ expected:String,_ element:XCUIElement){expectation(for:NSPredicate(format:"label == %@",expected),evaluatedWith:element);waitForExpectations(timeout:15)}
     private func capture(_ name:String,_ app:XCUIApplication){let a=XCTAttachment(screenshot:app.screenshot());a.name=name;a.lifetime = .keepAlways;add(a)}
-    private func reveal(_ element:XCUIElement,_ app:XCUIApplication){for _ in 0..<12{if element.exists && element.isHittable && element.frame.midY<app.tabBars.firstMatch.frame.minY{return};app.swipeUp()};XCTAssertTrue(element.waitForExistence(timeout:5));XCTAssertTrue(element.isHittable)}
+    private func reveal(_ element:XCUIElement,_ app:XCUIApplication){
+        for _ in 0..<24 {
+            let top=app.navigationBars.firstMatch.frame.maxY+4,bottom=app.tabBars.firstMatch.exists ? app.tabBars.firstMatch.frame.minY-6 : app.frame.maxY-60
+            if element.exists && element.isHittable && element.frame.midY>top && element.frame.midY<bottom{return}
+            let delta:CGFloat=element.exists && element.frame.midY<top ? 100 : -140
+            let point=app.coordinate(withNormalizedOffset:CGVector(dx:0.8,dy:0.5));point.press(forDuration:0.1,thenDragTo:point.withOffset(CGVector(dx:0,dy:delta)),withVelocity:.slow,thenHoldForDuration:0.1)
+        }
+        XCTAssertTrue(element.waitForExistence(timeout:5));XCTAssertTrue(element.isHittable)
+    }
     func testWorkerLiveCardAndBreakResumeUseExistingLedger(){
         let app=launch(worker:true,extra:["--native-ui-dark-testing"]);XCTAssertFalse(app.segmentedControls["attendance-mode"].exists);XCTAssertTrue(app.staticTexts["attendance-live-clock"].exists);capture("attendance-worker-dark",app)
         let pause=app.buttons["attendance-break"];reveal(pause,app);pause.tap();XCTAssertTrue(app.buttons.matching(identifier:"attendance-break").firstMatch.waitForExistence(timeout:10));label("Ukončit přestávku",app.buttons["attendance-break"]);app.buttons["attendance-break"].tap();label("Zahájit přestávku",app.buttons["attendance-break"])
