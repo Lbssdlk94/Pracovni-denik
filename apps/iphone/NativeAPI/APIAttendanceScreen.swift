@@ -88,7 +88,7 @@ struct APIAttendanceView:View {
         let detail=data["detail"],today=APIAttendanceLogic.calendar.startOfDay(for:Date()),next=APIAttendanceLogic.calendar.date(byAdding:.day,value:1,to:today)!
         let days=APIAttendanceLogic.days(shifts:scopedShifts(data),intervals:detail["intervals"].array,from:today,to:next)
         let present=Set(scopedShifts(data).filter{$0["endAt"].isNull && $0["startAt"].double<=Date().timeIntervalSince1970*1000}.map{$0["userId"].string}).count
-        let check=records.filter{!$0.issues.isEmpty}.count+data["pendingCorrections"].array.count
+        let check=APIAttendanceLogic.reviewCount(records,corrections:data["pendingCorrections"].array)
         return APIAttendanceMetrics(items:[("Dnes v práci","\(present)/\(detail["people"].array.count)","person.2"),("Dnes uzavřeno",APIAttendanceLogic.hours(days.reduce(0){$0+$1.confirmed}),"clock"),("Měsíc uzavřeno",APIAttendanceLogic.hours(records.reduce(0){$0+$1.confirmed}),"calendar"),("Ke kontrole",String(check),"exclamationmark.triangle")])
     }
     @ViewBuilder private func teamPeople(_ data:APIValue)->some View {

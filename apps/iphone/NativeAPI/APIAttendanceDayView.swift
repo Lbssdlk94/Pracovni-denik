@@ -27,6 +27,7 @@ struct APIAttendanceDayView:View {
                 }
                 Text("Zakázkové hodiny, přejezdy a ostatní činnosti jsou částmi docházky. Nepřičítají se k ní podruhé.").font(.caption).foregroundStyle(.secondary)
             }
+            if data["detail"]["activitySchema"].int==1{Section("Čas na jednotlivých zakázkách"){APIAttendanceJobDaySummary(store:store,slices:day.slices)}}
             if data["detail"]["activitySchema"].int==1{Section("Časová osa") {
                 ForEach(day.slices){slice in
                     VStack(alignment:.leading,spacing:5){
@@ -81,4 +82,19 @@ struct APIAttendanceCorrectionRow:View {
         Text("Autor: "+value["createdBy"].string+" · "+stamp("createdAt")).font(.caption)
         if !value["reviewedAt"].isNull{Text("Vyřídil: "+value["reviewedBy"].string+" · "+stamp("reviewedAt")).font(.caption)}
     }}
+}
+
+struct APIAttendanceJobDaySummary:View {
+    @ObservedObject var store:APIStore
+    let slices:[APIAttendanceSlice]
+    var body:some View {
+        let grouped=Dictionary(grouping:slices.filter{$0.kind=="work" && !$0.job.id.isEmpty},by:{$0.job.id})
+        if grouped.isEmpty{Text("V tomto dni nejsou dostupné přiřazené zakázky.").font(.subheadline).foregroundStyle(.secondary)}
+        ForEach(grouped.keys.sorted(),id:\.self){id in
+            let rows=grouped[id] ?? [],job=rows.first?.job ?? .null,hours=APIAttendanceLogic.hours(rows.reduce(0){$0+$1.milliseconds})
+            NavigationLink{APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:job)}label:{
+                VStack(alignment:.leading,spacing:4){Text(job.title).font(.subheadline.weight(.semibold));Text(hours+(rows.contains{!$0.confirmed} ? " · průběžně" : "")).font(.caption).foregroundStyle(.secondary)}.frame(minHeight:44)
+            }.accessibilityIdentifier("attendance-summary-job-"+id)
+        }
+    }
 }

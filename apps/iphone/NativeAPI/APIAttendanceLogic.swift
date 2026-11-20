@@ -61,6 +61,11 @@ enum APIAttendanceLogic {
         let confirmed=days.reduce(0){$0+$1.confirmed},closed=days.filter{$0.confirmed>0}.count
         return (confirmed,closed,closed==0 ? 0 : confirmed/Double(closed),days.reduce(0){$0+$1.work})
     }
+    static func reviewCount(_ days:[APIAttendanceDay],corrections:[APIValue])->Int {
+        let shifts=Set(days.filter{!$0.issues.isEmpty}.flatMap{day in day.shifts.map(\.id)})
+        let pending=Set(corrections.filter{$0["status"].string=="pending"}.map{$0["shiftId"].string.isEmpty ? $0.id : $0["shiftId"].string})
+        return shifts.union(pending).count
+    }
     static func csv(_ days:[APIAttendanceDay])->String {
         func cell(_ value:String)->String{let clean=value.trimmingCharacters(in:.whitespacesAndNewlines);let safe=clean.first.map{"=+-@".contains($0)}==true ? "'"+value : value;return "\""+safe.replacingOccurrences(of:"\"",with:"\"\"")+"\""}
         let heading=["Pracovník","Datum","Příchod","Odchod","Uzavřené čisté hodiny","Průběžné hodiny","Přestávky (h)","Zakázky v uzavřených směnách (h)","Stav"]

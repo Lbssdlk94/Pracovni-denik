@@ -25,6 +25,8 @@ final class APIAttendanceLogicTests:XCTestCase {
     func testCrossMidnightKeepsOneShiftAndSplitsDaysWithoutAutomaticDeparture(){
         let rows=days([shift("night","2026-11-19T21:00:00Z",nil)],[],now:"2026-11-20T05:00:00Z")
         XCTAssertEqual(rows.count,2);XCTAssertEqual(rows.reduce(0){$0+$1.gross}/3600000,8);XCTAssertTrue(rows.allSatisfy{$0.open && $0.last.isNull && !$0.issues.isEmpty})
+        XCTAssertEqual(APIAttendanceLogic.reviewCount(rows,corrections:[]),1)
+        XCTAssertEqual(APIAttendanceLogic.reviewCount(rows,corrections:[.object(["id":.s("request"),"shiftId":.s("night"),"status":.s("pending")])]),1)
     }
     func testDSTDaysHaveTwentyThreeAndTwentyFiveActualHours(){
         for (start,end,expected) in [("2026-03-28T23:00:00Z","2026-03-29T22:00:00Z",23.0),("2026-10-24T22:00:00Z","2026-10-25T23:00:00Z",25.0)]{
