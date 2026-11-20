@@ -84,4 +84,9 @@ final class APIAttendanceLogicTests:XCTestCase {
         await model.load(store:store,month:String(store.today.prefix(7)),user:store.userID,discipline:"all",refresh:true);XCTAssertTrue(model.data.isNull);XCTAssertNotNil(model.problem)
     }
 
+    func testOvernightFixtureStartsOnPreviousLocalDayAtAnyTime(){
+        let c=APIAttendanceLogic.calendar,day=APIAttendanceLogic.monthDate("2026-11"),me:APIValue = .object(["user":.object(["id":.s("worker"),"name":.s("Pracovnik")])])
+        for hour in [1,8,19,23]{let now=c.date(bySettingHour:hour,minute:30,second:0,of:day)!,data=APIAttendanceFixture.example(me:me,now:now,overnight:true),shift=data["activeShift"];XCTAssertFalse(shift.isNull);XCTAssertTrue(shift["endAt"].isNull);XCTAssertLessThan(c.startOfDay(for:APIAttendanceLogic.date(shift["startAt"].double)),c.startOfDay(for:now))}
+    }
+
 }

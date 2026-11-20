@@ -13,9 +13,9 @@ final class APIAttendanceUITests:XCTestCase {
             let top=app.navigationBars.firstMatch.frame.maxY+4,bottom=app.tabBars.firstMatch.exists ? app.tabBars.firstMatch.frame.minY-6 : app.frame.maxY-60
             if element.exists && element.isHittable && element.frame.midY>top && element.frame.midY<bottom{return}
             let delta:CGFloat=element.exists && element.frame.midY<top ? 100 : -140
-            let point=app.coordinate(withNormalizedOffset:CGVector(dx:0.8,dy:0.5));point.press(forDuration:0.1,thenDragTo:point.withOffset(CGVector(dx:0,dy:delta)),withVelocity:.slow,thenHoldForDuration:0.1)
+            let point=app.coordinate(withNormalizedOffset:CGVector(dx:0.03,dy:0.55));point.press(forDuration:0.1,thenDragTo:point.withOffset(CGVector(dx:0,dy:delta)),withVelocity:.slow,thenHoldForDuration:0.1)
         }
-        XCTAssertTrue(element.waitForExistence(timeout:5));XCTAssertTrue(element.isHittable)
+        capture("attendance-control-not-found",app);let debug=XCTAttachment(string:app.debugDescription);debug.lifetime = .keepAlways;add(debug);XCTAssertTrue(element.waitForExistence(timeout:5));XCTAssertTrue(element.isHittable)
     }
     func testWorkerLiveCardAndBreakResumeUseExistingLedger(){
         let app=launch(worker:true,extra:["--native-ui-dark-testing"]);XCTAssertFalse(app.segmentedControls["attendance-mode"].exists);XCTAssertTrue(app.staticTexts["attendance-live-clock"].exists);capture("attendance-worker-dark",app)

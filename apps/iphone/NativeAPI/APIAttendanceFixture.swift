@@ -9,7 +9,7 @@ enum APIAttendanceFixture {
         for (i,person) in people.enumerated() {
             for offset in [-2,-1,0] {
                 if before && person.id==user && offset==0{continue}
-                let day=c.date(byAdding:.day,value:offset,to:today)!,start=offset==0 ? now.addingTimeInterval(overnight && person.id==user ? -14*3600 : -3*3600) : c.date(byAdding:.hour,value:7,to:day)!
+                let day=c.date(byAdding:.day,value:offset,to:today)!,start=offset==0 ? (overnight && person.id==user ? c.date(bySettingHour:22,minute:0,second:0,of:c.date(byAdding:.day,value:-1,to:today)!)! : now.addingTimeInterval(-3*3600)) : c.date(byAdding:.hour,value:7,to:day)!
                 let end:Date?=offset==0 && i<2 ? nil : start.addingTimeInterval(offset==0 ? 2*3600 : 8*3600)
                 let sid="attendance-"+person.id+"-"+String(offset),s=APIValue.object(["id":.s(sid),"userId":.s(person.id),"userName":person["name"],"startAt":.number(start.timeIntervalSince1970*1000),"endAt":end.map{.number($0.timeIntervalSince1970*1000)} ?? .null,"version":.n(1),"startGpsStatus":.s("disabled"),"endGpsStatus":end==nil ? .null : .s("disabled")])
                 shifts.append(s)
