@@ -30,6 +30,7 @@ final class APIAttendanceUITests:XCTestCase {
     }
     func testDayDetailContainsTimelineAndDirectJobNavigation(){
         let app=launch(worker:true);let day=app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH %@","attendance-day-")).firstMatch;reveal(day,app);day.tap();XCTAssertTrue(app.navigationBars["Pracovní den"].waitForExistence(timeout:10));capture("attendance-day-detail",app)
+        let summary=app.buttons["attendance-summary-job-fixture-progress"];reveal(summary,app);XCTAssertTrue(summary.label.contains("3 h"));capture("attendance-day-jobs",app)
         let job=app.buttons["attendance-timeline-job-fixture-progress"].firstMatch;reveal(job,app);job.tap();XCTAssertTrue(app.navigationBars["Detail zakázky"].waitForExistence(timeout:10))
     }
     func testOldOpenShiftOffersCorrectionWithoutAutomaticDeparture(){

@@ -12,6 +12,7 @@ struct APIAttendanceDayView:View {
         let kinds=["work","travel","break","other","unallocated"],totals=kinds.map{kind in (kind,day.slices.filter{$0.kind==kind}.reduce(0){$0+$1.milliseconds})}.filter{$0.1>0}
         List {
             Section{
+                VStack(alignment:.leading,spacing:10){
                 Text(APIAttendanceLogic.label(day.day,format:"EEEE d. MMMM yyyy").capitalized).font(.title3.bold())
                 if store.manager{Text(day.name).font(.headline)}
                 Text(APIAttendanceLogic.hours(day.net)).font(.largeTitle.bold()).monospacedDigit().foregroundStyle(DiaryStyle.accent)
@@ -19,6 +20,7 @@ struct APIAttendanceDayView:View {
                 facts
                 if !day.issues.isEmpty{ForEach(day.issues,id:\.self){Label($0,systemImage:"exclamationmark.triangle").foregroundStyle(DiaryStyle.warning).font(.subheadline)}}
                 if !store.online{Label("Offline · uložený přehled dne",systemImage:"wifi.slash").font(.caption)}
+                }.frame(maxWidth:.infinity,alignment:.leading).padding(.vertical,4)
             }
             Section("Rozdělení pracovního dne") {
                 if data["detail"]["activitySchema"].int != 1{Text("Server neposkytuje podrobné intervaly. Nezařazený čas automaticky nepovažujeme za jinou činnost.").font(.caption)}
@@ -53,7 +55,7 @@ struct APIAttendanceDayView:View {
                 }
             }
             if !corrections.isEmpty{Section("Historie oprav"){ForEach(corrections,id:\.id){APIAttendanceCorrectionRow(value:$0)}}}
-        }.navigationTitle("Pracovní den").navigationBarTitleDisplayMode(.inline).scrollContentBackground(.hidden).background(DiaryStyle.background)
+        }.navigationTitle("Pracovní den").navigationBarTitleDisplayMode(.inline).contentMargins(.top,0,for:.scrollContent).scrollContentBackground(.hidden).background(DiaryStyle.background)
             .sheet(item:$localAction){APIAttendanceAction(store:store,action:$0)}
     }
     private var facts:some View{VStack(alignment:.leading,spacing:6){LabeledContent("Příchod",value:APIAttendanceView.time(day.first));LabeledContent("Odchod",value:day.last.isNull ? "Neukončeno" : APIAttendanceView.time(day.last));LabeledContent("Celková přítomnost",value:APIAttendanceLogic.hours(day.gross));if data["detail"]["activitySchema"].int==1{LabeledContent("Přestávky",value:APIAttendanceLogic.hours(day.breaks));LabeledContent("Čistá pracovní doba",value:APIAttendanceLogic.hours(day.net))}}.font(.subheadline)}
