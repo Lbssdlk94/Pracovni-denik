@@ -60,7 +60,7 @@ struct APIAttendanceView:View {
             }
             if model.loading && !model.data.isNull{ProgressView("Aktualizuji docházku…")}
             if let error=problem ?? model.problem{Section{Text(error).foregroundStyle(DiaryStyle.warning);Button("Zkusit znovu"){Task{await load(refresh:true)}}}}
-        }.listStyle(.insetGrouped).listSectionSpacing(10).scrollContentBackground(.hidden).background(DiaryStyle.background)
+        }.listStyle(.insetGrouped).listSectionSpacing(10).contentMargins(.top,0,for:.scrollContent).scrollContentBackground(.hidden).background(DiaryStyle.background)
             .navigationTitle("Docházka").navigationBarTitleDisplayMode(.inline)
             .toolbar{APIHeader(store:store);ToolbarItem(placement:.topBarTrailing){Menu{Button("Vybrat měsíc",systemImage:"calendar"){calendar=true};if store.manager{Button("Export měsíční docházky",systemImage:"square.and.arrow.up"){export=true}.disabled(data["detail"]["activitySchema"].int != 1)}}label:{Image(systemName:"calendar")}.buttonStyle(.automatic).accessibilityLabel("Období a export").accessibilityIdentifier("attendance-period-menu")}}
             .task(id:key){await load()}.refreshable{await store.resume(refreshViews:false);await load(refresh:true)}
@@ -71,7 +71,7 @@ struct APIAttendanceView:View {
             .onChange(of:team){_,value in if value{employee="all"}else{discipline="all"}}
     }
     private var monthControl:some View {
-        HStack{Button{moveMonth(-1)}label:{Image(systemName:"chevron.left")}.accessibilityLabel("Předchozí měsíc");Spacer(minLength:0);Button{calendar=true}label:{Text(APIAttendanceLogic.label(selectedMonth,format:"LLLL yyyy").capitalized).font(.headline)}.accessibilityIdentifier("attendance-month");Spacer(minLength:0);Button{moveMonth(1)}label:{Image(systemName:"chevron.right")}.accessibilityLabel("Následující měsíc")}.buttonStyle(APIJobsCompactButtonStyle())
+        HStack{Button{moveMonth(-1)}label:{Image(systemName:"chevron.left")}.accessibilityLabel("Předchozí měsíc");Spacer(minLength:0);Button{calendar=true}label:{Text(APIAttendanceLogic.label(selectedMonth,format:"LLLL yyyy").capitalized).font(.headline).padding(.horizontal,10)}.accessibilityIdentifier("attendance-month");Spacer(minLength:0);Button{moveMonth(1)}label:{Image(systemName:"chevron.right")}.accessibilityLabel("Následující měsíc")}.buttonStyle(APIJobsCompactButtonStyle())
     }
     private func moveMonth(_ amount:Int){if let date=APIAttendanceLogic.calendar.date(byAdding:.month,value:amount,to:selectedMonth),2000...2099 ~= APIAttendanceLogic.calendar.component(.year,from:date){selectedMonth=date}}
     private func freshness(_ data:APIValue)->some View {
