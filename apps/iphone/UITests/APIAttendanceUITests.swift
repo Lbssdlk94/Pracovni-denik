@@ -29,8 +29,12 @@ final class APIAttendanceUITests:XCTestCase {
         let app=launch();reveal(app.buttons["attendance-month"],app);let before=app.buttons["attendance-month"].label;app.buttons["Předchozí měsíc"].tap();XCTAssertNotEqual(app.buttons["attendance-month"].label,before);app.buttons["attendance-month"].tap();XCTAssertTrue(app.navigationBars["Vybrat měsíc"].waitForExistence(timeout:10));XCTAssertTrue(app.datePickers.firstMatch.exists);capture("attendance-month-picker",app);app.buttons["Zobrazit"].tap()
     }
     func testDayDetailContainsTimelineAndDirectJobNavigation(){
-        let app=launch(worker:true);let day=app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH %@","attendance-day-")).firstMatch;reveal(day,app);day.tap();XCTAssertTrue(app.navigationBars["Pracovní den"].waitForExistence(timeout:10));capture("attendance-day-detail",app)
-        let summary=app.buttons["attendance-summary-job-fixture-progress"];reveal(summary,app);XCTAssertTrue(summary.label.contains("3 h"));capture("attendance-day-jobs",app)
+        let started=Date();let app=launch(worker:true);let day=app.buttons.matching(NSPredicate(format:"identifier BEGINSWITH %@","attendance-day-")).firstMatch;reveal(day,app);day.tap();XCTAssertTrue(app.navigationBars["Pracovní den"].waitForExistence(timeout:10));capture("attendance-day-detail",app)
+        let summary=app.buttons["attendance-summary-job-fixture-progress"];reveal(summary,app);// The fixture starts three hours ago. At 00:xx–02:xx Prague time
+        // the newest day correctly contains only its part after midnight.
+        var calendar=Calendar(identifier:.gregorian);calendar.timeZone=TimeZone(identifier:"Europe/Prague")!
+        let possibleHours=Set([min(3,calendar.component(.hour,from:started)),min(3,calendar.component(.hour,from:Date()))])
+        XCTAssertTrue(possibleHours.contains{summary.label.contains("\($0) h")},summary.label);capture("attendance-day-jobs",app)
         let job=app.buttons["attendance-timeline-job-fixture-progress"].firstMatch;reveal(job,app);job.tap();XCTAssertTrue(app.navigationBars["Detail zakázky"].waitForExistence(timeout:10))
     }
     func testOldOpenShiftOffersCorrectionWithoutAutomaticDeparture(){

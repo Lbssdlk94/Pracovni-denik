@@ -1,6 +1,6 @@
 {
   "baseline": "27f2165",
-  "policy": "Do not edit protected surfaces. New treatment must be explicitly scoped to secondary routes. No global changes to approved tokens or layouts.",
+  "policy": "User clarification: preserve only the jointly redesigned native iOS screens. Web screens may be redesigned to match them. Keep scoped changes to native shared components.",
   "files": {
     "apps/iphone/App/DiaryDesign.swift": "ac86337763ffbb90dca44a44acfbf4de776129275d4c5e98075dfd5b7f6ae4f5",
     "apps/iphone/NativeAPI/APIAttendance.swift": "d458a3da85ec3e46cd4f0abfa252237346e6270a27c2dd195ddcd090807046b4",
@@ -42,20 +42,7 @@
     "apps/iphone/NativeAPI/APIProtocolTemplates.swift": "e1a4ccda43d83c70c6cc30af55cdfd2f707d46651606891ccbfe227d64a6ff51",
     "apps/iphone/WatchApp/PracovniDenikWatchApp.swift": "04533de439acb79aee9027c0b15f3d4f4e8bedafa4cf5723224c31d46562968c",
     "apps/iphone/WatchApp/WatchStore.swift": "c117df358185c34f61db6e11f3ef3e29a9ca44b6d1da3a5252fa86b71f26a2d7",
-    "apps/iphone/WatchApp/WatchViews.swift": "55ad4177040d84afe4eb6279296de13780bc6ca24b437927bd5a68d53e099215",
-    "apps/work-diary/web/approved-layout.css": "ae9ea357eee5afaff220556901db1f094383ec84285505858295d78676b8240d",
-    "apps/work-diary/web/attendance-ui.js": "f80a2034c9b0bea2c1d85b50d266b4ed2aec13111f69f75752986fe33e307e7f",
-    "apps/work-diary/web/control-surfaces.css": "818189932a70e817ce7d8fca06403c1cfd46313081c236eae8761deb05503571",
-    "apps/work-diary/web/customers-ui.js": "be6448424648857cb07b097f78ea5b8276340d05e0c4dc80d8f6127ca6e7e0a9",
-    "apps/work-diary/web/design-tokens.css": "044af02e3b2d2d8de71cb2e4b8f59c066fadcc19daae314f99cc539275401b97",
-    "apps/work-diary/web/desktop.css": "e5fc401271292f6c76f927ace3ba3f681f61f78d5a56b255a546fb241f689ad7",
-    "apps/work-diary/web/field-ui.css": "9fbbc56e5e3229ba8f1acbe6b350c165d41d1ca9e7f810137ce7471c4d1d2d9e",
-    "apps/work-diary/web/jobs-ui.js": "5048939ca0b1eb9550392bf0dde876f2e44aebaddf0a232327c5a0731e39f51d",
-    "apps/work-diary/web/mobile-workspace.css": "0edc085e11581c41814f89aeafafd9a81b98d13a4ef4a6e2008a1226185025de",
-    "apps/work-diary/web/overview-ui.js": "8f2c4cfd999b6a59a0a5e1b82193f30ac31ad82fa5fd86e02b4e2b289fba45bb",
-    "apps/work-diary/web/service-protocol-pdf.js": "621304f67e18c01458691b14af31d09847e0efd494acc84d308fee8e1bba8116",
-    "apps/work-diary/web/style.css": "4ceb4a18aca0d499f3d85ca81fcd2fe0a0bb1c7001cf5c3f1c7a81c3920840b9",
-    "apps/work-diary/web/work-diary-ui.css": "3a5577e08ddd06e809965519b840fda9bf16fede2ec3e403a220e3eabb5d7dd6"
+    "apps/iphone/WatchApp/WatchViews.swift": "55ad4177040d84afe4eb6279296de13780bc6ca24b437927bd5a68d53e099215"
   },
   "fragments": [
     {
@@ -93,12 +80,6 @@
       "start": "    private var jobContent:",
       "end": "    @ViewBuilder private var entityContent:",
       "sha256": "23d54509172a13f5bd9336c1656abf048d8d9ddf8b963a29648f4e6e74148e7b"
-    },
-    {
-      "file": "apps/work-diary/web/app.js",
-      "start": "function shell(content){",
-      "end": "function render(){",
-      "sha256": "fde0b822ebf901c263f8d17c32ed36058fb92eab44b3fa8255fe01c190d077b2"
     },
     {
       "file": "apps/iphone/NativeAPI/APIForms.swift",
