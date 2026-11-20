@@ -63,7 +63,7 @@ struct APISecondaryField: View {
                     TextField(field.title,text:Binding(get:{value.string},set:{value = .s($0)}),axis:.vertical).lineLimit(2...5).frame(minHeight:44).accessibilityIdentifier("api-field-"+field.id)
                 }
             } else { APIFieldEditor(field:field,value:$value,options:options) }
-        }.environment(\.locale,Locale(identifier:"cs_CZ"))
+        }.tint(DiaryStyle.accent).environment(\.locale,Locale(identifier:"cs_CZ"))
             .sheet(isPresented:$selecting) {
                 APISecondaryChoiceSheet(title:field.title,choices:choices,required:field.required,value:Binding(get:{value.string},set:{value = .s($0)}))
             }

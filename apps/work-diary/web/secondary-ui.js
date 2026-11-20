@@ -1,6 +1,6 @@
-// Opt-in enhancement of the remaining screens. Approved pages retain their DOM,
+// Responsive web enhancement; only native iOS screens are protected by the user. Existing pages retain their DOM,
 // stylesheet cascade and handlers. No form, navigation or sync data is recreated.
-export const secondaryPages=new Set(['home','editor','zones','team','settings','materials','defects','subscriptions','vehicles']);
+export const secondaryPages=new Set(['overview','jobs','customers','attendance','home','editor','zones','team','settings','materials','defects','subscriptions','vehicles']);
 export const secondaryForms=new Set(['material-edit-form','material-delete-form','customer-form','garden-form','job-form','service-form','defect-form','subscription-plan-form','subscription-form','invoice-company-form','protocol-template-form','drive-config-form','material-reminder-form','handoff-form','blowout-form','tariff-form','subscription-contract','planning-reserve-form','workspace-membership-form','email-settings-form','garden-delete-form','position-form','valve-label-form','zone-form','invite-form']);
 const themeKey='diary-interface-appearance',railKey='diary-secondary-navigation';
 function read(key,fallback){try{return localStorage.getItem(key)||fallback;}catch{return fallback;}}
@@ -27,6 +27,12 @@ export function enhanceSecondaryPage(page){
    const update=()=>button.setAttribute('aria-expanded',String(!shell.classList.contains('pd-rail-collapsed')));update();button.onclick=()=>{shell.classList.toggle('pd-rail-collapsed');write(railKey,shell.classList.contains('pd-rail-collapsed')?'closed':'open');update();};top.prepend(button);
   }
   for(const item of shell.querySelectorAll('.sidebar button,.sidebar a')){if(!item.title)item.title=item.textContent.trim();}
+ }
+ const preview=shell.querySelector('.role-preview'),header=shell.querySelector('.topbar');
+ if(preview&&header&&!header.querySelector('[data-preview-toggle]')){
+  preview.hidden=!preview.classList.contains('is-active');preview.id='web-role-preview';
+  const eye=document.createElement('button');eye.type='button';eye.className='btn round-button';eye.dataset.previewToggle='';eye.setAttribute('aria-label','Zobrazit jako');eye.setAttribute('aria-controls',preview.id);eye.setAttribute('aria-expanded',String(!preview.hidden));eye.innerHTML='<svg class="interface-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>';
+  eye.onclick=()=>{preview.hidden=preview.classList.contains('is-active')?false:!preview.hidden;eye.setAttribute('aria-expanded',String(!preview.hidden));if(!preview.hidden)preview.querySelector('select')?.focus();};header.querySelector('.notification-bell')?.before(eye);if(!eye.isConnected)header.append(eye);
  }
  const selector=document.querySelector('#interface-appearance');if(selector){selector.value=read(themeKey,'system');selector.onchange=()=>{write(themeKey,selector.value);applyAppearance(selector.value);};}
 }

@@ -24,3 +24,6 @@
 :root[data-theme=dark] :is(.overview-tile-icon,.customer-avatar,.job-customer-avatar,.diary-avatar,.diary-workspace-icon,.folder-icon,.empty-icon){background:var(--pd-sage-soft);color:var(--pd-forest)}
 :root[data-theme=dark] :is(.service-sync-state,.diary-sync,.job-arrival,.handoff-summary,.notification-item.unread){background:var(--pd-sage-soft);color:var(--pd-forest);border-color:var(--pd-sage-line)}
 :root[data-theme=dark] :is(.conflict,.delete-warning,.service-conflict,.diary-sync.needs-attention,.protocol-missing){background:var(--pd-warning-soft);color:var(--pd-warning);border-color:var(--pd-warning)}
+:root[data-theme=dark] #materials-categories>summary,:root[data-theme=dark] #materials-review>summary{background:var(--pd-sage-soft);color:var(--pd-forest);border-color:var(--pd-sage-line)}
+:root[data-theme=dark] .shell:not(.admin-shell)>.sidebar>.nav button{color:var(--pd-muted)}
+:root[data-theme=dark] .shell:not(.admin-shell)>.sidebar>.nav button.active{color:var(--pd-forest)}
