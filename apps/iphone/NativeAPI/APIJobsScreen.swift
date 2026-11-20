@@ -93,11 +93,11 @@ struct APIJobsScreen:View {
         }
     }
     private var freshness:some View {
-        HStack(alignment:.firstTextBaseline,spacing:5){
-            Image(systemName:!store.online ? "wifi.slash" : model.cache["stale"].bool ? "clock.arrow.circlepath" : "arrow.clockwise")
-            Text(!store.online ? "Offline · uložená data" : model.cache.isNull ? "Načítání" : model.cache["stale"].bool ? "Uložená kopie · "+updatedTime : "Synchronizováno v "+updatedTime)
+        let layout=typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment:.leading,spacing:4)) : AnyLayout(HStackLayout(alignment:.firstTextBaseline,spacing:5))
+        return layout{
+            Label(!store.online ? "Offline · uložená data" : model.cache.isNull ? "Načítání" : model.cache["stale"].bool ? "Uložená kopie · "+updatedTime : "Synchronizováno v "+updatedTime,systemImage:!store.online ? "wifi.slash" : model.cache["stale"].bool ? "clock.arrow.circlepath" : "arrow.clockwise")
             if !store.outbox.isEmpty{Text("· čeká: \(store.outbox.count)")}
-            Spacer(minLength:0)
+            if !typeSize.isAccessibilitySize{Spacer(minLength:0)}
             if !model.loading{Text("\(jobs.count)\(model.complete ? "" : "+") zakázek")}
         }.font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true).accessibilityElement(children:.combine)
     }

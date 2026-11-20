@@ -52,11 +52,20 @@ struct APIJobListRow:View {
             HStack(alignment:.firstTextBaseline,spacing:6){Text(APIJobsPresentation.title(current)).font(.headline).foregroundStyle(.primary).lineLimit(typeSize.isAccessibilitySize ? nil : 2);Spacer(minLength:2);statusBadge;Image(systemName:"chevron.right").font(.caption2).foregroundStyle(.secondary).accessibilityHidden(true)}
             Text(typeTitle+(current["discipline"].string.isEmpty ? "" : current["discipline"].string=="garden" ? " · Garden" : " · Závlaha")+" · "+APIJobsPresentation.appointment(current)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
             if !current["address"].string.isEmpty{Label(current["address"].string,systemImage:"mappin").font(.caption).foregroundStyle(.secondary).lineLimit(typeSize.isAccessibilitySize ? nil : 1)}
-            HStack(spacing:6){crew;Spacer(minLength:0);if timeScope==store.scope,!snapshot.isNull{Text(hours).font(.caption).foregroundStyle(.secondary)};if !current["completionPercent"].isNull{Text(current["completionPercent"].string+" %").font(.caption.weight(.semibold)).foregroundStyle(DiaryStyle.accent)}}
+            summaryMetrics
             if !current["completionPercent"].isNull{ProgressView(value:min(100,max(0,current["completionPercent"].double)),total:100).tint(DiaryStyle.accent).accessibilityHidden(true)}
         }.frame(maxWidth:.infinity,alignment:.leading).contentShape(Rectangle()).accessibilityElement(children:.combine)
     }
     private var typeTitle:String{["installation":"Realizace","service":"Servis","survey":"Zaměření"][current["jobType"].string] ?? "Zakázka"}
+    private var summaryMetrics:some View {
+        let layout=typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment:.leading,spacing:4)) : AnyLayout(HStackLayout(spacing:6))
+        return layout{
+            crew
+            if !typeSize.isAccessibilitySize{Spacer(minLength:0)}
+            if timeScope==store.scope,!snapshot.isNull{Text(hours).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)}
+            if !current["completionPercent"].isNull{Text(current["completionPercent"].string+" %").font(.caption.weight(.semibold)).foregroundStyle(DiaryStyle.accent)}
+        }
+    }
     private var hours:String{
         let rows=projected["intervals"].array.filter{store.manager || $0["userId"].string==store.userID}
         let value=rows.filter{$0["kind"].string=="work"}.reduce(Int64(0)){$0+APIWorkTimeLogic.duration($1)}
@@ -72,7 +81,7 @@ struct APIJobListRow:View {
         let people=APIJobDetailPresentation.crew(job:current,states:projected["states"].array)
         return HStack(spacing:-3){ForEach(Array(people.prefix(3)),id:\.id){person in
             let name=names[person.id] ?? person["name"].string
-            Text(name=="Přiřazený pracovník" ? "·" : APIJobDetailPresentation.initials(name)).font(.caption2.weight(.semibold)).foregroundStyle(DiaryStyle.accent).frame(width:24,height:24).background(DiaryStyle.soft,in:Circle()).accessibilityLabel(name)
+            Text(name=="Přiřazený pracovník" ? "·" : APIJobDetailPresentation.initials(name)).font(.caption2.weight(.semibold)).dynamicTypeSize(...DynamicTypeSize.large).foregroundStyle(DiaryStyle.accent).frame(width:24,height:24).background(DiaryStyle.soft,in:Circle()).accessibilityLabel(name)
         };if people.count>3{Text("+\(people.count-3)").font(.caption2).padding(.leading,5)}}
     }
     private var actionRow:some View {
