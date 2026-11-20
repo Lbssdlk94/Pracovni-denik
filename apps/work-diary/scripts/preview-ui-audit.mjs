@@ -1,0 +1,10 @@
+// Isolated loopback UI regression adapter. No route or test identity is bundled into production.
+import '../tests/redesign-clock.mjs';
+import http from 'node:http';
+import worker from '../dist/server/index.js';
+import {environment,people,request} from '../tests/fixtures.mjs';
+const ctx={waitUntil:p=>p.catch(()=>{})};let env,queue=Promise.resolve();
+async function reset(){env=environment();await worker.fetch(request('/api/me',people.owner),env,ctx);for(const role of ['admin','worker','reader']){const r=await worker.fetch(request('/api/invitations',people.owner,'POST',{email:people[role].email,role}),env,ctx);if(!r.ok)throw Error(await r.text());await worker.fetch(request('/api/me',people[role]),env,ctx);}}
+await reset();
+const server=http.createServer(async(req,res)=>{try{const url=new URL(req.url,'http://127.0.0.1:5198');if(url.pathname==='/__qa/reset'){await reset();res.end('reset');return;}if(url.pathname==='/__qa/stop'){res.end('stopped');server.close();return;}if(url.pathname==='/__qa/login'){const person=url.searchParams.get('user');if(!people[person]){res.writeHead(400);res.end();return;}res.writeHead(302,{'set-cookie':'qa-person='+person+'; Path=/; SameSite=Lax',location:'/'});res.end();return;}const person=people[(req.headers.cookie||'').match(/qa-person=(\w+)/)?.[1]],headers=new Headers(req.headers);for(const key of [...headers.keys()])if(key.startsWith('oai-authenticated-'))headers.delete(key);if(person){headers.set('oai-authenticated-user-id',person.id);headers.set('oai-authenticated-user-email',person.email);}const chunks=[];for await(const c of req)chunks.push(c);const input=new Request(url,{method:req.method,headers,body:['GET','HEAD'].includes(req.method)?undefined:Buffer.concat(chunks)}),response=await(url.pathname.startsWith('/api/')?(queue=queue.catch(()=>{}).then(()=>worker.fetch(input,env,ctx))):worker.fetch(input,env,ctx));res.writeHead(response.status,Object.fromEntries(response.headers));res.end(Buffer.from(await response.arrayBuffer()));}catch(e){console.error(e);res.writeHead(500);res.end('Isolated UI audit error');}});
+server.listen(5198,'127.0.0.1',()=>console.log('UI audit preview http://127.0.0.1:5198'));

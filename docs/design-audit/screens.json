@@ -1,0 +1,2429 @@
+{
+  "baseline": "27f2165",
+  "phase": "audit before implementation",
+  "scope": "active NativeAPI targets, tenant web and isolated Super Admin; legacy hybrid sources are not active iOS UI",
+  "roles": [
+    "owner",
+    "administrator",
+    "admin",
+    "worker",
+    "reader",
+    "Super Admin (separate central API/TOTP)"
+  ],
+  "screens": [
+    {
+      "platform": "ios",
+      "id": "APIActionEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIActions.swift",
+      "line": 15,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobStatusEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIActions.swift",
+      "line": 34,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDepartureEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIActions.swift",
+      "line": 69,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIOutboxView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAdministration.swift",
+      "line": 5,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIRecordLinksView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAdministration.swift",
+      "line": 17,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDriveSettings",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAdministration.swift",
+      "line": 63,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolEmailView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAdministration.swift",
+      "line": 82,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDraftDestination",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAdministration.swift",
+      "line": 103,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceAction",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAttendance.swift",
+      "line": 42,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceLiveCard",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIAttendanceComponents.swift",
+      "line": 4,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceMetrics",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIAttendanceComponents.swift",
+      "line": 55,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceDayRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIAttendanceComponents.swift",
+      "line": 60,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendancePersonRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIAttendanceComponents.swift",
+      "line": 71,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceChart",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAttendanceComponents.swift",
+      "line": 76,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceMonthPicker",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAttendanceComponents.swift",
+      "line": 102,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceDayView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAttendanceDayView.swift",
+      "line": 4,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceRepairView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAttendanceDayView.swift",
+      "line": 70,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceCorrectionRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIAttendanceDayView.swift",
+      "line": 76,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceJobDaySummary",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIAttendanceDayView.swift",
+      "line": 89,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendancePreviewHost",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAttendancePreviews.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAttendanceScreen.swift",
+      "line": 4,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIBackupsView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIBackups.swift",
+      "line": 14,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APISubscriptionContent",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIBusinessModules.swift",
+      "line": 3,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APISubscriptionActivation",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIBusinessModules.swift",
+      "line": 32,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIVehiclesHome",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIBusinessModules.swift",
+      "line": 54,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDefectBadge",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIBusinessModules.swift",
+      "line": 71,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIHistoryVisit",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIBusinessModules.swift",
+      "line": 75,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APINoticeContent",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIBusinessModules.swift",
+      "line": 90,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "DiaryBadge",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIComponents.swift",
+      "line": 3,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "DiaryTile",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIComponents.swift",
+      "line": 11,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "NativeJobCard",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIComponents.swift",
+      "line": 23,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIConflictReview",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIConflictReview.swift",
+      "line": 3,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIOverview",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIDashboard.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDashboardFreshness",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIDashboardComponents.swift",
+      "line": 8,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDashboardStat",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIDashboardComponents.swift",
+      "line": 22,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDashboardStats",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIDashboardComponents.swift",
+      "line": 31,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDashboardPersonRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIDashboardComponents.swift",
+      "line": 56,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDashboardProjectRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIDashboardComponents.swift",
+      "line": 70,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDashboardVisitRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIDashboardComponents.swift",
+      "line": 82,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDashboardPreviewHost",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIDashboardPreviews.swift",
+      "line": 5,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDashboardCurrentJob",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIDashboardWork.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDashboardAttendanceCard",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIDashboardWork.swift",
+      "line": 47,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIFieldsView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIForms.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIFieldEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIForms.swift",
+      "line": 17,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIEntityEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIForms.swift",
+      "line": 78,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobsMap",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIGeometry.swift",
+      "line": 26,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIZonesView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIGeometry.swift",
+      "line": 56,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIShaftEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIGeometry.swift",
+      "line": 64,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIPlanView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIGeometry.swift",
+      "line": 101,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIBlowoutView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIGeometry.swift",
+      "line": 139,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobActionBar",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobActionBar.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobCompletionSummary",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobCompletion.swift",
+      "line": 18,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobCompletionCard",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobCompletion.swift",
+      "line": 33,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobCompletionCompactContent",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobCompletion.swift",
+      "line": 46,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobCompletionEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobCompletion.swift",
+      "line": 84,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobStatusBadge",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobDetailComponents.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobAvatarStack",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobDetailComponents.swift",
+      "line": 9,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobCompactHeader",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobDetailComponents.swift",
+      "line": 21,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobTimeOverview",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobDetailComponents.swift",
+      "line": 45,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobMetric",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobDetailComponents.swift",
+      "line": 86,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobWorkerRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobDetailComponents.swift",
+      "line": 97,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobDetailContent",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobDetailContent.swift",
+      "line": 4,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobSettingsRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobDetailContent.swift",
+      "line": 171,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobQuickLabel",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobDetailContent.swift",
+      "line": 185,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobSupplementary",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobDetailContent.swift",
+      "line": 190,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobRecordManagement",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobDetailContent.swift",
+      "line": 202,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobDetailPreviewHost",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobDetailPreviews.swift",
+      "line": 7,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobDiary",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobDiary.swift",
+      "line": 10,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobDiaryEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobDiary.swift",
+      "line": 69,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobListRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobListRow.swift",
+      "line": 3,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobRowWorkSheet",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobListRow.swift",
+      "line": 129,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIUpcomingVisits",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobListRow.swift",
+      "line": 163,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobTimeView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobTime.swift",
+      "line": 81,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIWorkTimeConflictView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobTime.swift",
+      "line": 199,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIWorkTimeActionEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobTime.swift",
+      "line": 244,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIWorkTimeProposalEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobTime.swift",
+      "line": 290,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIWorkTimeAdministration",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobTime.swift",
+      "line": 298,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobsFilterSheet",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobsFilters.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobsCalendarSheet",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobsFilters.swift",
+      "line": 60,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobsPreviewHost",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobsPreviews.swift",
+      "line": 4,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobsScreen",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobsScreen.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIMaterialReview",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIMaterialReview.swift",
+      "line": 22,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIMaterialPreferredEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIMaterialReview.swift",
+      "line": 38,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAuthenticatedImage",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIMedia.swift",
+      "line": 18,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIQuickLook",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIMedia.swift",
+      "line": 43,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APICamera",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIMedia.swift",
+      "line": 50,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIFilesView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIMedia.swift",
+      "line": 82,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APISignature",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIMedia.swift",
+      "line": 170,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIPhotoGrid",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIPhotoGrid.swift",
+      "line": 3,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocol.swift",
+      "line": 4,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolCatalog",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolCatalog.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolMaterialTotals",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolCatalog.swift",
+      "line": 38,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolMaterialLine",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolCatalog.swift",
+      "line": 42,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolSectionLabel",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIProtocolComponents.swift",
+      "line": 4,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolWorkSection",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolComponents.swift",
+      "line": 8,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolTimeSection",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolComponents.swift",
+      "line": 20,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolPhotos",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolComponents.swift",
+      "line": 24,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolReview",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolComponents.swift",
+      "line": 38,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolShare",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolComponents.swift",
+      "line": 51,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIWorkChargesEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolPDF.swift",
+      "line": 5,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolPreviewHost",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolPreviews.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolSignatureScreen",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolSignature.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolTemplateManager",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolTemplates.swift",
+      "line": 4,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolTemplateEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolTemplates.swift",
+      "line": 12,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIResourceList",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIRecordRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "line": 64,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIEntityDetail",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "line": 96,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIReadFields",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "line": 319,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDataPairs",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "line": 334,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIRolePreviewPicker",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIRolePreview.swift",
+      "line": 7,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIRolePreviewBanner",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIRolePreview.swift",
+      "line": 15,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIRoot",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIRoot.swift",
+      "line": 4,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APILogin",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIRoot.swift",
+      "line": 57,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIHeader",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIRoot.swift",
+      "line": 77,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component"
+    },
+    {
+      "platform": "ios",
+      "id": "APIMore",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIRoot.swift",
+      "line": 85,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APISessionsView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISecurity.swift",
+      "line": 3,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIPrivacyView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISecurity.swift",
+      "line": 13,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolPhotoPicker",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISecurity.swift",
+      "line": 21,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APISettings",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 3,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIConfigView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 45,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIPasswordView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 55,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APITeamContent",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 67,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APILocalAccountEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 80,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIHealthView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 92,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIShaftCanvas",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIShaftCanvas.swift",
+      "line": 4,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIShaftContent",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIShaftCanvas.swift",
+      "line": 26,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APIPlanCanvas",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIShaftCanvas.swift",
+      "line": 34,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "ios",
+      "id": "APISubscriptionPlanEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISubscriptionPlan.swift",
+      "line": 4,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "access-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/access-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createAccessUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "attendance-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/attendance-ui.js",
+      "status": "locked",
+      "forms": [
+        "attendance-correction-form",
+        "attendance-delete-form",
+        "attendance-review-form"
+      ],
+      "entryPoints": [
+        "createAttendanceUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "approved identity B / protected page"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "blowout-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/blowout-ui.js",
+      "status": "partial",
+      "forms": [
+        "blowout-form"
+      ],
+      "entryPoints": [
+        "createBlowoutUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "customers-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/customers-ui.js",
+      "status": "locked",
+      "forms": [
+        "customer-attach-form",
+        "customer-form",
+        "customers-search",
+        "garden-customer-form"
+      ],
+      "entryPoints": [
+        "customerContactMarkup",
+        "createCustomersUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "approved identity B / protected page"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "device-permissions-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/device-permissions-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createDevicePermissionsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "drive-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/drive-ui.js",
+      "status": "partial",
+      "forms": [
+        "drive-config-form"
+      ],
+      "entryPoints": [
+        "createDriveUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "email-settings-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/email-settings-ui.js",
+      "status": "partial",
+      "forms": [
+        "email-settings-form"
+      ],
+      "entryPoints": [
+        "createEmailSettingsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "garden-history-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/garden-history-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createGardenHistoryUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "garden-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/garden-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "gardenTabsMarkup"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "invoice-settings-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/invoice-settings-ui.js",
+      "status": "partial",
+      "forms": [
+        "invoice-company-form"
+      ],
+      "entryPoints": [
+        "createInvoiceSettingsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-backlog-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-backlog-ui.js",
+      "status": "partial",
+      "forms": [
+        "planning-reserve-form"
+      ],
+      "entryPoints": [
+        "backlogMarkup"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-completion-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-completion-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "jobCompletionMarkup",
+        "bindJobCompletion"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-diary-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-diary-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createJobDiaryUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-handoffs-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-handoffs-ui.js",
+      "status": "partial",
+      "forms": [
+        "handoff-form"
+      ],
+      "entryPoints": [
+        "handoffSummary",
+        "createJobHandoffsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-map-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-map-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createJobMapUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-photos-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-photos-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createJobPhotosUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-table-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-table-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "sortJobTable",
+        "jobTableMarkup"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-time-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-time-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createJobTimeUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-timeline-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-timeline-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "jobTimelineMarkup",
+        "bindTimelineInfo"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-week-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-week-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "jobWeekDays",
+        "jobWeekMarkup"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "jobs-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/jobs-ui.js",
+      "status": "locked",
+      "forms": [
+        "job-departure-form",
+        "job-edit-form",
+        "job-status-form",
+        "jobs-filters"
+      ],
+      "entryPoints": [
+        "createJobsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "approved identity B / protected page"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "local-auth-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/local-auth-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createPasswordUI",
+        "createAccountUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "materials-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/materials-ui.js",
+      "status": "partial",
+      "forms": [
+        "material-delete-form",
+        "material-edit-form"
+      ],
+      "entryPoints": [
+        "createMaterialsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "nearby-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/nearby-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createNearbyUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "notifications-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/notifications-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createNotificationsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "operations-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/operations-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createOperationsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "overview-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/overview-ui.js",
+      "status": "locked",
+      "forms": [],
+      "entryPoints": [
+        "overviewVisits",
+        "createOverviewUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "approved identity B / protected page"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "plan-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/plan-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createPlanUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "position-map-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/position-map-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "openPositionMap"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "protocol-email-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/protocol-email-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createProtocolEmailUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "record-links-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/record-links-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createRecordLinksUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "reminder-settings-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/reminder-settings-ui.js",
+      "status": "partial",
+      "forms": [
+        "material-reminder-form"
+      ],
+      "entryPoints": [
+        "createReminderSettingsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "service-work-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/service-work-ui.js",
+      "status": "partial",
+      "forms": [
+        "service-work-form"
+      ],
+      "entryPoints": [
+        "createServiceWorkUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "settings-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/settings-ui.js",
+      "status": "partial",
+      "forms": [
+        "features-form"
+      ],
+      "entryPoints": [
+        "settingsPage",
+        "bindSettings"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "subscriptions-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/subscriptions-ui.js",
+      "status": "partial",
+      "forms": [
+        "subscription-contract",
+        "subscription-filters",
+        "tariff-form"
+      ],
+      "entryPoints": [
+        "createSubscriptionsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "vehicles-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/vehicles-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createVehiclesUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "volume-test-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/volume-test-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "selectVolumeIds",
+        "createVolumeJob",
+        "runVolumeImport",
+        "createVolumeTestUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "work-charges-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/work-charges-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createWorkChargesUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "workspace-recovery-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/workspace-recovery-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "workspaceRecoveryArchive",
+        "readWorkspaceRecoveryArchive",
+        "createWorkspaceRecoveryUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "workspace-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/workspace-ui.js",
+      "status": "partial",
+      "forms": [
+        "workspace-membership-form"
+      ],
+      "entryPoints": [
+        "workspaceBadge",
+        "workspaceDisciplineField",
+        "workspaceFilterMarkup",
+        "createWorkspaceUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only"
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "admin",
+      "kind": "module",
+      "file": "apps/super-admin/web/admin.js",
+      "status": "partial",
+      "forms": [
+        "company-filters",
+        "mfa-form"
+      ],
+      "entryPoints": [
+        "api",
+        "toast",
+        "moduleChecks",
+        "pruneDependencies",
+        "modal",
+        "closeModal",
+        "shell",
+        "navigate",
+        "load",
+        "render",
+        "bind",
+        "catalogEditor",
+        "companyEditor",
+        "moduleEnableEditor",
+        "companyDetail",
+        "copy",
+        "connectionEditor",
+        "start",
+        "renderAuth",
+        "rolloutEditor"
+      ],
+      "roles": "Super Admin / central authorization and TOTP, separate from tenant roles"
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "overview",
+      "kind": "module",
+      "file": "apps/super-admin/web/overview.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "filterCompanies",
+        "overviewHTML",
+        "moduleMatrix"
+      ],
+      "roles": "Super Admin / central authorization and TOTP, separate from tenant roles"
+    },
+    {
+      "platform": "ios",
+      "id": "jobs:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "locked",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "jobs:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "locked",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "jobs:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "customers:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "locked",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "customers:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "customers:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "gardens:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "gardens:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "gardens:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "defects:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "defects:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "defects:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "materials:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "materials:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "materials:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "categories:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "categories:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "categories:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "vehicles:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "vehicles:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "vehicles:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "entries:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "entries:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "entries:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "drivers:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "drivers:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "tariffs:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "tariffs:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "tariffs:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "subscriptions:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "subscriptions:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "subscriptions:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "services:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "services:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "services:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "history:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "history:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "shafts:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "shafts:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "shafts:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "notifications:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "notifications:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "team:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "team:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "ios",
+      "id": "team:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "home",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "gardenOverview",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "gardenFolders",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "gardenHome",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "editGarden",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "editService",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "selectPositionOnMap",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "manualPosition",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "zonesPage",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "backupSettings",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "editor",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "editValveLabel",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "editZone",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "teamPage",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "presentInvite",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "showLogin",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates"
+    }
+  ],
+  "platformGaps": [
+    {
+      "area": "appearance",
+      "web": "forced light root tokens; no user appearance control",
+      "ios": "system light/dark; no explicit per-user appearance selector",
+      "plan": "add opt-in theme preference; preserve approved light CSS and native reference components"
+    },
+    {
+      "area": "protocol templates and signed metadata",
+      "web": "legacy protocol form; shared API preserves modern stored metadata, template management missing",
+      "ios": "modern editor/templates and version-bound signatures",
+      "plan": "add template management to settings using the existing /api/protocol-templates API; protect existing protocol form"
+    },
+    {
+      "area": "Super Admin",
+      "web": "separate central console, company/license/module/connector/rollout administration and TOTP",
+      "ios": "tenant client; central console is not exposed as native tenant permission",
+      "plan": "preserve security boundary; verify an equivalent authorized web access path instead of granting tenant roles central access"
+    }
+  ]
+}

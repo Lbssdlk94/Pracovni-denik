@@ -107,16 +107,14 @@ struct APIEntityEditor: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment:.leading,spacing:18) {
+            Form {
                     if loading { ProgressView("Načítám údaje…") }
-                    else { APIFieldsView(fields:fields.filter{!extras.contains($0.id)},value:$value,options:visibleOptions,edited:edited).diaryCard();if !fields.filter({extras.contains($0.id)}).isEmpty{DisclosureGroup("Doplňující údaje"){APIFieldsView(fields:fields.filter{extras.contains($0.id)},value:$value,options:visibleOptions,edited:edited)}.diaryCard()} }
+                    else { APISecondaryFormSections(fields:fields.filter{!extras.contains($0.id)},value:$value,options:visibleOptions,edited:edited);if !fields.filter({extras.contains($0.id)}).isEmpty{Section{DisclosureGroup("Doplňující údaje"){APIFieldsView(fields:fields.filter{extras.contains($0.id)},value:$value,options:visibleOptions,edited:edited)}}} }
                     if resource.entity == .defects,!value["sourceJobId"].string.isEmpty {APIProtocolPhotoPicker(store:store,jobID:value["sourceJobId"].string,photos:Binding(get:{value["photos"]},set:{value["photos"]=$0})).diaryCard()}
                     if !overlap.isNull {VStack(alignment:.leading){ForEach(Array(overlap["warnings"].array.enumerated()),id:\.offset){_,warning in Text(warning["message"].string).foregroundStyle(DiaryStyle.warning)};if !overlap["overlaps"].array.isEmpty{Text("Překryvy práce: \(overlap["overlaps"].array.count). Zkontrolujte přiřazení, čas a rezervu mezi návštěvami.").foregroundStyle(DiaryStyle.warning)}};Button("Přesto uložit po kontrole překryvů"){value["allowOverlaps"] = .bool(true);value["previewRevision"]=overlap["revision"];Task{await save()}}.diaryBubble()}
                     if let problem { DiaryStatusBanner(text:problem,warning:true) }
                     Text("Koncept se průběžně ukládá v tomto iPhonu.").font(.footnote).foregroundStyle(.secondary)
-                }.padding(18)
-            }.background(DiaryStyle.background).navigationTitle(isNew ? "Nový záznam" : "Upravit").navigationBarTitleDisplayMode(.inline)
+            }.scrollContentBackground(.hidden).background(DiaryStyle.background).navigationTitle(resource.entity == .jobs ? (isNew ? "Nová zakázka":"Upravit zakázku") : (isNew ? "Nový záznam · ":"Upravit · ")+resource.title).navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement:.cancellationAction) { Button("Zavřít") { confirmClose=true }.disabled(saving) }
                     ToolbarItem(placement:.confirmationAction) { Button("Uložit") { Task { await save() } }.disabled(loading || saving) }

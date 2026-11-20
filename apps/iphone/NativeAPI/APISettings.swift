@@ -2,11 +2,13 @@ import SwiftUI
 
 struct APISettings:View {
     @ObservedObject var store:APIStore
+    @AppStorage("diary-interface-appearance") private var appearance="system"
     @State private var problem:String?
     var body:some View{List{
         if store.canPreviewRoles{Section("Náhled deníku"){APIRolePreviewPicker(store:store);Text("Zobrazí menu a ovládání role s vašimi daty. V náhledu se změny neukládají.").font(.footnote)}}
         Section{Text(store.me["user"]["name"].string).font(.headline);Text(store.company).foregroundStyle(.secondary)}
         if store.enabled("notifications"){Section{Button("Upozornění na iPhonu"){NativePushController.shared.showSettings=true};NavigationLink("Výběr oznámení"){APIConfigView(store:store,spec:.preferences)}}}
+        Section("Vzhled"){Picker("Barevný režim",selection:$appearance){ForEach(APIAppearance.allCases){Text($0.title).tag($0.rawValue)}}.accessibilityIdentifier("settings-appearance")}
         Section("Účet"){Picker("Firma",selection:Binding(get:{store.transport.origin.host ?? ""},set:{host in Task{do{try await store.switchInstallation(URL(string:"https://"+host+"/")!)}catch{problem=error.localizedDescription}}})){Text("Dr. Závlaha").tag("zavlahovy-denik.purplecedar.chatgpt.site");Text("Dr. Garden").tag("dr-garden.purplecedar.chatgpt.site")};NavigationLink("Moje přihlášení"){APIPasswordView(store:store)};NavigationLink("Přihlášená zařízení"){APISessionsView(store:store)};Button("Apple Watch"){WatchPhoneCoordinator.shared.showSettings=true};if !store.me["workspace"].isNull{Picker("Pracovní obor",selection:Binding(get:{store.transport.discipline},set:{v in Task{do{try await store.switchDiscipline(v)}catch{problem=error.localizedDescription}}})){if store.me["workspace"]["disciplines"].array.count>1{Text("Oba obory").tag("all")};ForEach(store.me["workspace"]["disciplines"].array.map(\.string),id:\.self){Text($0=="irrigation" ? "Závlaha" : "Garden").tag($0)}}}}
         if store.manager{
             Section("Firma"){
@@ -23,7 +25,7 @@ struct APISettings:View {
             if store.enabled("backups"){Section("Zálohy a data"){NavigationLink("Úplné serverové zálohy"){APIBackupsView(store:store)};NavigationLink("Kontrola vazeb"){APIRecordLinksView(store:store)};NavigationLink("Technický stav"){APIHealthView(store:store)}}}
             Section("Dostupné moduly"){Text("Moduly této firmy nastavuje pouze provozovatel v Super Adminu.").font(.footnote);DisclosureGroup("Povolené funkce"){ForEach(store.me["features"].object.keys.sorted(),id:\.self){key in if store.enabled(key){Text(APIFeatureNames.name(key)).font(.caption)}}}}
         }
-        Section{Button("Odhlásit se",role:.destructive){Task{do{try await store.logout()}catch{problem=error.localizedDescription}}}.frame(minHeight:44);Text("Pracovní deník · 0.8.0").font(.footnote).foregroundStyle(.secondary)}
+        Section{Button("Odhlásit se",role:.destructive){Task{do{try await store.logout()}catch{problem=error.localizedDescription}}}.frame(minHeight:44);Text("Pracovní deník · "+(Bundle.main.object(forInfoDictionaryKey:"CFBundleShortVersionString") as? String ?? "")+" ("+(Bundle.main.object(forInfoDictionaryKey:"CFBundleVersion") as? String ?? "")+")").font(.footnote).foregroundStyle(.secondary)}
         if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}
     }.navigationTitle("Nastavení").listStyle(.insetGrouped).scrollContentBackground(.hidden).background(DiaryStyle.background)}
 }
@@ -49,7 +51,7 @@ struct APIConfigView:View {
     @State private var version:APIValue = .n(0)
     @State private var problem:String?
     @State private var busy=false
-    var body:some View{Form{APIFieldsView(fields:spec.fields,value:$value);if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)};Button("Uložit"){Task{await save()}}.disabled(busy)}.navigationTitle(spec.title).task{do{let response=try await store.get(spec.path);version=response["version"];value=spec.key.map{response[$0]} ?? spec.readKey.map{response[$0]} ?? response}catch{problem=error.localizedDescription}}}
+    var body:some View{Form{APISecondaryFormSections(fields:spec.fields,value:$value);if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)};Button("Uložit"){Task{await save()}}.disabled(busy)}.navigationTitle(spec.title).task{do{let response=try await store.get(spec.path);version=response["version"];value=spec.key.map{response[$0]} ?? spec.readKey.map{response[$0]} ?? response}catch{problem=error.localizedDescription}}}
     func save()async{busy=true;defer{busy=false};do{var input=value.selecting(spec.fields.map(\.id));if spec.title=="Resend" && input["apiKey"].string.isEmpty{var o=input.object;o.removeValue(forKey:"apiKey");input = .object(o)};if let key=spec.key{input = .object([key:input])};if spec.hasVersion{input["version"]=version};let result=try await store.write(spec.path,method:"PUT",body:input);version=result["version"];value=spec.key.map{result[$0]} ?? spec.readKey.map{result[$0]} ?? result;problem="Uloženo."}catch{problem=error.localizedDescription}}
 }
 struct APIPasswordView:View {

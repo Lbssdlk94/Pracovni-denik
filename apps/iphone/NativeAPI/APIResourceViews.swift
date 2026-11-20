@@ -183,7 +183,7 @@ struct APIEntityDetail: View {
         }
     }
     @ViewBuilder private var genericFields:some View {
-        APIReadFields(value:record,fields:resource.fields).diaryCard()
+        APISecondaryReadFields(value:record,fields:resource.fields).diaryCard()
         if resource.entity == .entries{
             if !record["authorName"].string.isEmpty{Text("Přidal/a: "+record["authorName"].string).font(.footnote)}
             APIFilesView(store:store,path:"/api/vehicles/"+resource.parent+"/entries/"+record.id+"/receipts",mode:.receipts,record:record)
@@ -234,40 +234,54 @@ struct APIEntityDetail: View {
         }
     }
     private var customer: some View {
-        VStack(spacing:18) {
-            DisclosureGroup("Kontakt a adresa") {
-                APIReadFields(value:record,fields:resource.fields.filter{["name","email","phones","addresses","contactNotes"].contains($0.id)})
-                ForEach(Array(record["phones"].array.enumerated()),id:\.offset){_,p in if let url=URL(string:"tel:"+p["number"].string.filter{"+0123456789".contains($0)}){Link("Zavolat "+p["number"].string,destination:url).frame(minHeight:44)}}
-            }.diaryCard()
-            link("Zahrady",.gardens,seed:.object(["customerId":.s(record.id)]))
-            link("Zakázky",.jobs,seed:.object(["customerId":.s(record.id)]))
-            if store.enabled("subscriptions") { link("Servisní předplatné",.subscriptions,seed:.object(["customerId":.s(record.id)])) }
-            DisclosureGroup("Fakturační údaje"){APIReadFields(value:record["billing"],fields:APISchemas.billing)}.diaryCard()
-            if store.manager,!store.me["workspace"].isNull { Button("Zařazení do oborů"){action=APIDomainAction.membership(record:record,kind:"customers")}.diaryBubble().frame(minHeight:44) }
+        VStack(spacing:12) {
+            APISecondarySection(title:"Kontakt a adresa",symbol:"person.crop.rectangle") {
+                APISecondaryReadFields(value:record,fields:resource.fields.filter{["email","phones","addresses","contactNotes"].contains($0.id)})
+                ForEach(Array(record["phones"].array.enumerated()),id:\.offset){_,p in if let url=URL(string:"tel:"+p["number"].string.filter{"+0123456789".contains($0)}){Link(destination:url){Label("Zavolat "+p["number"].string,systemImage:"phone")}.frame(minHeight:44)}}
+            }
+            APISecondarySection(title:"Práce pro zákazníka",symbol:"list.clipboard") {
+                related("Zahrady",.gardens,seed:.object(["customerId":.s(record.id)]))
+                Divider();related("Zakázky",.jobs,seed:.object(["customerId":.s(record.id)]))
+                if store.enabled("subscriptions") {Divider();related("Servisní předplatné",.subscriptions,seed:.object(["customerId":.s(record.id)]))}
+            }
+            APISecondarySection(title:"Fakturace a zařazení",symbol:"creditcard") {
+                DisclosureGroup("Fakturační údaje"){APISecondaryReadFields(value:record["billing"],fields:APISchemas.billing).padding(.vertical,8)}
+                if store.manager,!store.me["workspace"].isNull {Button("Zařazení do oborů"){action=APIDomainAction.membership(record:record,kind:"customers")}.frame(minHeight:44)}
+            }
         }
     }
     private var garden: some View {
-        VStack(spacing:18) {
-            DisclosureGroup("Kontakt a adresa") {
-                Text(record["address"].string).textSelection(.enabled)
-                if let url=APIFormat.navigation(record["address"].string){Link("Navigovat",destination:url).frame(minHeight:44)}
-                if !record["customerId"].string.isEmpty { NavigationLink("Otevřít zákazníka"){APIEntityDetail(store:store,resource:APIResource(entity:.customers),initial:.object(["id":record["customerId"],"name":.s("Zákazník")]))}.frame(minHeight:44) }
-                if store.manager { Button("Přiřadit existujícího zákazníka"){action=APIDomainAction.linkCustomer(garden:record)}.frame(minHeight:44) }
-            }.diaryCard()
-            link("Zakázky",.jobs,seed:.object(["gardenId":.s(record.id),"customerId":record["customerId"],"address":record["address"],"city":record["addressDetails"]["city"],"customerAddressId":record["addressDetails"]["customerAddressId"]]))
-            if store.enabled("gardenHistory"){link("Historie a servis",.history,parent:record.id)}
-            if store.enabled("defects"){link("Závady",.defects,seed:.object(["gardenId":.s(record.id)]))}
-            if store.enabled("service"){link("Samostatné servisní zápisy",.services,parent:record.id)}
-            if store.enabled("shafts"){link("Šachty a fotodokumentace",.shafts,seed:.object(["gardenId":.s(record.id)]))}
-            if store.enabled("blowout"){NavigationLink{APIBlowoutView(store:store,garden:record)}label:{category("Vyfukování","wind")}}
-            if store.enabled("plans"){NavigationLink{APIPlanView(store:store,garden:record)}label:{category("Plán zahrady","map")}}
-            DisclosureGroup("Technické údaje"){APIReadFields(value:record,fields:resource.fields.filter{["notes","pumpType","sharedDescription"].contains($0.id)})}.diaryCard()
+        VStack(spacing:12) {
+            APISecondarySection(title:"Místo a zákazník",symbol:"mappin.and.ellipse") {
+                Text(record["address"].string).font(.subheadline).textSelection(.enabled)
+                if let url=APIFormat.navigation(record["address"].string){Link(destination:url){Label("Navigovat",systemImage:"location")}.frame(minHeight:44)}
+                if !record["customerId"].string.isEmpty {NavigationLink("Otevřít zákazníka"){APIEntityDetail(store:store,resource:APIResource(entity:.customers),initial:.object(["id":record["customerId"],"name":.s("Zákazník")]))}.frame(minHeight:44)}
+                if store.manager {Button("Přiřadit existujícího zákazníka"){action=APIDomainAction.linkCustomer(garden:record)}.frame(minHeight:44)}
+            }
+            APISecondarySection(title:"Realizace a dokumentace",symbol:"leaf") {
+                related("Zakázky",.jobs,seed:.object(["gardenId":.s(record.id),"customerId":record["customerId"],"address":record["address"],"city":record["addressDetails"]["city"],"customerAddressId":record["addressDetails"]["customerAddressId"]]))
+                if store.enabled("gardenHistory"){Divider();related("Historie a servis",.history,parent:record.id)}
+                if store.enabled("defects"){Divider();related("Závady",.defects,seed:.object(["gardenId":.s(record.id)]))}
+                if store.enabled("service"){Divider();related("Samostatné servisní zápisy",.services,parent:record.id)}
+                if store.enabled("shafts"){Divider();related("Šachty a fotodokumentace",.shafts,seed:.object(["gardenId":.s(record.id)]))}
+                if store.enabled("blowout"){Divider();NavigationLink{APIBlowoutView(store:store,garden:record)}label:{relatedLabel("Vyfukování","wind")}}
+                if store.enabled("plans"){Divider();NavigationLink{APIPlanView(store:store,garden:record)}label:{relatedLabel("Plán zahrady","map")}}
+            }
+            APISecondarySection(title:"Technické údaje",symbol:"wrench.and.screwdriver") {
+                APISecondaryReadFields(value:record,fields:resource.fields.filter{["notes","pumpType","sharedDescription"].contains($0.id)})
+            }
         }
+    }
+    private func relatedLabel(_ title:String,_ symbol:String)->some View {
+        HStack(spacing:10){Image(systemName:symbol).foregroundStyle(DiaryStyle.accent).frame(width:22);Text(title).foregroundStyle(.primary);Spacer(minLength:4);Image(systemName:"chevron.right").font(.caption).foregroundStyle(.secondary)}.font(.subheadline).frame(minHeight:44).contentShape(Rectangle())
+    }
+    private func related(_ title:String,_ entity:APIEntity,parent:String="",seed:APIValue = .object([:]))->some View {
+        NavigationLink{APIResourceList(store:store,resource:APIResource(entity:entity,parent:parent,seed:seed))}label:{relatedLabel(title,entity.symbol)}
     }
     private var defect: some View {
         VStack(alignment:.leading,spacing:16) {
             Label(record["status"].string == "resolved" ? "Vyřešená závada" : "Otevřená závada",systemImage:"exclamationmark.triangle").foregroundStyle(record["status"].string == "resolved" ? DiaryStyle.accent : DiaryStyle.warning)
-            APIReadFields(value:record,fields:resource.fields.filter{!["repairJobIds","sourceJobId","gardenId"].contains($0.id)}).diaryCard()
+            APISecondaryReadFields(value:record,fields:resource.fields.filter{!["repairJobIds","sourceJobId","gardenId"].contains($0.id)}).diaryCard()
             if !record["sourceJobId"].string.isEmpty { NavigationLink("Původní zakázka"){APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:.object(["id":record["sourceJobId"],"title":.s("Zdrojová zakázka")]))} }
             if !record["repairJobs"].array.isEmpty{DisclosureGroup("Navazující opravné zakázky"){ForEach(record["repairJobs"].array,id:\.id){job in NavigationLink(job.title+" · "+APIFormat.status(job["status"].string)){APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:job)}}}.diaryCard()}
             if record["hasOtherRepair"].bool{Text("Další oprava existuje mimo vaše oprávnění.").font(.footnote)}

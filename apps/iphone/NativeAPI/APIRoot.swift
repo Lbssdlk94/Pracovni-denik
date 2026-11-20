@@ -84,16 +84,30 @@ struct APIHeader:ToolbarContent {
 }
 struct APIMore:View {
     @ObservedObject var store:APIStore
-    var body:some View{ScrollView{VStack(spacing:16){HStack{Image(systemName:"person.crop.circle.fill").font(.largeTitle);VStack(alignment:.leading){Text(store.me["user"]["name"].string).font(.headline);Text(store.company).foregroundStyle(.secondary)}}.diaryCard()
-        category("Práce v terénu","leaf",entities:[.gardens,.defects,.shafts])
-        category("Firemní agenda","building.2",entities:[.materials,.vehicles,.subscriptions])
-        if store.manager && store.enabled("teamManagement"){NavigationLink{APIResourceList(store:store,resource:APIResource(entity:.team))}label:{row("Tým","person.2")}}
-        if store.enabled("notifications"){NavigationLink{APIResourceList(store:store,resource:APIResource(entity:.notifications))}label:{row("Upozornění","bell")}}
-        NavigationLink{APISettings(store:store)}label:{row("Nastavení","gearshape")}
-        NavigationLink{APIOutboxView(store:store)}label:{row("Koncepty a synchronizace","arrow.triangle.2.circlepath")}
-    }.padding(18)}.background(DiaryStyle.background).navigationTitle("Více").navigationBarTitleDisplayMode(.inline)}
-    @ViewBuilder func category(_ title:String,_ symbol:String,entities:[APIEntity])->some View{let allowed=entities.filter{store.enabled($0.feature)&&(!$0.managerOnly||store.manager)};if !allowed.isEmpty{NavigationLink{ScrollView{VStack(spacing:16){ForEach(allowed,id:\.self){entity in if entity == .vehicles{NavigationLink{APIVehiclesHome(store:store)}label:{row(entity.title,entity.symbol)}}else{NavigationLink{APIResourceList(store:store,resource:APIResource(entity:entity))}label:{row(entity.title,entity.symbol)}}}}.padding(18)}.background(DiaryStyle.background).navigationTitle(title)}label:{row(title,symbol)}}}
-    func row(_ title:String,_ symbol:String)->some View{HStack(spacing:14){Image(systemName:symbol).frame(width:44,height:44).background(DiaryStyle.soft,in:RoundedRectangle(cornerRadius:14));Text(title).font(.headline);Spacer();Image(systemName:"chevron.right").font(.caption)}.foregroundStyle(DiaryStyle.accent).frame(minHeight:48).diaryCard().accessibilityElement(children:.combine).accessibilityLabel(title)}
+    var body:some View {
+        List {
+            Section { VStack(alignment:.leading,spacing:4){Text(store.me["user"]["name"].string).font(.headline);Text(store.company).font(.subheadline).foregroundStyle(.secondary)}.padding(.vertical,4) }
+            category("Práce v terénu","leaf",entities:[.gardens,.defects,.shafts])
+            category("Firemní agenda","building.2",entities:[.materials,.vehicles,.subscriptions])
+            Section("Účet a aplikace") {
+                if store.manager && store.enabled("teamManagement") { NavigationLink{APIResourceList(store:store,resource:APIResource(entity:.team))}label:{Label("Tým",systemImage:"person.2")} }
+                if store.enabled("notifications") { NavigationLink{APIResourceList(store:store,resource:APIResource(entity:.notifications))}label:{Label("Upozornění",systemImage:"bell")} }
+                NavigationLink{APISettings(store:store)}label:{Label("Nastavení",systemImage:"gearshape")}
+                NavigationLink{APIOutboxView(store:store)}label:{Label("Koncepty a synchronizace",systemImage:"arrow.triangle.2.circlepath")}
+            }
+        }.listStyle(.insetGrouped).scrollContentBackground(.hidden).background(DiaryStyle.background).navigationTitle("Více").navigationBarTitleDisplayMode(.inline)
+    }
+    @ViewBuilder func category(_ title:String,_ symbol:String,entities:[APIEntity])->some View {
+        let allowed=entities.filter{store.enabled($0.feature)&&(!$0.managerOnly||store.manager)}
+        if !allowed.isEmpty {
+            Section {
+                DisclosureGroup { ForEach(allowed,id:\.self){entity in
+                    if entity == .vehicles { NavigationLink{APIVehiclesHome(store:store)}label:{Label(entity.title,systemImage:entity.symbol)} }
+                    else { NavigationLink{APIResourceList(store:store,resource:APIResource(entity:entity))}label:{Label(entity.title,systemImage:entity.symbol)} }
+                }} label:{Label(title,systemImage:symbol)}
+            }
+        }
+    }
 }
 
 struct APIPhoneFollowUp:Identifiable{let id=UUID();let job:APIValue;let action:String}

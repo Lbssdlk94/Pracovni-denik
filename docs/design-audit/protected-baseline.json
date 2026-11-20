@@ -1,0 +1,110 @@
+{
+  "baseline": "27f2165",
+  "policy": "Do not edit protected surfaces. New treatment must be explicitly scoped to secondary routes. No global changes to approved tokens or layouts.",
+  "files": {
+    "apps/iphone/App/DiaryDesign.swift": "ac86337763ffbb90dca44a44acfbf4de776129275d4c5e98075dfd5b7f6ae4f5",
+    "apps/iphone/NativeAPI/APIAttendance.swift": "d458a3da85ec3e46cd4f0abfa252237346e6270a27c2dd195ddcd090807046b4",
+    "apps/iphone/NativeAPI/APIAttendanceComponents.swift": "a9936b34064ce8dde4032e2a9526b5ecbb2a2632ebfe387ba273e48174afc627",
+    "apps/iphone/NativeAPI/APIAttendanceDayView.swift": "8ae04e34701564af583d7208baceca4bdb2216c0393d2e3a47809b2c7626417c",
+    "apps/iphone/NativeAPI/APIAttendanceFixture.swift": "a05aff06aebbd9c9171c8eec8d8f2a88f3f2b3fc8240802a7147f6bda10e5f74",
+    "apps/iphone/NativeAPI/APIAttendanceLogic.swift": "032ad7c1dc51a20be7d80d5e294c9a49bc242d04ee6fd3596d3c0b2e618cab4c",
+    "apps/iphone/NativeAPI/APIAttendanceModel.swift": "dfd76f8697c38f75d0461664f1f38f670b6500f3b49963e1c61c3816e8e3a574",
+    "apps/iphone/NativeAPI/APIAttendancePreviews.swift": "554d2c209677284c7c586c9800d0130b74520bcc468d522c274749d4344795c2",
+    "apps/iphone/NativeAPI/APIAttendanceScreen.swift": "e2e9484fda36f5ce7bb34054e400b26880edd5f023d92bdd9f4357d93f82ec40",
+    "apps/iphone/NativeAPI/APIDashboard.swift": "ec01ea698aa46a0987bdedb911374bbff7d6fbe782447ca8bfab17a838517e43",
+    "apps/iphone/NativeAPI/APIDashboardComponents.swift": "f9d32dcbe547a658ca709ba5f03735860b0233db2e83a781b4aae8b81882afe7",
+    "apps/iphone/NativeAPI/APIDashboardFixture.swift": "f7f72b1fceae79b38250e88ca54c6e45fa7a18f655e38d6cf218c4695b99e4cc",
+    "apps/iphone/NativeAPI/APIDashboardLogic.swift": "c3302712bcfb837956c4fa3bb74d46bf93bf27f56097360695e4817b6efeff08",
+    "apps/iphone/NativeAPI/APIDashboardPreviews.swift": "6b13c0a6e70b568e499b8a8694e615ee57f695253c8d6df18a0de0fa1ead7ac6",
+    "apps/iphone/NativeAPI/APIDashboardWork.swift": "4676a03dc313f4354bdaee4f8fd9f2dc7add7595e65cd8f99b554f8d07e34190",
+    "apps/iphone/NativeAPI/APIJobActionBar.swift": "ed897fe0c7e1948c4207d1b7aabc58420f455a9f74e91a7c56f442999721d869",
+    "apps/iphone/NativeAPI/APIJobCompletion.swift": "27864b70bf33ec996f1de5d00f229cc663ecc3b02c485a9eb19513a988216c72",
+    "apps/iphone/NativeAPI/APIJobDetailComponents.swift": "3569f980ccd5fce21bafea3556974d69859011f3d70797c61749375274845453",
+    "apps/iphone/NativeAPI/APIJobDetailContent.swift": "e7d7f86568b050f2b2ff336f5e3e35b3815f6c63f521e20fead86f1beccd7368",
+    "apps/iphone/NativeAPI/APIJobDetailPresentation.swift": "f9e1fdff490542205d16a8da4fe2d9d9d85714cfc4e775f3032d0eb6b60d7d95",
+    "apps/iphone/NativeAPI/APIJobDetailPreviews.swift": "139665206d8e084f23258fa242736ec548cf08d923a4c6a1a01220329e55642d",
+    "apps/iphone/NativeAPI/APIJobTime.swift": "b46180b407bb15adc35adb171bba60db8603b7367473df0b447103a66da9aee7",
+    "apps/iphone/NativeAPI/APIJobsFilters.swift": "f5764f237aa25c23ae49c5357d4549da02c51b3fc6e900e891a86207cbfbd1e6",
+    "apps/iphone/NativeAPI/APIJobsFixture.swift": "74f41307890c677072a070d5ce0f037b547717132d40875dcb7951d5e6278eb8",
+    "apps/iphone/NativeAPI/APIJobsListModel.swift": "0b46ac11117f6a89fe798fdeebb652d856da6d0305ca8641c05b194c288797f3",
+    "apps/iphone/NativeAPI/APIJobsPresentation.swift": "daa848eae916fbd32d69b1abb9af488a7c9671240b5da7d135bb2a78558772e6",
+    "apps/iphone/NativeAPI/APIJobsPreviews.swift": "fecad0037fff3ed2f77ea54b2c64b8093fba3723671cf86f9821853818283da5",
+    "apps/iphone/NativeAPI/APIJobsScreen.swift": "c7f0c96a40819161b18e8e0a7b2a2fcf224de84bbd0287ad31af641614a0b9c0",
+    "apps/iphone/NativeAPI/APIProtocol.swift": "b3342a0d625b853c60dd677fffd594b2fd0bb131c9db8ae2fd78535f3053f5bf",
+    "apps/iphone/NativeAPI/APIProtocolCatalog.swift": "385de60afd9c0cd62fcb6bd64dee21fde8f322060b492ab8f19d291057260c2c",
+    "apps/iphone/NativeAPI/APIProtocolComponents.swift": "a9575d6851d8101f11f557da9436a1e5ead7690c5764523893159ba4c559f701",
+    "apps/iphone/NativeAPI/APIProtocolFixture.swift": "cd67be8200c4f99b578388c5d58cba914fa00f4bd51a86da19ca459ae5e71647",
+    "apps/iphone/NativeAPI/APIProtocolLogic.swift": "85579684a0bc36044906e0f793f814b16eb1a66a18f5862b84ae6daaa1e60dcf",
+    "apps/iphone/NativeAPI/APIProtocolModel.swift": "5ad575b8c0d0692d451a50d8782980007c7674d8645ff5aba6c73f6e7a2a8d03",
+    "apps/iphone/NativeAPI/APIProtocolPDF.swift": "445bea8458138025f7b9195d25dee99b6e9e477ee25866449d03a74506b04d6b",
+    "apps/iphone/NativeAPI/APIProtocolPreviews.swift": "135ab8d8359b6cf8c43258ead791f3619541fb7ae8948cc2544a981b61c6e40e",
+    "apps/iphone/NativeAPI/APIProtocolSignature.swift": "79cfc1d9e9ddeee9c0a235027e353fb727ede933bb6a118c4882d2364e25b1f8",
+    "apps/iphone/NativeAPI/APIProtocolTemplates.swift": "e1a4ccda43d83c70c6cc30af55cdfd2f707d46651606891ccbfe227d64a6ff51",
+    "apps/iphone/WatchApp/PracovniDenikWatchApp.swift": "04533de439acb79aee9027c0b15f3d4f4e8bedafa4cf5723224c31d46562968c",
+    "apps/iphone/WatchApp/WatchStore.swift": "c117df358185c34f61db6e11f3ef3e29a9ca44b6d1da3a5252fa86b71f26a2d7",
+    "apps/iphone/WatchApp/WatchViews.swift": "55ad4177040d84afe4eb6279296de13780bc6ca24b437927bd5a68d53e099215",
+    "apps/work-diary/web/approved-layout.css": "ae9ea357eee5afaff220556901db1f094383ec84285505858295d78676b8240d",
+    "apps/work-diary/web/attendance-ui.js": "f80a2034c9b0bea2c1d85b50d266b4ed2aec13111f69f75752986fe33e307e7f",
+    "apps/work-diary/web/control-surfaces.css": "818189932a70e817ce7d8fca06403c1cfd46313081c236eae8761deb05503571",
+    "apps/work-diary/web/customers-ui.js": "be6448424648857cb07b097f78ea5b8276340d05e0c4dc80d8f6127ca6e7e0a9",
+    "apps/work-diary/web/design-tokens.css": "044af02e3b2d2d8de71cb2e4b8f59c066fadcc19daae314f99cc539275401b97",
+    "apps/work-diary/web/desktop.css": "e5fc401271292f6c76f927ace3ba3f681f61f78d5a56b255a546fb241f689ad7",
+    "apps/work-diary/web/field-ui.css": "9fbbc56e5e3229ba8f1acbe6b350c165d41d1ca9e7f810137ce7471c4d1d2d9e",
+    "apps/work-diary/web/jobs-ui.js": "5048939ca0b1eb9550392bf0dde876f2e44aebaddf0a232327c5a0731e39f51d",
+    "apps/work-diary/web/mobile-workspace.css": "0edc085e11581c41814f89aeafafd9a81b98d13a4ef4a6e2008a1226185025de",
+    "apps/work-diary/web/overview-ui.js": "8f2c4cfd999b6a59a0a5e1b82193f30ac31ad82fa5fd86e02b4e2b289fba45bb",
+    "apps/work-diary/web/service-protocol-pdf.js": "621304f67e18c01458691b14af31d09847e0efd494acc84d308fee8e1bba8116",
+    "apps/work-diary/web/style.css": "4ceb4a18aca0d499f3d85ca81fcd2fe0a0bb1c7001cf5c3f1c7a81c3920840b9",
+    "apps/work-diary/web/work-diary-ui.css": "3a5577e08ddd06e809965519b840fda9bf16fede2ec3e403a220e3eabb5d7dd6"
+  },
+  "fragments": [
+    {
+      "file": "apps/iphone/NativeAPI/APIRoot.swift",
+      "start": "struct APIRoot:",
+      "end": "struct APILogin:",
+      "sha256": "6431eaf1d0abb12c704df3b36a2c5d8f448d08ab6abf3c7b3287153798f726f8"
+    },
+    {
+      "file": "apps/iphone/NativeAPI/APIRoot.swift",
+      "start": "struct APIHeader:",
+      "end": "struct APIMore:",
+      "sha256": "65daa2b0676178fe73f97ee3a91f2e829084a968f56cf2f7a91bb2b3b5b5c325"
+    },
+    {
+      "file": "apps/iphone/NativeAPI/APIForms.swift",
+      "start": "struct APIFieldsView:",
+      "end": "@MainActor\nstruct APIEntityEditor:",
+      "sha256": "b87c6e812182dde859afdab774ceb2514753d814ac1dca918aeede79196b1e37"
+    },
+    {
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "start": "struct APIResourceList:",
+      "end": "enum APIFormat {",
+      "sha256": "e641b1193b7b3da8f64972c554498aeff7a5de857b9c1eb56f225b2b623e13d2"
+    },
+    {
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "start": "    var body: some View {\n        detailScrollView",
+      "end": "    @ViewBuilder private var defectWarnings:",
+      "sha256": "e4040e539e9eac38a8039c2109bc17d0654909fc4357e84c9161712e3cc3aefa"
+    },
+    {
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "start": "    private var jobContent:",
+      "end": "    @ViewBuilder private var entityContent:",
+      "sha256": "23d54509172a13f5bd9336c1656abf048d8d9ddf8b963a29648f4e6e74148e7b"
+    },
+    {
+      "file": "apps/work-diary/web/app.js",
+      "start": "function shell(content){",
+      "end": "function render(){",
+      "sha256": "fde0b822ebf901c263f8d17c32ed36058fb92eab44b3fa8255fe01c190d077b2"
+    },
+    {
+      "file": "apps/iphone/NativeAPI/APIForms.swift",
+      "start": "    func edited(_ key:String)",
+      "end": "\n}",
+      "sha256": "e74c4b4020abce7d73e3bed20513a7435a82c323196aef684a7037d1a3c10f3a"
+    }
+  ]
+}
