@@ -31,16 +31,17 @@ struct APIJobsScreen:View {
         return APIJobsPresentation.sorted(available,by:applied.sort)
     }
     var body:some View {
+        let visibleJobs=jobs
         List {
             Section {
                 controls
-                freshness
+                freshness(count:visibleJobs.count)
                 if applied.dateRange{Text(APIJobsPresentation.date(APIJobsPresentation.day(applied.from))+" – "+APIJobsPresentation.date(APIJobsPresentation.day(applied.to))).font(.caption).foregroundStyle(.secondary)}
                 if !applied.attention.isEmpty{Text(APIDashboardLogic.attentionTitles[applied.attention] ?? applied.attention).font(.subheadline.weight(.semibold))}
             }.listRowBackground(Color.clear).listRowSeparator(.hidden).listRowInsets(EdgeInsets(top:2,leading:0,bottom:2,trailing:0))
-            jobSections
+            jobSections(visibleJobs)
             if model.loading{ProgressView(model.rows.isEmpty ? "Načítám zakázky…" : "Načítám další zakázky…").font(.subheadline).listRowBackground(Color.clear)}
-            if jobs.isEmpty && !model.loading{
+            if visibleJobs.isEmpty && !model.loading{
                 ContentUnavailableView(query.isEmpty ? "Žádné zakázky pro tento výběr" : "Žádné výsledky",systemImage:"calendar.badge.checkmark",description:Text("Zkuste změnit termín, hledání nebo filtry.")).listRowBackground(Color.clear)
                 if period == .today && query.isEmpty && applied.count==0{APIUpcomingVisits(store:store,mine:mine)}
             }
@@ -52,7 +53,7 @@ struct APIJobsScreen:View {
             .task(id:key){if previewRows==nil{await load()}}.refreshable{if previewRows==nil{await store.resume(refreshViews:false);await load(refresh:true)}}
             .sheet(isPresented:$filters){APIJobsFilterSheet(store:store,original:applied,rows:model.rows){value in applied=value;if !value.worker.isEmpty{mine=false};if value.dateRange{period = .all}}}
             .sheet(isPresented:$calendar){APIJobsCalendarSheet(filters:applied){from,to in applied.from=from;applied.to=to;applied.dateRange=true;period = .all}}
-            .sheet(isPresented:$map){NavigationStack{APIJobsMap(store:store,jobs:jobs)}}
+            .sheet(isPresented:$map){NavigationStack{APIJobsMap(store:store,jobs:visibleJobs)}}
             .navigationDestination(isPresented:Binding(get:{!detailJob.isNull},set:{if !$0{detailJob = .null}})){if !detailJob.isNull{APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:detailJob)}}
     }
     private var controls:some View {
@@ -79,9 +80,10 @@ struct APIJobsScreen:View {
             Button{filters=true}label:{Image(systemName:"line.3.horizontal.decrease").overlay(alignment:.topTrailing){if applied.count>0{Text(String(applied.count)).font(.caption2.bold()).padding(3).foregroundStyle(Color.white).background(DiaryStyle.actionFill,in:Circle()).offset(x:9,y:-7)}}}.accessibilityLabel("Filtry").accessibilityValue("Aktivní filtry: \(applied.count)").accessibilityIdentifier("jobs-filters")
         }.buttonStyle(APIJobsCompactButtonStyle()).fixedSize(horizontal:true,vertical:false)
     }
-    @ViewBuilder private var jobSections:some View {
+    @ViewBuilder private func jobSections(_ visible:[APIValue])->some View {
+        let grouped=Dictionary(grouping:visible,by:APIJobsGroup.of)
         ForEach(APIJobsGroup.allCases){group in
-            let rows=jobs.filter{APIJobsGroup.of($0)==group}
+            let rows=grouped[group] ?? []
             if !rows.isEmpty{
                 Section {
                     if group != .done || doneExpanded{ForEach(rows,id:\.id){job in APIJobListRow(store:store,job:job,open:{detailJob=$0}).listRowInsets(EdgeInsets(top:3,leading:0,bottom:3,trailing:0)).listRowSeparator(.hidden).listRowBackground(Color.clear)}}
@@ -92,13 +94,13 @@ struct APIJobsScreen:View {
             }
         }
     }
-    private var freshness:some View {
+    private func freshness(count:Int)->some View {
         let layout=typeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment:.leading,spacing:4)) : AnyLayout(HStackLayout(alignment:.firstTextBaseline,spacing:5))
         return layout{
             Label(!store.online ? "Offline · uložená data" : model.cache.isNull ? "Načítání" : model.cache["stale"].bool ? "Uložená kopie · "+updatedTime : "Synchronizováno v "+updatedTime,systemImage:!store.online ? "wifi.slash" : model.cache["stale"].bool ? "clock.arrow.circlepath" : "arrow.clockwise")
             if !store.outbox.isEmpty{Text("· čeká: \(store.outbox.count)")}
             if !typeSize.isAccessibilitySize{Spacer(minLength:0)}
-            if !model.loading{Text("\(jobs.count)\(model.complete ? "" : "+") zakázek")}
+            if !model.loading{Text("\(count)\(model.complete ? "" : "+") zakázek")}
         }.font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true).accessibilityElement(children:.combine)
     }
     private var updatedTime:String{model.cache["at"].double>0 ? APIAttendanceView.time(model.cache["at"]) : "čas neznámý"}
