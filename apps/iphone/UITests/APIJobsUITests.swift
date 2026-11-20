@@ -31,7 +31,9 @@ final class APIJobsUITests:XCTestCase {
         XCTAssertTrue(app.buttons["native-job-fixture-progress"].waitForExistence(timeout:5));XCTAssertFalse(app.buttons["native-job-fixture-travel"].exists)
         // Cancel search before opening the existing native filter sheet.
         if app.buttons["Cancel"].exists{app.buttons["Cancel"].tap()}else if app.buttons["Zrušit"].exists{app.buttons["Zrušit"].tap()}else{search.buttons.firstMatch.tap()}
-        app.buttons["jobs-filters"].tap();XCTAssertTrue(app.navigationBars["Filtry"].waitForExistence(timeout:10));capture("jobs-filter-sheet",app)
+        app.buttons["jobs-filters"].tap();XCTAssertTrue(app.navigationBars["Filtry"].waitForExistence(timeout:10))
+        let reset=app.buttons["jobs-filter-reset"];XCTAssertTrue(reset.isHittable);XCTAssertGreaterThan(reset.frame.width,60,"Resetovat must have room for its full title, not one clipped letter")
+        capture("jobs-filter-sheet",app)
         let type=app.buttons["jobs-filter-type"];reveal(type,in:app);type.tap();app.buttons["Realizace"].firstMatch.tap()
         app.buttons["Zobrazit zakázky"].tap();XCTAssertTrue(app.navigationBars["Zakázky"].waitForExistence(timeout:10))
     }

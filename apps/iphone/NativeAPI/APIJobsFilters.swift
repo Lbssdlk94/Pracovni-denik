@@ -46,8 +46,8 @@ struct APIJobsFilterSheet:View {
             }.environment(\.locale,Locale(identifier:"cs_CZ")).environment(\.timeZone,APIJobsPresentation.calendar.timeZone)
                 .navigationTitle("Filtry").navigationBarTitleDisplayMode(.inline)
                 .toolbar{
-                    ToolbarItem(placement:.topBarLeading){Button("Resetovat"){draft=APIJobsFilters()}.accessibilityIdentifier("jobs-filter-reset")}
-                    ToolbarItem(placement:.topBarTrailing){Button("Zavřít",systemImage:"xmark"){dismiss()}.labelStyle(.iconOnly)}
+                    ToolbarItem(placement:.topBarLeading){Button("Resetovat"){draft=APIJobsFilters()}.buttonStyle(.automatic).accessibilityIdentifier("jobs-filter-reset")}
+                    ToolbarItem(placement:.topBarTrailing){Button("Zavřít",systemImage:"xmark"){dismiss()}.labelStyle(.iconOnly).buttonStyle(.automatic)}
                 }
                 .safeAreaInset(edge:.bottom){Button("Zobrazit zakázky"){if draft.to<draft.from{draft.to=draft.from};apply(draft);dismiss()}.diaryBubble(.primary).padding(12).frame(maxWidth:.infinity).background(.regularMaterial)}
         }.onAppear{draft=original}.task(id:store.scope){
@@ -71,7 +71,7 @@ struct APIJobsCalendarSheet:View {
             if range{DatePicker("Do",selection:$to,in:from...,displayedComponents:.date)}
         }.environment(\.locale,Locale(identifier:"cs_CZ")).environment(\.timeZone,APIJobsPresentation.calendar.timeZone)
             .navigationTitle("Kalendář zakázek").navigationBarTitleDisplayMode(.inline)
-            .toolbar{ToolbarItem(placement:.cancellationAction){Button("Zrušit"){dismiss()}};ToolbarItem(placement:.confirmationAction){Button("Zobrazit"){apply(from,range ? max(from,to) : from);dismiss()}}}
+            .toolbar{ToolbarItem(placement:.cancellationAction){Button("Zrušit",systemImage:"xmark"){dismiss()}.labelStyle(.iconOnly).buttonStyle(.automatic)};ToolbarItem(placement:.confirmationAction){Button("Zobrazit"){apply(from,range ? max(from,to) : from);dismiss()}.buttonStyle(.automatic)}}
         }.onAppear{from=filters.dateRange ? filters.from : Date();to=filters.dateRange ? filters.to : from;range=filters.dateRange && APIJobsPresentation.day(from) != APIJobsPresentation.day(to)}.onChange(of:from){_,value in if to<value{to=value}}
     }
 }
