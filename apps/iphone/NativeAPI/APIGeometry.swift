@@ -26,6 +26,7 @@ enum APIPlaces {
 struct APIJobsMap:View {
     @ObservedObject var store:APIStore
     let jobs:[APIValue]
+    @State private var detailJob:APIValue = .null
     @State private var rows:[APIValue]=[]
     @State private var selected:APIMapGroup?
     @State private var problem:String?
@@ -36,7 +37,7 @@ struct APIJobsMap:View {
             if store.manager{
                 Map{ForEach(groups){group in
                     Annotation(group.points.count>1 ? "\(group.points.count) zakázky" : group.points[0].job["customerName"].string,coordinate:group.position){
-                        Button{selected=group}label:{Image(systemName:group.points.allSatisfy(\.confirmed) ? "mappin.circle.fill" : "questionmark.circle.fill").font(.largeTitle).foregroundStyle(group.points.allSatisfy(\.confirmed) ? DiaryStyle.accent : DiaryStyle.warning)}.accessibilityLabel(group.points.count>1 ? "Zakázky na místě" : group.points[0].job["customerName"].string).accessibilityIdentifier("map-job-"+group.points[0].job.id)
+                        Button{detailJob = .null;selected=group}label:{Image(systemName:group.points.allSatisfy(\.confirmed) ? "mappin.circle.fill" : "questionmark.circle.fill").font(.largeTitle).foregroundStyle(group.points.allSatisfy(\.confirmed) ? DiaryStyle.accent : DiaryStyle.warning)}.accessibilityLabel(group.points.count>1 ? "Zakázky na místě" : group.points[0].job["customerName"].string).accessibilityIdentifier("map-job-"+group.points[0].job.id)
                     }
                 }}.mapControls{MapCompass();MapScaleView()}
                 DisclosureGroup("Upřesnění míst · \(rows.count) zakázek"){
@@ -47,7 +48,7 @@ struct APIJobsMap:View {
                 if let problem{Text(problem).font(.caption).foregroundStyle(DiaryStyle.warning).padding(8)}
                 Text("Neověřená místa označuje otazník. Body na stejné adrese jsou seskupené.").font(.caption).foregroundStyle(.secondary).padding(8)
             }else{ContentUnavailableView("Mapa je určena správci",systemImage:"lock")}
-        }.navigationTitle("Mapa zakázek").task{rows=jobs}.onChange(of:jobs){_,values in rows=values}.sheet(item:$selected){group in NavigationStack{List(group.points){point in VStack(alignment:.leading,spacing:4){APIJobListRow(store:store,job:point.job);Text(point.confirmed ? "Potvrzené místo" : "Místo je třeba upřesnit").font(.caption).foregroundStyle(.secondary)}}.navigationTitle("Zakázky na místě")}}
+        }.navigationTitle("Mapa zakázek").task{rows=jobs}.onChange(of:jobs){_,values in rows=values}.sheet(item:$selected){group in NavigationStack{List(group.points){point in VStack(alignment:.leading,spacing:4){APIJobListRow(store:store,job:point.job,open:{detailJob=$0});Text(point.confirmed ? "Potvrzené místo" : "Místo je třeba upřesnit").font(.caption).foregroundStyle(.secondary)}}.navigationTitle("Zakázky na místě").navigationDestination(isPresented:Binding(get:{!detailJob.isNull},set:{if !$0{detailJob = .null}})){if !detailJob.isNull{APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:detailJob)}}}}
     }
     func locate(_ job:APIValue)async{busy=true;defer{busy=false};do{let result=try await store.write("/api/jobs/"+job.id+"/geocode",method:"POST",body:.object(["address":.s(APIPlaces.normalize(APIPlaces.address(job)))]));if let index=rows.firstIndex(where:{$0.id==job.id}){rows[index]["geocode"]=result["geocode"]};problem=nil}catch{problem=error.localizedDescription}}
     func choose(_ job:APIValue,candidate:APIValue)async{do{let result=try await store.write("/api/jobs/"+job.id+"/geocode",method:"PUT",body:.object(["address":job["geocode"]["address"],"version":job["geocode"]["version"],"selectedId":.s(candidate.id)]));if let index=rows.firstIndex(where:{$0.id==job.id}){rows[index]["geocode"]=result["geocode"]};problem=nil}catch{problem=error.localizedDescription}}

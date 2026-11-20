@@ -61,7 +61,9 @@ struct APIJobsCalendarSheet:View {
     let filters:APIJobsFilters
     let apply:(Date,Date)->Void
     @Environment(\.dismiss) private var dismiss
-    @State private var from=Date(),to=Date(),range=false
+    @State private var from=Date()
+    @State private var to=Date()
+    @State private var range=false
     var body:some View {
         NavigationStack{Form{
             Toggle("Vybrat období",isOn:$range)

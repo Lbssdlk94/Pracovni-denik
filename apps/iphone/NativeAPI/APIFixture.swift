@@ -58,6 +58,8 @@ final class APIFixtureProtocol:URLProtocol {
             let all=fixture["jobs"].array.map{records["/api/jobs/"+$0.id] ?? $0}
             var jobs=all
             let q=Dictionary(URLComponents(url:request.url!,resolvingAgainstBaseURL:false)!.queryItems?.map{($0.name,$0.value ?? "")} ?? [],uniquingKeysWith:{$1})
+            let pages=records["fixture-job-pages"]?.array ?? []
+            if !pages.isEmpty{let index=Int(q["cursor"] ?? "0") ?? 0;return json(pages[min(index,pages.count-1)])}
             if let attention=q["attention"]{jobs=jobs.filter{APIDashboardFixture.matches($0,kind:attention,day:fixture["jobs"].array.first?["dueDate"].string ?? "")}}
             if let month=q["month"]{jobs=jobs.filter{$0["dueDate"].string.isEmpty || $0["dueDate"].string.hasPrefix(month+"-")}}
             if let day=q["day"]{jobs=jobs.filter{$0["dueDate"].string==(day=="undated" ? "" : day)}}

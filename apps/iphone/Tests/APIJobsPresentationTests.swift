@@ -67,4 +67,34 @@ final class APIJobsPresentationTests:XCTestCase {
         await model.load(store:store,filters:APIJobsFilters(),period:.all,mine:true,refresh:true)
         XCTAssertTrue(model.rows.isEmpty);XCTAssertNotNil(model.problem)
     }
+    @MainActor func testAllPagesAreMergedBeforeFinalSortAndDuplicateVersionsAreReplaced()async throws{
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start()
+        let rows=(0..<205).map{job(String(format:"job-%03d",$0)).merged(["version":.n(1)])}
+        let newer=rows[0].merged(["version":.n(2),"customerName":.s("Aktualizovaný zákazník")])
+        let pages:[APIValue]=[.object(["jobs":.array(Array(rows.prefix(100))),"nextCursor":.s("1")]),.object(["jobs":.array(Array(rows[100..<200])),"nextCursor":.s("2")]),.object(["jobs":.array(Array(rows.suffix(5))+[newer]),"nextCursor":.null])]
+        APIFixtureProtocol.lock.withLock{APIFixtureProtocol.records["fixture-job-pages"] = .array(pages)}
+        let model=APIJobsListModel();await model.load(store:store,filters:APIJobsFilters(),period:.all,mine:true)
+        XCTAssertTrue(model.complete);XCTAssertNil(model.problem);XCTAssertEqual(model.rows.count,205)
+        XCTAssertEqual(model.rows.first{$0.id==newer.id}?["version"].int,2)
+        XCTAssertEqual(APIJobsPresentation.sorted(model.rows,by:.customer).first?.id,newer.id)
+    }
+    @MainActor func testRepeatingCursorStopsWithoutLosingLoadedDataOrClaimingCompleteness()async throws{
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start()
+        let page:APIValue = .object(["jobs":.array([job("one")]),"nextCursor":.s("0")])
+        APIFixtureProtocol.lock.withLock{APIFixtureProtocol.records["fixture-job-pages"] = .array([page])}
+        let model=APIJobsListModel();await model.load(store:store,filters:APIJobsFilters(),period:.all,mine:true)
+        XCTAssertFalse(model.complete);XCTAssertNotNil(model.problem);XCTAssertEqual(model.rows.count,1)
+    }
+    @MainActor func testListReloadCannotDropPendingWorkAndSyncReplaysOnlyOnce()async throws{
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start()
+        let path="/api/jobs/fixture-progress/time",snapshot=try await store.get(path),version=snapshot["states"].array.first{$0["userId"].string==store.userID}?["version"] ?? .n(0)
+        let at=Date().timeIntervalSince1970*1000-10000
+        store.online=false
+        _ = try await store.write(path+"/actions",method:"POST",body:.object(["operationId":.s("jobs-offline-work"),"action":.s("work"),"at":.number(at),"workers":.array([.object(["userId":.s(store.userID),"version":version])])]),offline:true,operationID:"jobs-offline-work")
+        let model=APIJobsListModel();await model.load(store:store,filters:APIJobsFilters(),period:.today,mine:true)
+        XCTAssertEqual(store.outbox.count,1)
+        store.online=true;await store.sync();await store.sync()
+        XCTAssertTrue(store.outbox.isEmpty)
+        let after=try await store.get(path);XCTAssertEqual(after["intervals"].array.count,1)
+    }
 }

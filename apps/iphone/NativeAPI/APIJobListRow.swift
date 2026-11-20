@@ -3,11 +3,11 @@ import SwiftUI
 struct APIJobListRow:View {
     @ObservedObject var store:APIStore
     let job:APIValue
+    let open:(APIValue)->Void
     @State private var statusRequest:APIJobStatusRequest?
     @State private var departure=false
     @State private var report=false
     @State private var work:APIWorkTimeAction?
-    @State private var opened=false
     @State private var snapshot:APIValue = .null
     @State private var timeScope=""
     @State private var timeProblem:String?
@@ -15,22 +15,23 @@ struct APIJobListRow:View {
     @State private var contactScope=""
     @Environment(\.openURL) private var openURL
     @Environment(\.dynamicTypeSize) private var typeSize
-    var mayWork:Bool{APIJobWorkflow.canWork(job,userID:store.userID,writer:store.writer,manager:store.manager) && !store.isRolePreview}
+    var mayWork:Bool{APIJobWorkflow.canWork(current,userID:store.userID,writer:store.writer,manager:store.manager) && !store.isRolePreview}
     private var current:APIValue{let value=store.currentJob(job);return contactScope==store.scope && !contact.isNull ? value.merged(["customerContact":contact]) : value}
     private var projected:APIValue{
-        if timeScope==store.scope,!snapshot.isNull{return APIWorkTimeLogic.project(snapshot,store:store)}
         let own=current["myTime"].merged(["userId":.s(store.userID),"assigned":.bool(assigned)])
-        return APIWorkTimeLogic.project(.object(["job":current,"states":.array([own]),"intervals":.array([])]),store:store)
+        var source=timeScope==store.scope && !snapshot.isNull ? snapshot : .object(["job":current,"states":.array([own]),"intervals":.array([])])
+        if let saved=store.vault?.state.cache["/api/jobs/"+job.id+"/time"],saved["projection"].string != "dashboard",saved["serverNow"].double>source["serverNow"].double{source=saved}
+        source["states"] = .array(source["states"].array.map{state in state["userId"].string==store.userID && own["version"].int>state["version"].int ? state.merged(own.object) : state})
+        return APIWorkTimeLogic.project(source,store:store)
     }
     private var assigned:Bool{current["assignedTo"].string==store.userID || current["assignedTos"].array.contains(.s(store.userID))}
     private var personal:APIJobDetailAction?{APIJobDetailAction.resolve(job:current,states:projected["states"].array,userID:store.userID,travelEnabled:store.enabled("jobTravel"))}
     private var mayRecord:Bool{mayWork && assigned && (current["serviceApproval"].isNull || current["serviceApproval"].string=="confirmed")}
     var body:some View {
         VStack(alignment:.leading,spacing:4){
-            Button{opened=true}label:{summary}.buttonStyle(.plain).accessibilityIdentifier("native-job-"+job.id)
+            Button{open(current)}label:{summary}.buttonStyle(.plain).accessibilityIdentifier("native-job-"+job.id)
             actionRow
         }.padding(.vertical,1).contentShape(Rectangle())
-            .navigationDestination(isPresented:$opened){detail}
             .contextMenu{menu}
             .swipeActions(edge:.trailing,allowsFullSwipe:false){
                 if let url=APIFormat.navigation(current["address"].string){Button{openURL(url)}label:{Label("Navigovat",systemImage:"location")}.tint(DiaryStyle.accent)}
@@ -61,7 +62,7 @@ struct APIJobListRow:View {
     private var statusBadge:some View{
         let status=current["status"].string
         let color:Color=status=="done" ? .green : status=="on_way" ? .blue : status=="incomplete" ? DiaryStyle.warning : DiaryStyle.accent
-        return Text(current["serviceApproval"].string=="pending" ? "Ke schválení" : status=="incomplete" ? "Nelze dokončit" : APIFormat.status(status)).font(.caption2.weight(.semibold)).foregroundStyle(color).padding(.horizontal,7).padding(.vertical,4).background(color.opacity(0.12),in:Capsule()).fixedSize(horizontal:false,vertical:true)
+        return Text(current["serviceApproval"].string=="pending" ? "Ke schválení" : status=="incomplete" ? "Nelze dokončit" : APIFormat.status(status)).font(.caption2.weight(.semibold)).foregroundStyle(.primary).padding(.horizontal,7).padding(.vertical,4).background(color.opacity(0.12),in:Capsule()).fixedSize(horizontal:false,vertical:true)
     }
     private var crew:some View{
         let names=Dictionary(current["handoffs"].array.map{($0["userId"].string,$0["name"].string)},uniquingKeysWith:{$1})
@@ -76,13 +77,13 @@ struct APIJobListRow:View {
         return layout{
             HStack(spacing:4){if let url=APIFormat.navigation(current["address"].string){Link(destination:url){Image(systemName:"location")}.buttonStyle(APIJobsCompactButtonStyle()).accessibilityLabel("Navigovat")};if let phone=APIJobsPresentation.phone(current){Link(destination:phone){Image(systemName:"phone")}.buttonStyle(APIJobsCompactButtonStyle()).accessibilityLabel("Zavolat zákazníkovi")}}
             Spacer(minLength:0)
-            if store.enabled("attendance"),let personal,(mayRecord || personal == .report){Button{performPrimary()}label:{Label(shortTitle(personal),systemImage:personal.symbol).font(.caption.weight(.semibold)).fixedSize(horizontal:false,vertical:true)}.buttonStyle(APIJobsCompactButtonStyle()).accessibilityLabel(personal.title).accessibilityIdentifier("job-row-primary-"+job.id)}
+            if store.enabled("attendance"),let personal,(mayRecord || personal == .report){Button{performPrimary()}label:{Label(shortTitle(personal),systemImage:personal.symbol).font(.caption.weight(.semibold)).fixedSize(horizontal:false,vertical:true)}.buttonStyle(APIJobsCompactButtonStyle(primary:true)).accessibilityLabel(personal.title).accessibilityIdentifier("job-row-primary-"+job.id)}
             else if !store.enabled("attendance"),mayWork,let legacy=APIJobWorkflow.primary(current,travelEnabled:store.enabled("jobTravel")){Button{if legacy == .departure{departure=true}else{statusRequest=APIJobStatusRequest(targetStatus:legacy.targetStatus)}}label:{Label(legacy.title,systemImage:legacy.symbol).font(.caption.weight(.semibold))}.buttonStyle(APIJobsCompactButtonStyle())}
             Menu{menu}label:{Image(systemName:"ellipsis")}.buttonStyle(APIJobsCompactButtonStyle()).accessibilityLabel("Další akce zakázky").accessibilityIdentifier("job-row-menu-"+job.id)
         }
     }
     @ViewBuilder private var menu:some View {
-        Button("Otevřít detail",systemImage:"arrow.up.right.square"){opened=true}
+        Button("Otevřít detail",systemImage:"arrow.up.right.square"){open(current)}
         if APIResource(entity:.jobs).editable(store),!store.isRolePreview{
             Button("Upravit zakázku",systemImage:"pencil"){edit()}
             Button("Přeplánovat",systemImage:"calendar"){edit()}
@@ -91,16 +92,16 @@ struct APIJobListRow:View {
         if store.enabled("attendance"),mayRecord,personal == .stop{Button("Přerušit práci",systemImage:"pause"){work=APIWorkTimeAction(kind:"break")}}
         Button("Zobrazit protokol",systemImage:"doc.text"){report=true}
         if mayWork{Button("Změnit stav zakázky",systemImage:"checkmark.circle"){statusRequest=APIJobStatusRequest(targetStatus:nil)}}
-        if store.manager,current["serviceApproval"].string=="pending"{Button("Schválení zakázky",systemImage:"checkmark.seal"){opened=true}}
+        if store.manager,current["serviceApproval"].string=="pending"{Button("Schválení zakázky",systemImage:"checkmark.seal"){open(current)}}
         // Destructive record management remains in the existing confirmed detail flow.
-        if store.manager,!store.isRolePreview{Button("Správa záznamu",systemImage:"gearshape"){opened=true}}
+        if store.manager,!store.isRolePreview{Button("Správa záznamu",systemImage:"gearshape"){open(current)}}
     }
     private func shortTitle(_ action:APIJobDetailAction)->String{switch action{case .travel:return "Vyrazit";case .arrive:return "Jsem na místě";case .stop:return "Ukončit práci";case .resume:return "Pokračovat";case .report:return "Protokol"}}
     private func performPrimary(){guard let personal else{return};if let kind=personal.timeKind{work=APIWorkTimeAction(kind:kind)}else{report=true}}
     private func edit(){store.route=APIRoute(resource:APIResource(entity:.jobs),value:current)}
     private func loadTime()async{
         guard store.enabled("attendance") else{return};let scope=store.scope,key="/api/jobs/"+job.id+"/time"
-        if let cached=store.vault?.state.cache[key],cached["projection"].string != "dashboard"{snapshot=cached;timeScope=scope;if Date().timeIntervalSince1970*1000-cached["serverNow"].double<60000 && cached["job"]["version"].int>=current["version"].int{return}}
+        if let cached=store.vault?.state.cache[key],cached["projection"].string != "dashboard"{snapshot=cached;timeScope=scope;let version=cached["states"].array.first{$0["userId"].string==store.userID}?["version"].int ?? 0;if Date().timeIntervalSince1970*1000-cached["serverNow"].double<60000 && cached["job"]["version"].int>=current["version"].int && version>=current["myTime"]["version"].int{return}}
         do{try await Task.sleep(for:.milliseconds(250));let value=try await store.get(key);guard !Task.isCancelled,scope==store.scope else{return};snapshot=value;timeScope=scope;timeProblem=nil}catch is CancellationError{}catch{guard scope==store.scope else{return};if let e=error as? APIError,[401,403,404].contains(e.status){snapshot = .null;timeScope=""};timeProblem=error.localizedDescription}
     }
     private func loadContact()async{
@@ -108,7 +109,6 @@ struct APIJobListRow:View {
         let scope=store.scope
         do{let value=try await store.get("/api/customers/"+current["customerId"].string);guard scope==store.scope,!Task.isCancelled else{return};contact=value["customer"];contactScope=scope}catch{guard scope==store.scope else{return};contact = .null;contactScope=""}
     }
-    private var detail:some View{APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:job)}
 }
 
 // Load a fresh, authorized snapshot only when opening an action. The original

@@ -7,7 +7,11 @@ struct APIJobsScreen:View {
     @State private var mine=true
     @State private var applied=APIJobsFilters()
     @State private var query=""
-    @State private var filters=false,calendar=false,map=false,doneExpanded=false
+    @State private var detailJob:APIValue = .null
+    @State private var filters=false
+    @State private var calendar=false
+    @State private var map=false
+    @State private var doneExpanded=false
     @Environment(\.dynamicTypeSize) private var typeSize
     private let previewRows:[APIValue]?
     init(store:APIStore,filter:APIDashboardJobFilter?=nil,previewRows:[APIValue]?=nil){
@@ -41,6 +45,7 @@ struct APIJobsScreen:View {
             .sheet(isPresented:$filters){APIJobsFilterSheet(store:store,original:applied,rows:model.rows){value in applied=value;if !value.worker.isEmpty{mine=false};if value.dateRange{period = .all}}}
             .sheet(isPresented:$calendar){APIJobsCalendarSheet(filters:applied){from,to in applied.from=from;applied.to=to;applied.dateRange=true;period = .all}}
             .sheet(isPresented:$map){NavigationStack{APIJobsMap(store:store,jobs:jobs)}}
+            .navigationDestination(isPresented:Binding(get:{!detailJob.isNull},set:{if !$0{detailJob = .null}})){if !detailJob.isNull{APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:detailJob)}}
     }
     private var controls:some View {
         VStack(spacing:8){
@@ -62,7 +67,7 @@ struct APIJobsScreen:View {
             let rows=jobs.filter{APIJobsGroup.of($0)==group}
             if !rows.isEmpty{
                 Section {
-                    if group != .done || doneExpanded{ForEach(rows,id:\.id){job in APIJobListRow(store:store,job:job).listRowInsets(EdgeInsets(top:8,leading:12,bottom:8,trailing:12)).listRowSeparator(.hidden)}}
+                    if group != .done || doneExpanded{ForEach(rows,id:\.id){job in APIJobListRow(store:store,job:job,open:{detailJob=$0}).listRowInsets(EdgeInsets(top:8,leading:12,bottom:8,trailing:12)).listRowSeparator(.hidden)}}
                 }header:{
                     if group == .done{Button{withAnimation{doneExpanded.toggle()}}label:{HStack{Text("Dokončené · \(rows.count)");Spacer();Image(systemName:doneExpanded ? "chevron.up" : "chevron.down")}.frame(minHeight:44)}.buttonStyle(.plain).accessibilityIdentifier("jobs-completed").accessibilityValue(doneExpanded ? "Rozbaleno" : "Sbaleno")}
                     else{Text(group.title+" · \(rows.count)")}
@@ -83,5 +88,6 @@ struct APIJobsScreen:View {
 }
 
 struct APIJobsCompactButtonStyle:ButtonStyle {
-    func makeBody(configuration:Configuration)->some View{configuration.label.font(.body.weight(.semibold)).foregroundStyle(DiaryStyle.accent).frame(minWidth:44,minHeight:44).background(DiaryStyle.soft.opacity(configuration.isPressed ? 0.55 : 1),in:RoundedRectangle(cornerRadius:13)).scaleEffect(configuration.isPressed ? 0.96 : 1)}
+    var primary=false
+    func makeBody(configuration:Configuration)->some View{configuration.label.font(.body.weight(.semibold)).foregroundStyle(primary ? Color(.systemBackground) : DiaryStyle.accent).padding(.horizontal,primary ? 8 : 0).frame(minWidth:44,minHeight:44).background((primary ? DiaryStyle.actionFill : DiaryStyle.soft).opacity(configuration.isPressed ? 0.65 : 1),in:RoundedRectangle(cornerRadius:13)).scaleEffect(configuration.isPressed ? 0.96 : 1)}
 }
