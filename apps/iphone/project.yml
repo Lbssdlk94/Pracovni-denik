@@ -98,7 +98,7 @@ targets:
     platform: iOS
     sources:
       - path: UITests
-        includes: [NativeAPIUITests.swift, APIJobDetailPreviewUITests.swift, APIDashboardUITests.swift]
+        includes: [NativeAPIUITests.swift, APIJobDetailPreviewUITests.swift, APIDashboardUITests.swift, APIJobsUITests.swift]
     dependencies:
       - target: PracovniDenik
     settings:

@@ -1,7 +1,7 @@
 import XCTest
 
 final class NativeAPIUITests:XCTestCase {
-    func launch()->XCUIApplication{let app=XCUIApplication();app.launchArguments=["--native-api-testing"];app.launch();XCTAssertTrue(app.staticTexts["native-overview-title"].waitForExistence(timeout:15));XCTAssertEqual(app.webViews.count,0,"Native client must never embed a web application");return app}
+    func launch(extra:[String]=[])->XCUIApplication{let app=XCUIApplication();app.launchArguments=["--native-api-testing"]+extra;app.launch();XCTAssertTrue(app.staticTexts["native-overview-title"].waitForExistence(timeout:15));XCTAssertEqual(app.webViews.count,0,"Native client must never embed a web application");return app}
     func capture(_ name:String,_ app:XCUIApplication){let image=XCTAttachment(screenshot:app.screenshot());image.name=name;image.lifetime = .keepAlways;add(image)}
     func testOverviewAndPersistentFiveTabs(){let app=launch();for tab in ["Přehled","Zakázky","Docházka","Zákazníci","Více"]{XCTAssertTrue(app.tabBars.buttons[tab].exists)};capture("prehled-api",app)}
     func testJobTimeIsNativeAndKeepsDetailFocus(){
@@ -38,7 +38,7 @@ final class NativeAPIUITests:XCTestCase {
     func testAttendanceDaysAndMoreNativeModules(){let app=launch();app.tabBars.buttons["Docházka"].tap();XCTAssertTrue(app.staticTexts["Pracovní dny"].waitForExistence(timeout:10));capture("dochazka-api",app);app.tabBars.buttons["Více"].tap();let agenda=app.buttons["Firemní agenda"];XCTAssertTrue(agenda.waitForExistence(timeout:10));agenda.tap();app.buttons["Materiál"].tap();XCTAssertTrue(app.staticTexts["Rotační tryska"].waitForExistence(timeout:10));XCTAssertEqual(app.webViews.count,0);capture("material-api",app)}
 
     func testQuickDepartureRequiresExactTimeAndCanBeCancelled(){
-        let app=launch();app.tabBars.buttons["Zakázky"].tap()
+        let app=launch(extra:["--native-api-legacy-jobs-testing"]);app.tabBars.buttons["Zakázky"].tap()
         let depart=app.buttons["Jsem na cestě"].firstMatch
         XCTAssertTrue(depart.waitForExistence(timeout:10));depart.tap()
         XCTAssertTrue(app.navigationBars["Jsem na cestě"].waitForExistence(timeout:10))
