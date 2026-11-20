@@ -2,7 +2,7 @@
 
 ## Stav
 
-Implementace je připravená ve větvi `ui/ios-service-protocol-2026-11-20`, zdroj `7672c7a`; navazující větev `release/ios-0.8.5-2026-11-20` zvyšuje verzi telefonu a hodinek. Server nebyl nasazen a produkční databáze nebyla změněna. **Nová IPA ještě nevznikla.** Finální nativní ověření blokuje GitHub Billing & plans; výsledky jednotlivých ověření jsou níže.
+Implementace je dokončená ve větvi `release/ios-0.8.5-2026-11-20`, zdroj aplikace `30d6cb84745d0220d57be261caa14c53da0b86d7`. **Vydání 0.8.5 (14) pro iPhone a Apple Watch včetně IPA bylo úspěšně sestaveno a ověřeno.** [Stažení a kontrolní součty](IPHONE-0.8.5-2026-11-20.md). Server nebyl nasazen a produkční databáze nebyla změněna.
 
 ## Původní architektura a zachovaná pravidla
 
@@ -19,8 +19,10 @@ Původní oprávnění a filtrování na serveru zůstávají zachována. Pracov
 - Závadu lze z uloženého protokolu převést přes původní editor sledovaných závad včetně závažnosti, stavu a fotografií. Existující převod se znovu otevře. Server vyžaduje skutečnou zahradu zakázky nebo skutečnou zahradu jejího zákazníka, autorizaci a původní unikátní zdroj protokolu. Opakované uložení nevytváří další závadu.
 - Fotografie používají původní galerii, fotoaparát/knihovnu a upload frontu. Výběr, popis a příznak zahrnutí do PDF jsou součástí protokolu. Odebrání vazby neodstraňuje původní objekt fotografie. Selhání načtení vybrané fotografie zabrání vydávání neúplného PDF za kompletní.
 - Podpis má samostatnou adaptivní obrazovku, skutečnou ruční kresbu, vymazání, jméno a volbu nepřítomen/odmítl. Pouhé klepnutí nepředstavuje podpis. PNG, čas podpisu/záznamu, podepsaná verze a hash zákaznického obsahu jsou uložené. Server porovnává zobrazenou verzi šablony, identity a pracovních intervalů; souběžná změna vyžaduje obnovení a nový podpis. Podstatná změna obsahu zneplatní původní podpis; čistě interní poznámka bez zveřejnění ho nemění. Povinný podpis nelze nahradit stavem nepřítomen.
+- Offline protokol se zařazuje i při čekající fotografii a využívá původní `dependsOn`: při výpadku uploadu zůstane protokol čekající, po opakování se odešle až za fotografií. Regresní nativní test ověřuje zachování obou operací i přijetí výsledné verze.
 - Každá změna se okamžitě ukládá do původního lokálního konceptu, síťový autosave má debounce. Uzavření/minimalizace uchová koncept. Jedna operace čeká na potvrzení; novější lokální text se po přijetí starší operace nepřepíše. CAS konflikt zůstává viditelný a není tiše přepsán. Trvalé lokální selhání se nezobrazuje jako Uloženo.
 - Spodní lišta nabízí PDF a kontrolu/dokončení. Souhrn odkazuje přímo na chybějící sekci. Nepovinné prázdné sekce neblokují dokončení. Samostatné potvrzení protokolu automaticky nedokončuje zakázku; původní výslovná akce dokončení zachovává obchodní logiku.
+- Katalog má vyhledávání trvale v horní navigaci a tlačítko Hotovo pro ukončení zadávání desetinného množství; hledání se neschovává pod numerickou klávesnici.
 - Původní nativní PDF renderer je zachován a rozšířen o činnosti, šablonu, historickou identitu, skutečné uzavřené člověkohodiny, popisy vybraných fotografií a údaje podpisu. Interní poznámky se standardně vylučují; explicitní zveřejnění musí dovolit šablona. Nativní QuickLook, Share Sheet a původní archiv odeslaných protokolů. Před skutečným odesláním se potvrzuje příjemce. Stav Odesláno vyžaduje potvrzené odeslání poskytovatelem a odpovídající verzi protokolu; schválení samo neznamená odeslání.
 
 ## Soubory
@@ -31,28 +33,30 @@ Původní oprávnění a filtrování na serveru zůstávají zachována. Pracov
 | Komponenty | `APIProtocolComponents.swift`, `APIProtocolCatalog.swift`, `APIProtocolSignature.swift`, `APIProtocolTemplates.swift` |
 | PDF a integrace | `APIProtocolPDF.swift`, `APIMedia.swift`, `APIAdministration.swift`, `APIStore.swift` |
 | Preview / testovací aplikace | `APIProtocolFixture.swift`, `APIProtocolPreviews.swift`, `APIFixture.swift`, `PracovniDenikApp.swift` |
+| Navazující kontroly docházky | `apps/iphone/NativeAPI/APIAttendanceFixture.swift`, `Tests/APIAttendanceLogicTests.swift`, `UITests/APIAttendanceUITests.swift` |
 | Nativní testy a projekt | `apps/iphone/Tests/APIProtocolLogicTests.swift`, `UITests/APIProtocolUITests.swift`, `UITests/NativeAPIUITests.swift`, `project.yml`, `.github/workflows/iphone.yml` |
 | API | `apps/work-diary/worker/protocol-design.js`, `service-work.js`, `api.js`, `garden-history.js`, `protocol-emails.js` |
 | Sdílený web/PDF | `apps/work-diary/web/protocol-model.js`, `service-protocol-pdf.js`, `work-charges-ui.js`, `sw.js` |
 | Databáze | `apps/work-diary/db/schema.js`, `drizzle/0060_protocol_design.sql`, příslušný journal a snapshot |
 | Sestavení a testy | `apps/work-diary/scripts/build.mjs`, `test-protocol-design-worker.mjs`, `tests/protocol-design.test.js` |
 
-Přesný diff proti poslednímu vydání: `git diff 7a3ae0b..ui/ios-service-protocol-2026-11-20 --stat`.
+Přesný diff proti poslednímu vydání: `git diff 7a3ae0b..release/ios-0.8.5-2026-11-20 --stat`.
 
 ## Ověření
 
-- **446/446 serverových testů prošlo** na zdroji `7672c7a`, včetně 15 nových případů protokolu, původní kompatibility, cen, podpisu, fotografií, oddělení firem a sledovaných závad. Příkaz z `apps/work-diary`: `node --test --test-isolation=none tests/*.test.js`.
-- Skutečný sestavený Worker/workerd + D1: **prošlo všech 61 migrací**, reálné template CAS/audit, zákaz zápisu pracovníkem, ukládání činností a snímku, replay bez duplikace a skutečný ledger bez interních sazeb. `node scripts/build.mjs` a `node scripts/test-protocol-design-worker.mjs`.
-- Validace skutečného Worker artefaktu/startupu/autorizace: `node scripts/validate-artifact.mjs --allow-unbound` **prošlo**. `--allow-unbound` je pouze pro izolovaný feature checkout bez produkčního hosting ID; nejde o nasazení.
-- Místní Python kontroly podpisové politiky **4/4** a sestavení/simulátorů **13/13** prošly.
-- [Nativní běh 44774311749](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/44774311749), zdroj `8a50cc3`: kompilace aplikace a **131/131 jednotkových testů** prošly.
-- [Nativní běh 44776317228](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/44776317228), zdroj `41ef5a7`: kompilace a **133/133 jednotkových testů prošly**, včetně skutečného UIKit/PDFKit PDF a offline konceptu/synchronizace. UI **1/6 prošel, 5/6 selhalo** při hledání prvků. Snímky, AX výpisy a videa prokázaly přepsání dětských ID na DisclosureGroup, složený label šablony a přítomný nativní QuickLook bez testem hledaného tlačítka Done. Identifikátory byly přesunuty pouze na záhlaví, šablona má vlastní ID a PDF se ověřuje přes skutečný QLPDF view. **Tyto opravy ještě nejsou nativně ověřené.**
-- [Následující běh 44779185288](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/44779185288), zdroj `7672c7a`: GitHub nezačal provádět ani první krok. Anotace: “The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings”. Nejde o úspěšný compile/test.
-- Previews jsou vytvořené pro koncept, vyplněný/potvrzený protokol, tmavý režim, velký text, offline a malou šířku. Export některých simulátorových snímků proběhl; fyzický telefon ani skutečné odesílání zákazníkovi nebyly testovány.
+- Úplné vydávací sestavení [44791578694](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/44791578694), zdroj `30d6cb8`: **135/135 nativních jednotkových + 52/52 UI testů bez chyb**. Zahrnuje všech šest UI sad, původní funkce, nativní PDFKit kontrolu skutečného PDF, offline koncepty a pořadí fotografie/protokolu. Release iPhone, vložená Watch a Watch simulátor se třemi snímky prošly. IPA byla stažena a nezávisle ověřena podle SHA-256, phone/Watch identity/verze/platformy, privacy a nativních binárek.
+- Zaměřené ověření [44791566539](https://github.com/Lbssdlk94/Pracovni-denik/actions/runs/44791566539): **135 jednotkových + 13 UI testů protokolu/docházky bez chyb**, včetně posledních oprav katalogu, podpisu/PDF, noční směny a velkého písma. Checks-only kontrola potvrdila absenci IPA.
+- **446/446 serverových testů prošlo**, včetně 15 případů protokolu, původní kompatibility, historických cen, podpisu, fotografií, oddělení firem a sledovaných závad. Příkaz z `apps/work-diary`: `node --test --test-isolation=none tests/*.test.js`. Serverový zdroj se od tohoto ověření `7672c7a` nezměnil.
+- Skutečný sestavený Worker/workerd + D1: **všech 61 migrací**, reálné template CAS/audit, zákaz zápisu pracovníkem, ukládání činností a snímku, replay bez duplikace a skutečný ledger bez interních sazeb prošly. `node scripts/build.mjs` a `node scripts/test-protocol-design-worker.mjs`.
+- `node scripts/validate-artifact.mjs --allow-unbound` prošlo na skutečném izolovaném Workeru/startupu/autorizaci. `--allow-unbound` je pro feature checkout bez produkčního hosting ID, nejde o nasazení.
+- Kontroly podpisové politiky **4/4** a sestavení/simulátorů **13/13** prošly místně i v CI.
+- Previews pro koncept, vyplněný/potvrzený protokol, tmavý režim, velký text, offline a malou šířku. Exportovány a zkontrolovány konečné snímky katalogu, velkého textu a nativního PDF.
+
+Konečná kontrola opravila také ztrátu historických metadat při PDF exportu, blokování zařazení offline protokolu čekající fotografií a nedostupné horní dokončení katalogu během hledání. Testovací podklady pro noční směnu nyní zaručují předchozí místní den při jakékoli denní době. Testovací gesto pro velké písmo vede přes volnou plochu seznamu místo menu. Původní neúspěšné běhy byly následně překryty výše uvedeným úplným úspěšným ověřením; strojový záznam je v `docs/test-results/ios-protocol-2026-11-20.json`.
 
 ## Nasazení a zbývající rizika
 
-1. Odblokovat GitHub Actions v Billing & plans, zopakovat zaměřený nativní test `check_scope=protocol` a opravit případné další skutečné chyby. Pak úplná release sada a IPA podle [vydání 0.8.5](IPHONE-0.8.5-2026-11-20.md). Finální UI testy a nejnovější drobné změny SwiftUI nejsou kvůli blokaci ověřené.
+1. Automatizované kontroly a vydání IPA jsou dokončené podle [vydání 0.8.5](IPHONE-0.8.5-2026-11-20.md). Instalace používá dosavadní vlastní podpis; fyzické scénáře uvedené níže zůstávají k provoznímu ověření.
 2. Samostatně připravit nasazení odpovídajícího serveru a bezpečnou migraci **0060** na správné instalaci. Jde o přidání `protocol_details TEXT NOT NULL DEFAULT '{}'`; stávající řádky/historie zůstávají. Migrace 0059 pro přestávky je součástí předchozího vydání, musí být přítomná pro plnou docházku. Produkční migrace v této úloze nebyly spuštěné.
 3. Aktualizovat backend/web před používáním rozšířených šablon/podpisů v klientovi. Starší server bez 0060 nabízí základní protokol a klient pravdivě uvádí chybějící podporu. Nový server obsluhuje také starší web/klienty a při jejich změně obsahu moderního protokolu zneplatní podpis. Po vytvoření moderních podepsaných protokolů nevracet starý server, který tato pravidla nezná; při rollbacku zachovat novou kompatibilní API vrstvu a přidaný sloupec.
 4. Na fyzickém iPhonu ještě ověřit fotoaparát/knihovnu, podpis v obou orientacích, VoiceOver, skutečné offline ukončení/restart a následnou synchronizaci. E-mail ověřovat jen s explicitně schváleným příjemcem; testy neposílají zákazníkům zprávy.

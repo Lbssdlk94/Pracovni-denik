@@ -1,12 +1,13 @@
 {
   "date": "2026-11-20",
-  "source": "7672c7ada8a02ef5839c851b259b0616b683f282",
+  "source": "30d6cb84745d0220d57be261caa14c53da0b86d7",
   "backend": {
     "tests": 446,
     "passed": 446,
     "failed": 0,
     "duration_ms": 85444.060903,
-    "command": "node --test --test-isolation=none tests/*.test.js"
+    "command": "node --test --test-isolation=none tests/*.test.js",
+    "source": "7672c7ada8a02ef5839c851b259b0616b683f282"
   },
   "compiled_worker_d1": {
     "passed": true,
@@ -33,17 +34,205 @@
     "ui_failed": 5,
     "fixes_in_later_source_not_retested": true
   },
-  "native_latest": {
+  "release": {
+    "archive_sha256": "a2399a75a7ed489c99fbfc27e6c51824e5d51ccf070c23d7e3a6017adc9a10bf",
+    "ipa_sha256": "e559c52620e33116a2a5d3bea494f771d95ff6cda8a80a314b130248bddca460",
+    "ipa_bytes": 3777208,
+    "ipa_path": "/workspace/artifacts/ios-0.8.5/PracovniDenik-0.8.5-UNSIGNED.ipa",
+    "unsigned": true,
+    "native_tests": {
+      "unit": 135,
+      "ui": 52,
+      "failed": 0
+    },
+    "bundle_verification": {
+      "phone": {
+        "bundle_id": "cz.pracovnidenik.app",
+        "version": "0.8.5",
+        "build": "14",
+        "platforms": [
+          "iPhoneOS"
+        ],
+        "minimum_os": "17.0",
+        "executable_bytes": 14103120,
+        "architectures": [
+          {
+            "cpu_type": 16777228,
+            "bytes": 14103120,
+            "dynamic_libraries": [
+              "/System/Library/Frameworks/Foundation.framework/Foundation",
+              "/usr/lib/libobjc.A.dylib",
+              "/usr/lib/libSystem.B.dylib",
+              "/System/Library/Frameworks/AuthenticationServices.framework/AuthenticationServices",
+              "/System/Library/Frameworks/Charts.framework/Charts",
+              "/System/Library/Frameworks/Combine.framework/Combine",
+              "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation",
+              "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics",
+              "/System/Library/Frameworks/CoreLocation.framework/CoreLocation",
+              "/System/Library/Frameworks/CoreText.framework/CoreText",
+              "/System/Library/Frameworks/CoreTransferable.framework/CoreTransferable",
+              "/System/Library/Frameworks/CryptoKit.framework/CryptoKit",
+              "/System/Library/Frameworks/ImageIO.framework/ImageIO",
+              "/System/Library/Frameworks/Network.framework/Network",
+              "/System/Library/Frameworks/PhotosUI.framework/PhotosUI",
+              "/System/Library/Frameworks/QuickLook.framework/QuickLook",
+              "/System/Library/Frameworks/Security.framework/Security",
+              "/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+              "/System/Library/Frameworks/UIKit.framework/UIKit",
+              "/System/Library/Frameworks/UserNotifications.framework/UserNotifications",
+              "/System/Library/Frameworks/WatchConnectivity.framework/WatchConnectivity",
+              "/System/Library/Frameworks/_MapKit_SwiftUI.framework/_MapKit_SwiftUI",
+              "/System/Library/Frameworks/_PhotosUI_SwiftUI.framework/_PhotosUI_SwiftUI",
+              "/usr/lib/swift/libswiftAVFoundation.dylib",
+              "/usr/lib/swift/libswiftCore.dylib",
+              "/usr/lib/swift/libswiftCoreAudio.dylib",
+              "/usr/lib/swift/libswiftCoreFoundation.dylib",
+              "/usr/lib/swift/libswiftCoreImage.dylib",
+              "/usr/lib/swift/libswiftCoreLocation.dylib",
+              "/usr/lib/swift/libswiftCoreMIDI.dylib",
+              "/usr/lib/swift/libswiftCoreMedia.dylib",
+              "/usr/lib/swift/libswiftDarwin.dylib",
+              "/usr/lib/swift/libswiftDispatch.dylib",
+              "/usr/lib/swift/libswiftMapKit.dylib",
+              "/usr/lib/swift/libswiftMetal.dylib",
+              "/usr/lib/swift/libswiftOSLog.dylib",
+              "/usr/lib/swift/libswiftObjectiveC.dylib",
+              "/usr/lib/swift/libswiftQuartzCore.dylib",
+              "/usr/lib/swift/libswiftSpatial.dylib",
+              "/usr/lib/swift/libswiftUniformTypeIdentifiers.dylib",
+              "/usr/lib/swift/libswiftXPC.dylib",
+              "/usr/lib/swift/libswift_Concurrency.dylib",
+              "/usr/lib/swift/libswiftos.dylib",
+              "/usr/lib/swift/libswiftsimd.dylib",
+              "/usr/lib/swift/libswiftCoreGraphics.dylib"
+            ]
+          }
+        ],
+        "privacy_tracking": false
+      },
+      "watch": {
+        "bundle_id": "cz.pracovnidenik.app.watchapp",
+        "version": "0.8.5",
+        "build": "14",
+        "platforms": [
+          "WatchOS"
+        ],
+        "minimum_os": "10.0",
+        "executable_bytes": 1578384,
+        "architectures": [
+          {
+            "cpu_type": 33554444,
+            "bytes": 783216,
+            "dynamic_libraries": [
+              "/System/Library/Frameworks/Foundation.framework/Foundation",
+              "/usr/lib/libobjc.A.dylib",
+              "/usr/lib/libSystem.B.dylib",
+              "/System/Library/Frameworks/Combine.framework/Combine",
+              "/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+              "/System/Library/Frameworks/UIKit.framework/UIKit",
+              "/System/Library/Frameworks/WatchConnectivity.framework/WatchConnectivity",
+              "/usr/lib/swift/libswiftCore.dylib",
+              "/usr/lib/swift/libswiftCoreFoundation.dylib",
+              "/usr/lib/swift/libswiftCoreLocation.dylib",
+              "/usr/lib/swift/libswiftDarwin.dylib",
+              "/usr/lib/swift/libswiftDispatch.dylib",
+              "/usr/lib/swift/libswiftMapKit.dylib",
+              "/usr/lib/swift/libswiftOSLog.dylib",
+              "/usr/lib/swift/libswiftObjectiveC.dylib",
+              "/usr/lib/swift/libswiftQuartzCore.dylib",
+              "/usr/lib/swift/libswiftSceneKit.dylib",
+              "/usr/lib/swift/libswiftSpatial.dylib",
+              "/usr/lib/swift/libswiftUniformTypeIdentifiers.dylib",
+              "/usr/lib/swift/libswiftWatchKit.dylib",
+              "/usr/lib/swift/libswiftXPC.dylib",
+              "/usr/lib/swift/libswift_Concurrency.dylib",
+              "/usr/lib/swift/libswiftos.dylib",
+              "/usr/lib/swift/libswiftsimd.dylib"
+            ]
+          },
+          {
+            "cpu_type": 16777228,
+            "bytes": 775568,
+            "dynamic_libraries": [
+              "/System/Library/Frameworks/Foundation.framework/Foundation",
+              "/usr/lib/libobjc.A.dylib",
+              "/usr/lib/libSystem.B.dylib",
+              "/System/Library/Frameworks/Combine.framework/Combine",
+              "/System/Library/Frameworks/SwiftUI.framework/SwiftUI",
+              "/System/Library/Frameworks/UIKit.framework/UIKit",
+              "/System/Library/Frameworks/WatchConnectivity.framework/WatchConnectivity",
+              "/usr/lib/swift/libswiftCore.dylib",
+              "/usr/lib/swift/libswiftCoreFoundation.dylib",
+              "/usr/lib/swift/libswiftCoreLocation.dylib",
+              "/usr/lib/swift/libswiftDispatch.dylib",
+              "/usr/lib/swift/libswiftMapKit.dylib",
+              "/usr/lib/swift/libswiftOSLog.dylib",
+              "/usr/lib/swift/libswiftObjectiveC.dylib",
+              "/usr/lib/swift/libswiftQuartzCore.dylib",
+              "/usr/lib/swift/libswiftSceneKit.dylib",
+              "/usr/lib/swift/libswiftSpatial.dylib",
+              "/usr/lib/swift/libswiftUniformTypeIdentifiers.dylib",
+              "/usr/lib/swift/libswiftWatchKit.dylib",
+              "/usr/lib/swift/libswiftXPC.dylib",
+              "/usr/lib/swift/libswift_Builtin_float.dylib",
+              "/usr/lib/swift/libswift_Concurrency.dylib",
+              "/usr/lib/swift/libswiftos.dylib",
+              "/usr/lib/swift/libswiftsimd.dylib"
+            ]
+          }
+        ],
+        "privacy_tracking": false
+      }
+    },
+    "run": 44791578694,
+    "source": "30d6cb84745d0220d57be261caa14c53da0b86d7",
+    "version": "0.8.5",
+    "build": 14,
+    "ipa_created": true,
+    "full_native_suite_pending": false,
+    "artifact_id": 14658871464,
+    "archive_bytes": 182922935,
+    "artifact_expires_at": "2026-12-04T18:41:17Z",
+    "production_server_deployed": false
+  },
+  "native_blocked": {
     "run": 44779185288,
     "job": 136437001492,
     "started_steps": 0,
     "conclusion": "failure",
     "annotation": "The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings"
   },
-  "release": {
-    "prepared_version": "0.8.5",
-    "prepared_build": 14,
-    "ipa_created": false,
-    "full_native_suite_pending": true
+  "native_previous_full": {
+    "run": 44787277207,
+    "source": "07899bdfb2c239576f3ebc59c66ce2282750a99c",
+    "unit_passed": 134,
+    "unit_failed": 0,
+    "ui_passed": 49,
+    "ui_failed": 3,
+    "resolved_in_release": true
+  },
+  "native_latest": {
+    "run": 44791578694,
+    "job": 136480341507,
+    "source": "30d6cb84745d0220d57be261caa14c53da0b86d7",
+    "conclusion": "success",
+    "compile_passed": true,
+    "unit_passed": 135,
+    "unit_failed": 0,
+    "ui_passed": 52,
+    "ui_failed": 0,
+    "all_ui_suites_verified": true,
+    "device_build_passed": true,
+    "watch_build_and_three_captures_passed": true
+  },
+  "native_focused": {
+    "run": 44791566539,
+    "source": "30d6cb84745d0220d57be261caa14c53da0b86d7",
+    "conclusion": "success",
+    "unit_passed": 135,
+    "ui_passed": 13,
+    "failed": 0,
+    "scope": "protocol-attendance",
+    "checks_only": true
   }
 }

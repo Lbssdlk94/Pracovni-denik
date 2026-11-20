@@ -11,7 +11,7 @@ Použití a hranice architektury: [docs/PLATFORMA-A-PROVOZ.md](docs/PLATFORMA-A-
 
 ## iPhone a Apple Watch
 
-Poslední ověřená IPA: [iPhone a Apple Watch 0.8.4 (13)](docs/IPHONE-0.8.4-2026-11-20.md). Navazující [vydání 0.8.5 (14)](docs/IPHONE-0.8.5-2026-11-20.md) přidává [redesign servisního protokolu](docs/IOS-SERVICE-PROTOCOL-2026-11-20.md); závěrečné testy a vytvoření nové IPA nyní blokuje GitHub Billing & plans. Verze 0.8.5 ještě nemá vydaný artefakt.
+Poslední ověřená IPA: [iPhone a Apple Watch 0.8.5 (14)](docs/IPHONE-0.8.5-2026-11-20.md), včetně všech změn 0.8.4 a [nového servisního protokolu](docs/IOS-SERVICE-PROTOCOL-2026-11-20.md). Úplné sestavení prošlo 135 jednotkovými a 52 UI testy; soubor, kontrolní součty a podmínky aktivace serveru jsou v dokumentu vydání.
 
 ## Vývoj
 
