@@ -18,7 +18,7 @@ struct APIJobListRow:View {
     var mayWork:Bool{APIJobWorkflow.canWork(current,userID:store.userID,writer:store.writer,manager:store.manager) && !store.isRolePreview}
     private var current:APIValue{let value=store.currentJob(job);return contactScope==store.scope && !contact.isNull ? value.merged(["customerContact":contact]) : value}
     private var projected:APIValue{
-        let own=current["myTime"].merged(["userId":.s(store.userID),"assigned":.bool(assigned)])
+        let own=current["myTime"].merged(["userId":.s(store.userID),"version":.n(current["myTime"]["version"].int),"assigned":.bool(assigned)])
         var source=timeScope==store.scope && !snapshot.isNull ? snapshot : .object(["job":current,"states":.array([own]),"intervals":.array([])])
         if let saved=store.vault?.state.cache["/api/jobs/"+job.id+"/time"],saved["projection"].string != "dashboard",saved["serverNow"].double>source["serverNow"].double{source=saved}
         source["states"] = .array(source["states"].array.map{state in state["userId"].string==store.userID && own["version"].int>state["version"].int ? state.merged(own.object) : state})
@@ -31,7 +31,9 @@ struct APIJobListRow:View {
         VStack(alignment:.leading,spacing:4){
             Button{open(current)}label:{summary}.buttonStyle(.plain).accessibilityIdentifier("native-job-"+job.id)
             actionRow
-        }.padding(.vertical,1).contentShape(Rectangle())
+        }.padding(.horizontal,12).padding(.vertical,8)
+            .background{RoundedRectangle(cornerRadius:20).fill(DiaryStyle.surface).contentShape(RoundedRectangle(cornerRadius:20)).onTapGesture{open(current)}}
+            .contentShape(RoundedRectangle(cornerRadius:20))
             .contextMenu{menu}
             .swipeActions(edge:.trailing,allowsFullSwipe:false){
                 if let url=APIFormat.navigation(current["address"].string){Button{openURL(url)}label:{Label("Navigovat",systemImage:"location")}.tint(DiaryStyle.accent)}

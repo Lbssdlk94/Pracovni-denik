@@ -21,7 +21,15 @@ struct APIJobsScreen:View {
         var value=APIJobsFilters();value.state=filter?.state ?? "all";value.attention=filter?.attention ?? "";_applied=State(initialValue:value)
     }
     private var key:String{APIJobsPresentation.paths(filters:applied,period:period,mine:mine,manager:store.manager,userID:store.userID,now:Date()).joined(separator:"|")+store.scope+store.today+store.revision.uuidString}
-    private var jobs:[APIValue]{APIJobsPresentation.sorted(model.rows.map{store.currentJob($0)}.filter{APIJobsPresentation.matches($0,filters:applied,period:period,query:query,now:Date())},by:applied.sort)}
+    private var jobs:[APIValue]{
+        let now=Date(),selected=APIJobsPresentation.selectedDay(period,now:now),from=applied.dateRange ? APIJobsPresentation.day(applied.from) : "",to=applied.dateRange ? APIJobsPresentation.day(applied.to) : "",search=APIJobsPresentation.normalize(query)
+        let known=model.rows.map{store.currentJob($0)}
+        let own=known.map{$0["myTime"]}.max{$0["version"].int<$1["version"].int} ?? .null
+        let seed:APIValue = .object(["job":.null,"states":.array([own.merged(["userId":.s(store.userID),"version":.n(own["version"].int)])]),"intervals":.array([])])
+        let active=APIWorkTimeLogic.project(seed,store:store)["states"].array.first{$0["userId"].string==store.userID}?["active"]["jobId"].string ?? ""
+        let available=known.filter{APIJobsPresentation.matches($0,filters:applied,period:period,query:query,now:now,selected:selected,rangeStart:from,rangeEnd:to,normalizedSearch:search,personalActiveID:active)}
+        return APIJobsPresentation.sorted(available,by:applied.sort)
+    }
     var body:some View {
         List {
             Section {
@@ -76,7 +84,7 @@ struct APIJobsScreen:View {
             let rows=jobs.filter{APIJobsGroup.of($0)==group}
             if !rows.isEmpty{
                 Section {
-                    if group != .done || doneExpanded{ForEach(rows,id:\.id){job in APIJobListRow(store:store,job:job,open:{detailJob=$0}).listRowInsets(EdgeInsets(top:8,leading:12,bottom:8,trailing:12)).listRowSeparator(.hidden)}}
+                    if group != .done || doneExpanded{ForEach(rows,id:\.id){job in APIJobListRow(store:store,job:job,open:{detailJob=$0}).listRowInsets(EdgeInsets(top:3,leading:0,bottom:3,trailing:0)).listRowSeparator(.hidden).listRowBackground(Color.clear)}}
                 }header:{
                     if group == .done{Button{withAnimation{doneExpanded.toggle()}}label:{HStack{Text("Dokončené · \(rows.count)");Spacer();Image(systemName:doneExpanded ? "chevron.up" : "chevron.down")}.frame(minHeight:44)}.buttonStyle(.plain).accessibilityIdentifier("jobs-completed").accessibilityValue(doneExpanded ? "Rozbaleno" : "Sbaleno")}
                     else{Text(group.title+" · \(rows.count)")}

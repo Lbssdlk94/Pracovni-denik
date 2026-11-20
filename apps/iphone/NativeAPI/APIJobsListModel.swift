@@ -32,6 +32,14 @@ import SwiftUI
                 }
             }
             for base in requests{
+                if !store.online{
+                    guard ticket==id,binding==store.scope,!Task.isCancelled else{return}
+                    for page in Self.offlinePages(base,store:store){
+                        for job in page["jobs"].array{if found[job.id]==nil || job["version"].int>=found[job.id]!["version"].int{found[job.id]=job}}
+                        metadata.append(page["_jobCache"])
+                    }
+                    continue
+                }
                 var cursor="",seen=Set<String>()
                 repeat{
                     try Task.checkCancellation()
@@ -60,7 +68,7 @@ import SwiftUI
                 guard ticket==id,binding==store.scope,!Task.isCancelled else{return}
                 for month in APIJobMonthCache.months(containing:store.today){
                     var c=URLComponents(string:paths[0])!;c.queryItems=(c.queryItems ?? []).filter{$0.name != "month"}+[URLQueryItem(name:"month",value:month)]
-                    if let page=store.cachedJobList(c.string!){for job in page["jobs"].array{if found[job.id]==nil || job["version"].int>=found[job.id]!["version"].int{found[job.id]=job}};metadata.append(page["_jobCache"])}
+                    for page in Self.offlinePages(c.string!,store:store){for job in page["jobs"].array{if found[job.id]==nil || job["version"].int>=found[job.id]!["version"].int{found[job.id]=job}};metadata.append(page["_jobCache"])}
                 }
             }
             rows=Array(found.values);cache=Self.freshness(metadata,offline:!store.online)
@@ -78,5 +86,16 @@ import SwiftUI
         guard !values.isEmpty else{return .null}
         let at=values.map{$0["at"].double}.min() ?? 0
         return .object(["at":.number(at),"offline":.bool(offline || values.contains{$0["offline"].bool}),"stale":.bool(values.contains{$0["stale"].bool})])
+    }
+    private static func offlinePages(_ base:String,store:APIStore)->[APIValue]{
+        if let page=store.cachedJobList(base){return [page]}
+        // The original cache deliberately caps one response at 500 jobs. Read a
+        // large cached month through its existing day selections; every read still
+        // passes the same account/grant/offline-lease fence in cachedJobList.
+        guard let parameters=APIJobMonthCache.parameters(base,today:store.today),let month=parameters["month"] else{return []}
+        let f=DateFormatter();f.calendar=APIJobsPresentation.calendar;f.timeZone=f.calendar.timeZone;f.dateFormat="yyyy-MM-dd"
+        guard let start=f.date(from:month+"-01"),let range=f.calendar.range(of:.day,in:.month,for:start)else{return []}
+        let days=range.map{month+String(format:"-%02d",$0)}+["undated"]
+        return days.compactMap{day in var c=URLComponents(string:base)!;c.queryItems=(c.queryItems ?? []).filter{$0.name != "day"}+[URLQueryItem(name:"day",value:day)];return store.cachedJobList(c.string!)}
     }
 }

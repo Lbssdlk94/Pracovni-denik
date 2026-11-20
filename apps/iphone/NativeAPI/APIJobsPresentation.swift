@@ -30,7 +30,7 @@ enum APIJobsPresentation {
     static func appointment(_ job:APIValue)->String{let time=job["arrivalWindowStart"].string.isEmpty ? (job["plannedStart"].string.isEmpty ? job["startTime"].string : job["plannedStart"].string) : job["arrivalWindowStart"].string;return [date(job["dueDate"].string),time].filter{!$0.isEmpty}.joined(separator:" · ")}
     static func title(_ job:APIValue)->String{job["customerName"].string.isEmpty ? job.title : job["customerName"].string}
     static func normalize(_ text:String)->String{text.folding(options:[.diacriticInsensitive,.caseInsensitive],locale:Locale(identifier:"cs_CZ")).trimmingCharacters(in:.whitespacesAndNewlines)}
-    static func matches(_ job:APIValue,filters:APIJobsFilters,period:APIJobsPeriod,query:String,now:Date)->Bool{
+    static func matches(_ job:APIValue,filters:APIJobsFilters,period:APIJobsPeriod,query:String,now:Date,selected:String?=nil,rangeStart:String?=nil,rangeEnd:String?=nil,normalizedSearch:String?=nil,personalActiveID:String="")->Bool{
         let status=job["status"].string,due=job["dueDate"].string
         if filters.state=="approval"{guard APIJobsGroup.of(job) == .approval else{return false}}
         else if filters.state != "all",status != filters.state{return false}
@@ -38,27 +38,32 @@ enum APIJobsPresentation {
         if !filters.type.isEmpty,job["jobType"].string != filters.type{return false}
         if filters.discipline != "all",!job["discipline"].string.isEmpty,job["discipline"].string != filters.discipline{return false}
         if !filters.customer.isEmpty,job["customerId"].string != filters.customer{return false}
-        if filters.dateRange{if due<day(filters.from)||due>day(filters.to){return false}}
+        if filters.dateRange{if due<(rangeStart ?? day(filters.from))||due>(rangeEnd ?? day(filters.to)){return false}}
         else if period != .all{
-            let target=selectedDay(period,now:now)
-            let carry=period == .today && ["in_progress","on_way"].contains(status) && (due.isEmpty || due<=target)
+            let target=selected ?? selectedDay(period,now:now)
+            let carry=period == .today && (["in_progress","on_way"].contains(status) || job.id==personalActiveID) && (due.isEmpty || due<=target)
             if due != target && !carry{return false}
         }
-        let search=normalize(query)
+        let search=normalizedSearch ?? normalize(query)
         return search.isEmpty || ["customerName","title","address"].contains{normalize(job[$0].string).contains(search)}
     }
     static func sorted(_ jobs:[APIValue],by sort:APIJobsSort)->[APIValue]{
         func schedule(_ j:APIValue)->[String]{[j["dueDate"].string.isEmpty ? "9999-99-99" : j["dueDate"].string,j["plannedStart"].string.isEmpty ? j["startTime"].string : j["plannedStart"].string,j.id]}
-        return jobs.sorted{a,b in
+        // Prepare keys once, rather than folding names and allocating date keys
+        // for every comparison when the authorized list contains thousands of jobs.
+        let prepared=jobs.map{SortRow(job:$0,schedule:schedule($0),customer:sort == .customer ? normalize(title($0)) : "")}
+        return prepared.sorted{x,y in
+            let a=x.job,b=y.job
             switch sort{
             case .updated:if a["updatedAt"].double != b["updatedAt"].double{return a["updatedAt"].double>b["updatedAt"].double}
-            case .customer:let x=normalize(title(a)),y=normalize(title(b));if x != y{return x.localizedStandardCompare(y) == .orderedAscending}
+            case .customer:if x.customer != y.customer{return x.customer.localizedStandardCompare(y.customer) == .orderedAscending}
             case .status:if a["status"].string != b["status"].string{return a["status"].string<b["status"].string}
             case .schedule:break
             }
-            return schedule(a).lexicographicallyPrecedes(schedule(b))
-        }
+            return x.schedule.lexicographicallyPrecedes(y.schedule)
+        }.map(\.job)
     }
+    private struct SortRow{let job:APIValue;let schedule:[String];let customer:String}
     static func paths(filters:APIJobsFilters,period:APIJobsPeriod,mine:Bool,manager:Bool,userID:String,now:Date)->[String]{
         var q=[URLQueryItem(name:"state",value:filters.state=="approval" ? "all" : filters.state),URLQueryItem(name:"order",value:"schedule")]
         let worker = !manager || mine ? userID : filters.worker

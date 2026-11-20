@@ -33,10 +33,10 @@ struct APIJobsFilterSheet:View {
                     Picker("Zákazník",selection:$draft.customer){Text("Všichni zákazníci").tag("");ForEach(customers,id:\.id){Text($0.title).tag($0.id)};if !draft.customer.isEmpty,!customers.contains(where:{$0.id==draft.customer}){Text("Vybraný zákazník").tag(draft.customer)}}
                     Text("Nabídka zákazníků odpovídá dostupným načteným zakázkám.").font(.caption).foregroundStyle(.secondary)
                 }
-                Section("Termín"){
+                if store.enabled("jobCalendar") || store.enabled("jobList"){Section("Termín"){
                     Toggle("Konkrétní období",isOn:$draft.dateRange)
                     if draft.dateRange{DatePicker("Od",selection:$draft.from,displayedComponents:.date);DatePicker("Do",selection:$draft.to,in:draft.from...,displayedComponents:.date)}
-                }
+                }}
                 Section("Řazení"){Picker("Seřadit",selection:$draft.sort){ForEach(APIJobsSort.allCases,id:\.self){Text($0.title).tag($0)}}.pickerStyle(.inline)}
                 Section("Další filtry"){
                     Picker("Protokol",selection:$draft.protocolState){Text("Všechny").tag("");Text("Chybí nebo rozpracovaný").tag("unfinished");Text("Chybí").tag("missing");Text("Rozpracovaný").tag("draft");Text("Hotový").tag("ready")}

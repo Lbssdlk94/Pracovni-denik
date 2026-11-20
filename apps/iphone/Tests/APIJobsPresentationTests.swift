@@ -10,6 +10,8 @@ final class APIJobsPresentationTests:XCTestCase {
         for status in ["planned","incomplete","done"]{XCTAssertFalse(APIJobsPresentation.matches(job("old",status:status,day:"2026-09-01"),filters:f,period:.today,query:"",now:now))}
         XCTAssertFalse(APIJobsPresentation.matches(job("future",status:"in_progress",day:"2026-11-21"),filters:f,period:.today,query:"",now:now))
         XCTAssertFalse(APIJobsPresentation.matches(job("old",status:"in_progress",day:"2026-09-01"),filters:f,period:.tomorrow,query:"",now:now))
+        XCTAssertTrue(APIJobsPresentation.matches(job("queued",day:"2026-11-19"),filters:f,period:.today,query:"",now:now,personalActiveID:"queued"))
+        XCTAssertFalse(APIJobsPresentation.matches(job("other",day:"2026-11-19"),filters:f,period:.today,query:"",now:now,personalActiveID:"queued"))
     }
     func testGroupsUseRealStatusAndApprovalAndAlwaysPlaceDoneLast(){
         XCTAssertEqual(APIJobsGroup.allCases,[.working,.travel,.planned,.approval,.incomplete,.done])
@@ -96,5 +98,14 @@ final class APIJobsPresentationTests:XCTestCase {
         store.online=true;await store.sync();await store.sync()
         XCTAssertTrue(store.outbox.isEmpty)
         let after=try await store.get(path);XCTAssertEqual(after["intervals"].array.count,1)
+    }
+    @MainActor func testLargeAuthorizedOfflineMonthUsesExistingDaySelections()async throws{
+        APIFixtureProtocol.reset();let store=APIStore(fixture:true);await store.start();store.online=false
+        let month=String(store.today.prefix(7)),rows=(0..<650).map{index in job("cached-\(index)",day:month+(index<325 ? "-01" : "-02"))}
+        store.vault?.state.jobMonths=APIJobMonthState(months:[month:APIJobMonthSnapshot(jobs:rows,savedAt:Date(),revision:1)],verifiedAt:Date());store.jobMonthsAuthorized=true;store.jobMonthsReady=true
+        let model=APIJobsListModel();await model.load(store:store,filters:APIJobsFilters(),period:.all,mine:false)
+        // Fixture IDs in this test represent the current account's existing cache.
+        // The 'all team' manager request has no assignee and preserves all 650.
+        XCTAssertEqual(model.rows.count,650);XCTAssertFalse(model.complete);XCTAssertTrue(model.cache["offline"].bool)
     }
 }
