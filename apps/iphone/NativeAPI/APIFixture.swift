@@ -86,7 +86,7 @@ final class APIFixtureProtocol:URLProtocol {
         }
         if path=="/api/customers"{return json(.object(["customers":.array(customers),"nextCursor":.null]))}
         if path=="/api/gardens"{return json(.object(["gardens":.array(gardens)]))}
-        if path=="/api/materials"{return json(.object(["items":.array([material]),"categories":.array([.object(["id":.s("category-1"),"name":.s("Postřikovače"),"version":.n(1),"active":.bool(true)])]),"nextCursor":.null]))}
+        if path=="/api/materials"{return json(.object(["items":.array(APIProtocolFixture.enabled ? [material,material.merged(["id":.s("material-2"),"name":.s("Chránička"),"sku":.s("CHR 16"),"unit":.s("m"),"priceMinor":.n(1800)])] : [material]),"categories":.array([.object(["id":.s("category-1"),"name":.s("Postřikovače"),"version":.n(1),"active":.bool(true)])]),"nextCursor":.null]))}
         if path=="/api/defects"{return json(.object(["defects":fixture["defects"]]))}
         if path=="/api/notifications"{return json(.object(["notifications":.array([.object(["id":.s("notice-1"),"title":.s("Ukázkové upozornění"),"body":.s("Zkontrolujte zadání zakázky."),"readAt":.null])]),"unread":.n(1)]))}
         if path=="/api/jobs/people" || path=="/api/defects/people"{return json(.object(["people":.array([me["user"]])]))}

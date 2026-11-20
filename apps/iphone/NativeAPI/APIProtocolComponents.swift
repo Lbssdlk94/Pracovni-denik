@@ -55,5 +55,5 @@ struct APIProtocolShare:UIViewControllerRepresentable {
 }
 enum APIProtocolExport {
     static func photoIDs(_ report:APIValue)->[String]{report["photoIds"].array.map(\.string).filter{id in report["protocolDetails"]["photos"].array.first{$0.id==id}?["includePDF"].bool ?? true}}
-    static func customerReport(_ report:APIValue)->APIValue{var r=report;if !report["protocolDetails"]["customerNotes"].bool{r["notes"] = .s("")};return r}
+    static func customerReport(_ report:APIValue)->APIValue{var r=report;if report["protocolDetails"]["schema"].int==1 && report["protocolDetails"]["signature"]["status"].string != "signed"{r["customerSignature"] = .s("")};if !report["protocolDetails"]["customerNotes"].bool{r["notes"] = .s("")};return r}
 }

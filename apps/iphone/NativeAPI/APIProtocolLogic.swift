@@ -13,8 +13,9 @@ enum APIProtocolLogic {
     static func missing(_ report:APIValue,template:APIValue)->[String]{
         var required=Set(template["required"].array.map(\.string));required.insert("date");if template["signatureRequired"].bool{required.insert("signature")};if template["photosRequired"].bool{required.insert("photos")}
         let r=report.merged(["work":report["protocolDetails"]["schema"].int==1 ? .s(work(report)) : report["work"]])
-        var missing=required.filter{k in switch k{case "signature":return report["customerSignature"].string.isEmpty || report["protocolDetails"]["signature"]["status"].string != "signed";case "photos":return report["photoIds"].array.isEmpty;case "materialItems":return report[k].array.isEmpty;default:return report[k].string.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty}}
+        var missing=required.filter{k in switch k{case "signature":return report["customerSignature"].string.isEmpty || report["protocolDetails"]["signature"]["status"].string != "signed";case "photos":return report["photoIds"].array.isEmpty;case "time":return report["protocolDetails"]["timeSnapshot"]["intervals"].array.isEmpty;case "materialItems":return report[k].array.isEmpty;default:return report[k].string.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty}}
         if !["work","material","defects","notes","recommendations"].contains(where:{!r[$0].string.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty}) && r["materialItems"].array.isEmpty && r["photoIds"].array.isEmpty{missing.insert("content")}
+        if report["materialItems"].array.contains(where:{(try? quantity($0["quantity"].string))==nil}){missing.insert("materialItems")}
         return missing.sorted()
     }
     static func readiness(_ report:APIValue,template:APIValue)->Double{let total=Set(template["required"].array.map(\.string)+["date","content"]+(template["signatureRequired"].bool ? ["signature"]:[])+(template["photosRequired"].bool ? ["photos"]:[])).count;return Double(max(0,total-missing(report,template:template).count))/Double(max(1,total))}

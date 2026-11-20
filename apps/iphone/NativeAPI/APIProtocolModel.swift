@@ -11,6 +11,7 @@ import UIKit
     @Published var loaded=false
     @Published var busy=false
     @Published var localSaved=false
+    @Published var stale=false
     var jobID="",scope="",operationID=UUID().uuidString
     var submitted:APIValue?
     var task:Task<Void,Never>?
@@ -23,7 +24,7 @@ import UIKit
     func load(store:APIStore,jobID:String)async {
         guard !loaded else{return};self.jobID=jobID;scope=store.scope
         do{
-            let snap=try await store.get(path);guard scope==store.scope else{return};snapshot=snap
+            let snap:APIValue;do{snap=try await store.get(path)}catch let error as APIError where error.isTransient{guard let cached=store.vault?.state.cache[path]else{throw error};snap=cached;stale=true;problem="Uložená kopie · připojení se nepodařilo ověřit."};guard scope==store.scope else{return};snapshot=snap
             var r=snap["report"].isNull ? APIValue.object(["date":.s(store.today),"work":.s(""),"materialItems":.array([]),"photoIds":.array([]),"customerSignature":.s("")]) : snap["report"]
             normalize(&r)
             baseline = .object(["version":snap["job"]["version"],"report":r]);let draft=store.draft(key,fallback:baseline);value=draft.value;operationID=draft.operationID
@@ -61,19 +62,21 @@ import UIKit
     }
     func adoptAcknowledgement(store:APIStore,captured:APIValue){
         guard let saved=store.vault?.state.cache[path],!saved["report"].isNull else{return}
-        snapshot=saved;var r=saved["report"];normalize(&r);baseline = .object(["version":saved["job"]["version"],"report":r])
+        stale=false;let priorProtocol=snapshot["protocol"];snapshot=saved;if snapshot["protocol"].isNull{snapshot["protocol"]=priorProtocol};var r=saved["report"];normalize(&r);baseline = .object(["version":saved["job"]["version"],"report":r])
         if value==captured{value=baseline;localSaved=false;store.removeDraft(key)}else{value["version"]=saved["job"]["version"]}
         operationID=UUID().uuidString;submitted=nil
         if value != baseline{persist(store);changed(store:store)}
     }
     func syncChanged(store:APIStore){guard loaded,!busy,scope==store.scope else{return};if let captured=submitted,pending(store).isEmpty{adoptAcknowledgement(store:store,captured:captured)};if let bad=pending(store).first(where:{$0.state != "pending"}){problem=bad.error}}
-    func state(_ store:APIStore)->String{if busy{return "Ukládání"};if !pending(store).isEmpty{return "Čeká na synchronizaci"};if value != baseline{return localSaved ? (store.online ? "Uloženo v zařízení" : "Offline – uloženo v zařízení") : "Chyba ukládání"};return store.online ? "Uloženo" : "Offline – uložená kopie"}
+    func state(_ store:APIStore)->String{if busy{return "Ukládání"};if pending(store).contains(where:{$0.state != "pending"}){return "Chyba ukládání"};if !pending(store).isEmpty{return "Čeká na synchronizaci"};if value != baseline{return localSaved ? (store.online ? "Uloženo v zařízení" : "Offline – uloženo v zařízení") : "Chyba ukládání"};return store.online ? (stale ? "Uložená kopie" : "Uloženo") : "Offline – uložená kopie"}
     var status:String{
-        let deliveries=snapshot["protocol"]["delivery"].array.filter{!$0["stale"].bool}
+        if value != baseline{return APIProtocolLogic.missing(report,template:template).isEmpty ? "Připraveno k potvrzení" : "Rozpracováno"}
+        let deliveries=snapshot["protocol"]["delivery"].array.filter{!$0["stale"].bool && $0["report_version"]==baseline["report"]["version"]}
         if deliveries.contains(where:{$0["state"].string=="sent" && !$0["sent_at"].isNull}){return "Odesláno zákazníkovi"}
         if deliveries.contains(where:{["pending","approved"].contains($0["state"].string)}){return "Čeká na schválení"}
         if report["documentState"].string=="ready",value==baseline{return "Potvrzeno"}
         return APIProtocolLogic.missing(report,template:template).isEmpty ? "Připraveno k potvrzení" : "Rozpracováno"
     }
+    func refreshAuxiliary(store:APIStore)async{guard loaded,store.online,scope==store.scope else{return};do{let fresh=try await store.get(path);guard scope==store.scope else{return};snapshot["protocol"]=fresh["protocol"];if snapshot["report"].isNull,let t=fresh["protocol"]["templates"].array.first(where:{$0.id==report["protocolDetails"]["templateId"].string}){value["report"]["protocolDetails"]["template"]=t;baseline["report"]["protocolDetails"]["template"]=t}}catch{problem=error.localizedDescription}}
     func sign(_ signature:APIValue,png:String){value["report"]["customerSignature"] = .s(png);value["report"]["protocolDetails"]["signature"]=signature;value["report"]["protocolDetails"]["confirmSignature"] = .bool(signature["status"].string=="signed");value["report"]["protocolDetails"]["signature"]["localHash"] = .s(APIProtocolLogic.fingerprint(report))}
 }

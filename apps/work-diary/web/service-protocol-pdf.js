@@ -1,3 +1,4 @@
+import {protocolCustomerReport} from './protocol-model.js?v=workspace-roles-v1';
 import {planTimeSummary} from './planning-model.js?v=workspace-roles-v1';
 import {materialSummary,materialTotals,materialMoney} from './material-model.js?v=workspace-roles-v1';
 // PDF is generated on the device. Private records and photos never leave the app
@@ -28,7 +29,7 @@ async function readPhoto(blob,signal){
 }
 export async function createServiceProtocolPDF(entry,{signal,onProgress=()=>{},loadPhoto}={}){
  const snapshot=entry.snapshot;if(!snapshot)throw Error('Nejdříve ověřte přístup k zakázce s internetem.');
- const j=snapshot.job,r=entry.pending?entry.payload?.report:snapshot.report;
+ const j=snapshot.job,sourceReport=entry.pending?entry.payload?.report:snapshot.report,r=sourceReport?protocolCustomerReport(sourceReport):null;
  if(!r)throw Error('Nejdříve uložte servisní protokol.');
  const embeddedFont=await font();signal?.throwIfAborted();
  const doc=new globalThis.jspdf.jsPDF({unit:'mm',format:'a4',compress:true});
@@ -41,7 +42,7 @@ export async function createServiceProtocolPDF(entry,{signal,onProgress=()=>{},l
   for(const line of lines){if(y+height>bottom)newPage();doc.text(line,left,y);y+=height;}
  }
  function section(label,value){if(!value?.trim())return;if(y+20>bottom)newPage();y+=4;text(label,12);y+=1;text(value);}
- text('Dr. Závlaha · Závlahový deník',10);y+=4;text('SERVISNÍ PROTOKOL',21);y+=3;
+ text('Dr. Závlaha · Závlahový deník',10);y+=4;text(r.protocolDetails?.template?.name?.toUpperCase()||'SERVISNÍ PROTOKOL',21);y+=3;
  text('Zakázka: '+j.title,13);text('ID zakázky: '+j.id,8);y+=3;
  const billing=r.billingDetails||snapshot.billingPreview;if(billing){section('Dodavatel',billingText(billing.company));section('Odběratel',billingText(billing.customer));y+=3;}
  text('Zákazník: '+(j.customerName||'Neuveden'));text('Adresa realizace: '+([j.address,j.city&&!(j.address||'').includes(j.city)?j.city:''].filter(Boolean).join(', ')||'Neuvedena'));
@@ -59,13 +60,14 @@ export async function createServiceProtocolPDF(entry,{signal,onProgress=()=>{},l
  for(const [label,key]of [['Použitý materiál','material'],['Zjištěné závady','defects'],['Poznámka','notes'],['Doporučení pro další návštěvu','recommendations']])section(label,r[key]);
  if(r.materialItems?.length){section('Materiál z katalogu',r.materialItems.map(materialSummary).join('\n'));for(const total of materialTotals(r.materialItems))section('Celkem materiál',materialMoney(total.amount,total.currency));}
  if(r.workCharges){const c=r.workCharges;section('Práce',`${new Intl.NumberFormat('cs-CZ').format(c.hours)} h → ${c.hourUnits} započatých hodin × ${materialMoney(c.hourlyMinor)} = ${materialMoney(c.labourMinor)}`);section('Cesta',`${new Intl.NumberFormat('cs-CZ').format(c.kilometers)} km → ${c.travelUnits} započatých bloků po 30 km × ${materialMoney(c.travelRateMinor)} = ${materialMoney(c.travelMinor)}`);section('Celkem práce a cesta',materialMoney(c.totalMinor));const total=materialTotals(r.materialItems||[]);const czk=total.find(t=>t.currency==='CZK');section('Celkem výkaz (Kč)',materialMoney(c.totalMinor+(czk?.amount||0)));for(const t of total.filter(t=>t.currency!=='CZK'))section('Další měna – samostatně',materialMoney(t.amount,t.currency));}
+ const time=r.protocolDetails?.timeSnapshot;if(time){const totals=new Map();for(const i of time.intervals||[]){if(i.endAt==null)continue;const row=totals.get(i.userId)||{work:0,travel:0};if(i.kind==='work'||i.kind==='travel')row[i.kind]+=Math.max(0,i.endAt-i.startAt);totals.set(i.userId,row);}section('Evidence práce na zakázce',(time.workers||[]).map(p=>{const t=totals.get(p.userId)||{work:0,travel:0};return p.name+' · práce '+(t.work/3600000).toLocaleString('cs-CZ',{maximumFractionDigits:2})+' h · cesta '+(t.travel/3600000).toLocaleString('cs-CZ',{maximumFractionDigits:2})+' h';}).join('\n'));}
  text('Servisní výkaz není daňový doklad.',8,[99,111,104]);
  if(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(r.customerSignature||'')){if(y+42>bottom)newPage();y+=4;text('Podpis zákazníka',12);y+=2;doc.addImage(r.customerSignature,'PNG',left,y,68,22);y+=26;text('Zákazník podpisem potvrzuje provedení práce uvedené v tomto protokolu.',8,[99,111,104]);}
  const ids=[...new Set(r.photoIds||[])],warnings=[];
  if(ids.length){newPage();text('FOTODOKUMENTACE',17);y+=4;}
  for(let i=0;i<ids.length;i++){
   signal?.throwIfAborted();onProgress(`Připravuji fotografii ${i+1} z ${ids.length}…`);
-  const id=ids[i],local=(entry.photos||[]).find(p=>p.id===id),remote=(snapshot.photos||[]).find(p=>p.id===id),name=local?.file.name||remote?.name||'Fotografie '+(i+1);
+  const id=ids[i],local=(entry.photos||[]).find(p=>p.id===id),remote=(snapshot.photos||[]).find(p=>p.id===id),name=r.protocolDetails?.photos?.find(p=>p.id===id)?.caption||local?.file.name||remote?.name||'Fotografie '+(i+1);
   const blob=local?.file||await loadPhoto(id,remote);
   let img;try{img=await readPhoto(blob,signal);}catch(e){if(e.message!=='unsupported_image')throw e;warnings.push(name);section('Fotografie '+(i+1),name+' – tento formát se v prohlížeči nepodařilo zobrazit. Originál zůstává u zakázky.');continue;}
   const maxHeight=105,factor=Math.min(width/img.width,maxHeight/img.height),w=img.width*factor,h=img.height*factor;
