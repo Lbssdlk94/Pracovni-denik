@@ -26,6 +26,7 @@ import {handleJobHandoffs} from './job-handoffs.js';
 import {handleGardenHistory} from './garden-history.js';
 import {handleJobPlanner} from './job-planner.js';
 import {handleEmailConfiguration} from './email-config.js';
+import {handleProtocolTemplates} from './protocol-design.js';
 import {handleProtocolEmails} from './protocol-emails.js';
 import {handleInvoiceCompany} from './protocol-billing.js';
 import {handleWorkRates} from './work-charges.js';
@@ -246,6 +247,7 @@ async function workspaceRawApi(request,env,ctx){
     if(path==='/api/defects'||path.startsWith('/api/defects/')||/^\/api\/gardens\/[-\w]+\/history$/.test(path)){const {features}=await featureSettingsOnce();if(!features.gardens)fail(403,'Zahrady jsou v nastavení vypnuté.');return await handleGardenHistory(request,env,m,{all,one,body,json,fail,validId,cleanText,features});}
     if(path==='/api/email-settings')return await handleEmailConfiguration(request,env,m,{body,fail,json});
     if(path==='/api/invoice-company')return await handleInvoiceCompany(request,env,m,{body,fail,json,cleanText});
+    if(path==='/api/protocol-templates')return await handleProtocolTemplates(request,env,m,{body,fail,json,validId,cleanText});
     if(path==='/api/work-rates')return await handleWorkRates(request,env,m,{body,fail,json});
     if(path==='/api/materials'||path.startsWith('/api/materials/'))return await handleMaterials(request,env,m,{body,fail,json,validId,cleanText,expectedVersion});
     if(path.startsWith('/api/service-reminders/'))return await handleServiceReminders(request,env,m,{json,fail,boundedBytes,body});

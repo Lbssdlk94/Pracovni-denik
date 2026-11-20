@@ -287,7 +287,8 @@ final class APIStore: ObservableObject {
             }
         }
         let roots:[String:String]=["jobs":"job","customers":"customer","defects":"defect","vehicles":"vehicle","subscriptions":"subscription"]
-        let parts=path.split(separator:"/");guard parts.count>=2,let singular=roots[String(parts[1])]else{return}
+        let parts=(URLComponents(string:path)?.path ?? path).split(separator:"/");guard parts.count>=2,let singular=roots[String(parts[1])]else{return}
+        if parts.count==4,parts[1]=="jobs",parts[3]=="service",!result["report"].isNull{vault.state.cache["/api/jobs/"+String(parts[2])+"/service"]=result;vault.state.cache["/api/jobs/"+String(parts[2])+"/service?editor=1"]=result}
         if parts.count>=4,parts[1]=="jobs",parts[3]=="time",!result["intervals"].isNull{vault.state.cache["/api/jobs/"+String(parts[2])+"/time"]=result}
         var entity=result[singular];guard !entity.id.isEmpty else{return}
         if singular=="job",!result["report"].isNull{entity["protocolStatus"]=result["report"]["documentState"].string=="ready" ? .s("ready") : .s("draft")}
@@ -295,7 +296,8 @@ final class APIStore: ObservableObject {
         for key in vault.state.cache.keys where key.hasPrefix("/api/"+String(parts[1])){vault.state.cache[key]=patch(vault.state.cache[key]!)}
     }
     func draft(_ key: String, fallback: APIValue) -> APIDraft { (isRolePreview ? nil : vault?.state.drafts[key]) ?? APIDraft(value:fallback,baseVersion:fallback["version"].int,operationID:UUID().uuidString,updatedAt:Date()) }
-    func saveDraft(_ key: String, draft: APIDraft) { guard !isRolePreview else{return};do { vault?.state.drafts[key] = draft; try vault?.persist() } catch { self.error = error.localizedDescription } }
+    func saveDraftChecked(_ key:String,draft:APIDraft)throws{try requireLiveRole();guard let vault else{throw APIError.local("Koncept nelze uložit bez přihlášení.")};vault.state.drafts[key]=draft;try vault.persist()}
+    func saveDraft(_ key: String, draft: APIDraft) { guard !isRolePreview else{return};do { try saveDraftChecked(key,draft:draft) } catch { self.error = error.localizedDescription } }
     func removeDraft(_ key: String) { guard !isRolePreview else{return};vault?.state.drafts.removeValue(forKey:key); try? vault?.persist() }
     func updateOutbox() { outbox = vault?.state.outbox ?? [] }
     func file(_ path:String,version:APIValue = .null) async throws -> APIBytes {

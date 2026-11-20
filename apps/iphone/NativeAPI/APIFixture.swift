@@ -16,8 +16,10 @@ final class APIFixtureProtocol:URLProtocol {
     static func response(_ request:URLRequest)->(Int,Data,[String:String]){
         requests.append(request);let path=request.url!.path,method=request.httpMethod ?? "GET"
         func json(_ value:APIValue,_ status:Int=200)->(Int,Data,[String:String]){(status,(try? value.data()) ?? Data(),["Content-Type":"application/json"])}
+
         if let status=forcedStatus[path]{return json(.object(["error":.s("Isolated fixture \(status)")]),status)}
         func body()->APIValue{var data=request.httpBody;if data==nil,let stream=request.httpBodyStream{stream.open();defer{stream.close()};var bytes=Data();var buffer=[UInt8](repeating:0,count:4096);while stream.hasBytesAvailable{let n=stream.read(&buffer,maxLength:buffer.count);if n<=0{break};bytes.append(buffer,count:n)};data=bytes};return (try? JSONDecoder().decode(APIValue.self,from:data ?? Data())) ?? .null}
+        if path=="/api/protocol-templates",APIProtocolFixture.enabled{if method=="PUT"{let b=body();records["protocol-templates"]=b.merged(["version":.n(b["version"].int+1)])};return json(records["protocol-templates"] ?? APIProtocolFixture.configuration)}
         let fixture=fixtureData(),me=fixture["context"].merged(["installation":.object(["id":.s("native-fixture"),"name":.s("Dr. Závlaha"),"version":.n(1)]),"license":.null])
         if path=="/api/me"{return json(records[path] ?? me)}
         if path=="/api/auth/login"{let b=body();if b["preview"].bool{return json(.object(["userId":.s("fixture-owner"),"credentialVersion":.n(1)]))};return(200,try! APIValue.object(["mustChange":.bool(false)]).data(),["Content-Type":"application/json","Set-Cookie":"__Host-zavlahy-access=fixture; Path=/; Secure; HttpOnly; SameSite=Lax"])}
@@ -178,7 +180,7 @@ final class APIFixtureProtocol:URLProtocol {
                 return json(.object(["job":job,"entry":row]))
             }
             if parts[3]=="status"{let b=body();guard b["version"]==job["version"]else{return json(.object(["error":.s("Konflikt verze")]),409)};job["status"]=b["status"];job["incompleteReason"]=b["incompleteReason"];job["version"] = .n(job["version"].int+1);records[key]=job;return json(.object(["job":job]))}
-            if parts[3]=="service"{var report=records[key+"/report"] ?? .null;if method=="PUT"{let b=body();guard b["version"]==job["version"]else{return json(.object(["error":.s("Konflikt verze")]),409)};report=b["report"];report["version"] = .n(1);report["documentState"] = .s(b["finalizeReport"].bool ? "ready" : "draft");records[key+"/report"]=report;job["version"] = .n(job["version"].int+1);if b["complete"].bool{job["status"] = .s("done")};records[key]=job};return json(.object(["job":job,"report":report,"photos":.array([]),"billingPreview":.object([:])]))}
+            if parts[3]=="service"{var report=records[key+"/report"] ?? .null;if method=="PUT"{let b=body();guard b["version"]==job["version"]else{return json(.object(["error":.s("Konflikt verze")]),409)};report=b["report"];report["version"] = .n((records[key+"/report"]?["version"].int ?? 0)+1);if APIProtocolFixture.enabled{report["protocolDetails"]["template"]=APIProtocolFixture.template};report["documentState"] = .s(b["finalizeReport"].bool ? "ready" : "draft");records[key+"/report"]=report;job["version"] = .n(job["version"].int+1);if b["complete"].bool{job["status"] = .s("done")};records[key]=job};let result=APIValue.object(["job":job,"report":report,"photos":.array([]),"billingPreview":.object([:])]);return json(APIProtocolFixture.enabled ? APIProtocolFixture.decorate(result):result)}
             if parts[3]=="handoffs"{return json(.object(["jobVersion":job["version"],"revision":.n(1),"handoffs":.array([.object(["userId":.s("fixture-owner"),"version":.n(1),"status":.s("pending")])])]))}
         }
         if parts.count==3 && parts[1]=="customers",let row=customers.first(where:{$0.id==parts[2]}){return json(.object(["customer":row]))}

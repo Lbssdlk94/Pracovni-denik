@@ -169,6 +169,7 @@ struct APIFilesView:View {
 }
 struct APISignature:View {
     @Binding var encoded:String
+    var height:CGFloat=120
     @State private var strokes:[[CGPoint]]=[]
     @State private var drawing=false
     var body:some View{VStack(alignment:.leading,spacing:10){
@@ -179,7 +180,7 @@ struct APISignature:View {
                 for points in strokes{var path=Path();if let first=points.first{path.move(to:CGPoint(x:first.x*size.width,y:first.y*size.height));for p in points.dropFirst(){path.addLine(to:CGPoint(x:p.x*size.width,y:p.y*size.height))};context.stroke(path,with:.color(.black),lineWidth:2)}}
             }.background(Color.white,in:RoundedRectangle(cornerRadius:12)).overlay(RoundedRectangle(cornerRadius:12).stroke(.gray.opacity(0.3)))
             .gesture(DragGesture(minimumDistance:0).onChanged{gesture in if !drawing{drawing=true;strokes.append([])};let point=CGPoint(x:max(0,min(1,gesture.location.x/max(1,geometry.size.width))),y:max(0,min(1,gesture.location.y/max(1,geometry.size.height))));strokes[strokes.count-1].append(point)}.onEnded{_ in drawing=false;render()})
-        }.frame(height:120)
+        }.frame(height:height).accessibilityLabel("Podpisová plocha. Podepište se prstem.").accessibilityAddTraits(.allowsDirectInteraction)
         Button("Vymazat podpis",role:.destructive){encoded="";strokes=[];drawing=false}.frame(minHeight:44)
     }}
     func render(){let image=UIGraphicsImageRenderer(size:CGSize(width:320,height:120)).image{context in UIColor.white.setFill();context.fill(CGRect(x:0,y:0,width:320,height:120));if let bytes=Data(base64Encoded:encoded.components(separatedBy:",").last ?? ""),let old=UIImage(data:bytes){old.draw(in:CGRect(x:0,y:0,width:320,height:120))};context.cgContext.setStrokeColor(UIColor.black.cgColor);context.cgContext.setLineWidth(2);for points in strokes{guard let first=points.first else{continue};context.cgContext.beginPath();context.cgContext.move(to:CGPoint(x:first.x*320,y:first.y*120));for p in points.dropFirst(){context.cgContext.addLine(to:CGPoint(x:p.x*320,y:p.y*120))};context.cgContext.strokePath()}};if let bytes=image.pngData(),bytes.count<35000{encoded="data:image/png;base64,"+bytes.base64EncodedString();strokes=[]}}
