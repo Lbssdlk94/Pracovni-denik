@@ -76,7 +76,7 @@ struct APIJobsScreen:View {
         HStack(spacing:4){
             if store.enabled("jobCalendar"){Button{calendar=true}label:{Image(systemName:"calendar")}.accessibilityLabel("Kalendář zakázek").accessibilityIdentifier("jobs-calendar")}
             if store.manager && store.enabled("jobMap") && store.enabled("location"){Button{map=true}label:{Image(systemName:"map")}.accessibilityLabel("Mapa zakázek").accessibilityIdentifier("jobs-map")}
-            Button{filters=true}label:{Image(systemName:"line.3.horizontal.decrease").overlay(alignment:.topTrailing){if applied.count>0{Text(String(applied.count)).font(.caption2.bold()).padding(3).foregroundStyle(Color(.systemBackground)).background(DiaryStyle.actionFill,in:Circle()).offset(x:9,y:-7)}}}.accessibilityLabel("Filtry").accessibilityValue("Aktivní filtry: \(applied.count)").accessibilityIdentifier("jobs-filters")
+            Button{filters=true}label:{Image(systemName:"line.3.horizontal.decrease").overlay(alignment:.topTrailing){if applied.count>0{Text(String(applied.count)).font(.caption2.bold()).padding(3).foregroundStyle(Color.white).background(DiaryStyle.actionFill,in:Circle()).offset(x:9,y:-7)}}}.accessibilityLabel("Filtry").accessibilityValue("Aktivní filtry: \(applied.count)").accessibilityIdentifier("jobs-filters")
         }.buttonStyle(APIJobsCompactButtonStyle()).fixedSize(horizontal:true,vertical:false)
     }
     @ViewBuilder private var jobSections:some View {
@@ -107,5 +107,5 @@ struct APIJobsScreen:View {
 
 struct APIJobsCompactButtonStyle:ButtonStyle {
     var primary=false
-    func makeBody(configuration:Configuration)->some View{configuration.label.font(.body.weight(.semibold)).foregroundStyle(primary ? Color(.systemBackground) : DiaryStyle.accent).padding(.horizontal,primary ? 8 : 0).frame(minWidth:44,minHeight:44).background((primary ? DiaryStyle.actionFill : DiaryStyle.soft).opacity(configuration.isPressed ? 0.65 : 1),in:RoundedRectangle(cornerRadius:13)).scaleEffect(configuration.isPressed ? 0.96 : 1)}
+    func makeBody(configuration:Configuration)->some View{configuration.label.font(.body.weight(.semibold)).foregroundStyle(primary ? Color.white : DiaryStyle.accent).padding(.horizontal,primary ? 8 : 0).frame(minWidth:44,minHeight:44).background((primary ? DiaryStyle.actionFill : DiaryStyle.soft).opacity(configuration.isPressed ? 0.65 : 1),in:RoundedRectangle(cornerRadius:13)).scaleEffect(configuration.isPressed ? 0.96 : 1)}
 }
