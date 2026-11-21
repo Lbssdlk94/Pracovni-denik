@@ -44,7 +44,7 @@ export async function protocolDesignResolve(env,m,job,input,report,previous,fina
   else if(draft.confirmSignature===true){if(!Number.isSafeInteger(requested.signedAt)||requested.signedAt>Date.now()+120000||requested.signedAt<Date.now()-31*86400000)fail(400,'Zkontrolujte čas podpisu.');signature={status:'signed',name:clean(requested.name||job.customer_name||'',160),signedAt:requested.signedAt,recordedAt:Date.now(),signedVersion:(previous?.version||0)+1,contentHash:hash};}
   else{report.customerSignature='';signature={status:'invalidated',previousSignedAt:oldSignature.signedAt||null};}
  }else if(['absent','refused'].includes(requested.status)){report.customerSignature='';signature={status:requested.status,name:clean(requested.name||'',160),at:Number.isSafeInteger(requested.at)?requested.at:Date.now()};}
- else if(oldSignature.status==='signed'&&oldSignature.contentHash!==hash){report.customerSignature='';signature={status:'invalidated',previousSignedAt:oldSignature.signedAt};}
+ else if(oldSignature.status==='signed'||oldSignature.status==='invalidated'){report.customerSignature='';signature={status:'invalidated',previousSignedAt:oldSignature.signedAt||oldSignature.previousSignedAt||null};}
  details.signature=signature;details.contentHash=hash;report.protocolDetails=details;
  if(finalize){const missing=protocolMissing(report,template);if(missing.length)fail(400,'Protokol není připravený. Doplňte povinné údaje.',{code:'protocol_incomplete',missing});}
  return details;

@@ -21,6 +21,13 @@
 .pd-secondary .settings-workspace{display:grid;gap:16px;align-items:start}
 .pd-secondary .settings-workspace>.page-title{grid-column:1/-1}
 .pd-secondary .settings-workspace>.storage-card{margin:0;min-width:0}
+.secondary-settings-group{margin:0;padding:0;border:0}
+.secondary-settings-group>summary{min-height:44px;cursor:pointer;list-style:none;justify-content:space-between;padding:0}
+.secondary-settings-group>summary::-webkit-details-marker{display:none}
+.secondary-settings-group>summary::after{content:'⌄';color:var(--pd-forest);font-size:20px;flex-shrink:0}
+.secondary-settings-group[open]>summary::after{transform:rotate(180deg)}
+.secondary-settings-group>summary h2{font-size:17px;line-height:1.35;margin:0;color:var(--pd-text)}
+.secondary-settings-body{padding-top:8px}
 .pd-secondary details>summary{cursor:pointer;display:flex;align-items:center;gap:8px;font-weight:650}
 .pd-secondary details[open]>summary{margin-bottom:12px}
 .pd-secondary :is(.feature-list,.feature-row){gap:12px}
