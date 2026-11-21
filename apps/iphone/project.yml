@@ -7,8 +7,8 @@ settings:
   base:
     SWIFT_VERSION: '5.0'
     TARGETED_DEVICE_FAMILY: '1'
-    CURRENT_PROJECT_VERSION: 14
-    MARKETING_VERSION: 0.8.5
+    CURRENT_PROJECT_VERSION: 15
+    MARKETING_VERSION: 0.8.6
     CODE_SIGN_STYLE: Automatic
     APNS_ENVIRONMENT: development
   configs:
@@ -37,6 +37,45 @@ targets:
       PROVISIONING_PROFILE_SPECIFIER: $(APPLE_PROFILE_UUID)
       CODE_SIGN_ENTITLEMENTS: Resources/PracovniDenik.entitlements
       ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
+      "SWIFT_ACTIVE_COMPILATION_CONDITIONS[sdk=iphoneos*]": "$(inherited) MINISTRAL_DEVICE"
+      "FRAMEWORK_SEARCH_PATHS[sdk=iphoneos*]": "$(inherited) $(SRCROOT)/ThirdParty/llama.xcframework/ios-arm64"
+      "OTHER_LDFLAGS[sdk=iphoneos*]": "$(inherited) -framework llama"
+    preBuildScripts:
+      - name: Download llama.cpp device runtime
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          if [[ "${PLATFORM_NAME:-}" != "iphoneos" ]]; then
+            exit 0
+          fi
+          DEST="${SRCROOT}/ThirdParty/llama.xcframework"
+          if [[ -d "$DEST/ios-arm64/llama.framework" ]]; then
+            exit 0
+          fi
+          mkdir -p "${SRCROOT}/ThirdParty"
+          curl -L --fail --retry 3 -o "${SRCROOT}/ThirdParty/llama.zip" "https://github.com/ggml-org/llama.cpp/releases/download/b10549/llama-b10549-xcframework.zip"
+          rm -rf "${SRCROOT}/ThirdParty/unpack"
+          unzip -q "${SRCROOT}/ThirdParty/llama.zip" -d "${SRCROOT}/ThirdParty/unpack"
+          rm -rf "$DEST"
+          mv "${SRCROOT}/ThirdParty/unpack/build-apple/llama.xcframework" "$DEST"
+          rm -rf "${SRCROOT}/ThirdParty/llama.zip" "${SRCROOT}/ThirdParty/unpack"
+    postBuildScripts:
+      - name: Embed llama.cpp device runtime
+        basedOnDependencyAnalysis: false
+        script: |
+          set -euo pipefail
+          if [[ "${PLATFORM_NAME:-}" != "iphoneos" ]]; then
+            exit 0
+          fi
+          SRC="${SRCROOT}/ThirdParty/llama.xcframework/ios-arm64/llama.framework"
+          DEST="${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}"
+          mkdir -p "$DEST"
+          rm -rf "$DEST/llama.framework"
+          cp -R "$SRC" "$DEST/llama.framework"
+          if [[ "${CODE_SIGNING_ALLOWED:-YES}" != "NO" && -n "${EXPANDED_CODE_SIGN_IDENTITY:-}" && "${EXPANDED_CODE_SIGN_IDENTITY}" != "-" ]]; then
+            codesign --force --sign "${EXPANDED_CODE_SIGN_IDENTITY}" --timestamp=none "$DEST/llama.framework"
+          fi
     info:
       path: Info.plist
       properties:
@@ -52,6 +91,8 @@ targets:
         NSCameraUsageDescription: Kamera slouží k fotodokumentaci zakázky a zahrady a k pořízení účtenky.
         NSPhotoLibraryUsageDescription: Vyberte fotografie, které chcete připojit k pracovnímu záznamu.
         NSLocationWhenInUseUsageDescription: Poloha se používá při evidenci docházky, navigaci a označení místa práce.
+        NSSpeechRecognitionUsageDescription: Hlas slouží jen k nadiktování příkazu pracovnímu asistentovi v této aplikaci.
+        NSMicrophoneUsageDescription: Mikrofon slouží k hlasovému zadání příkazu pracovnímu asistentovi.
         UILaunchScreen:
           UIColorName: LaunchBackground
         UISupportedInterfaceOrientations:
