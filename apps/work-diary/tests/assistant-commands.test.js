@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseAssistantCommand, assistantModeInfo, ASSISTANT_MODES, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, foldCzech, nextWeekday} from '../web/assistant-commands.js';
+import {parseAssistantCommand, assistantModeInfo, ASSISTANT_MODES, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, foldCzech, nextWeekday, parseMaterialAddition, planMaterialLines} from '../web/assistant-commands.js';
 import {answerOffline} from '../web/assistant-offline.js';
 
 const today = '2026-11-21';
@@ -46,6 +46,22 @@ test('Czech examples map to safe intents without an AI model', ()=>{
   assert.equal(assign.params.person, 'Mark');
   assert.equal(intent('Označ zakázku Beta jako probíhá.'), 'jobs.status');
   assert.equal(parseAssistantCommand('Označ zakázku Beta jako probíhá.', today).params.status, 'in_progress');
+  const addition = parseMaterialAddition('Přidej k aktuální zakázce pět postřikovačů R-VAN 14 a dvacet metrů potrubí 32 mm.');
+  assert.equal(addition.current, true);
+  assert.deepEqual(addition.lines[0], {quantity:5, unit:'', name:'postrikovacu r van 14'});
+  assert.equal(addition.lines[1].quantity, 20);
+  assert.equal(addition.lines[1].unit, 'm');
+  assert.match(addition.lines[1].name, /potrubi 32 mm/);
+  assert.equal(intent('Kolik stojí materiál na zakázce Beta?'), 'materials.price');
+  assert.equal(intent('Je materiál připravený k zakázce Beta?'), 'materials.readiness');
+  assert.equal(intent('Připrav nákupní seznam materiálu na zítra.'), 'materials.shopping');
+  assert.equal(intent('Zkontroluj protokol u zakázky Beta.'), 'protocol.check');
+  assert.equal(parseAssistantCommand('Zapiš do protokolu závadu nefunguje sekce 3.', today).intent, 'protocol.note');
+  const catalog = [{id:'rvan',version:1,name:'Postřikovač R-VAN 14',sku:'RV14',unit:'ks',priceMinor:12500,currency:'CZK',active:true},{id:'pipe',version:1,name:'Potrubí PE 32 mm',sku:'PE32',unit:'m',priceMinor:4500,currency:'CZK',active:true}];
+  const planned = planMaterialLines(addition.lines, catalog);
+  assert.deepEqual(planned.lines.map(line=>[line.itemId, line.quantity, line.unit]), [['rvan',5,'ks'],['pipe',20,'m']]);
+  assert.match(planMaterialLines([{quantity:5, unit:'m', name:'postrikovacu r-van 14'}], catalog).error, /jednotce ks/);
+  assert.match(planMaterialLines([{quantity:1, unit:'ks', name:'neexistujici ventil'}], catalog).error, /nevidím/);
 });
 
 test('Synonyms, destructive refusals and mode registry stay local', ()=>{

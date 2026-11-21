@@ -17,7 +17,7 @@ function jobLine(job){
 export function answerOffline(command, snapshot = {}){
   const intent = command?.intent;
   const jobs = Array.isArray(snapshot.jobs) ? snapshot.jobs : null;
-  if(['jobs.create','protocol.draft','jobs.reschedule','jobs.assign','jobs.depart','jobs.status','attendance.arrive','attendance.leave'].includes(intent)) return {reply:noWrite, missing:true};
+  if(['jobs.create','protocol.draft','protocol.note','jobs.reschedule','jobs.assign','jobs.depart','jobs.status','attendance.arrive','attendance.leave','materials.add'].includes(intent)) return {reply:noWrite, missing:true};
   if(intent==='refused.destructive') return {reply:'Smazání nebo zrušení tady nespouštím, aby se nic omylem neztratilo. Použijte stávající obrazovku záznamu.'};
   if(intent==='unknown'||intent==='help') return {reply:'Offline umím jen to, co je v telefonu uložené: dnešní a zítřejší zakázky, nedokončené a čekající servis. Hodiny zakázky a docházku bez uloženého přehledu nepočítám.'};
   if(intent==='jobs.hours'||intent==='jobs.realizationHours'||intent==='attendance.hours'||intent==='attendance.report'||intent==='materials.search'){

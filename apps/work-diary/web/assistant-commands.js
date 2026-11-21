@@ -91,6 +91,63 @@ function materialQuery(value){
   return softenName(value);
 }
 
+const NUMBER_WORDS = {jeden:1,jedna:1,jedno:1,dva:2,dve:2,tri:3,ctyri:4,pet:5,sest:6,sedm:7,osm:8,devet:9,deset:10,jedenact:11,dvanact:12,dvacet:20,tricet:30,ctyricet:40,padesat:50,sto:100};
+const UNIT_WORDS = {ks:'ks',kus:'ks',kusu:'ks',kusy:'ks',metr:'m',metru:'m',metry:'m',m:'m',bm:'m'};
+
+function materialWords(value){
+  return foldCzech(value).split(/\s+/).map(word=>word.replace(/^[^a-z0-9]+|[^a-z0-9]+$/g,'')).filter(Boolean);
+}
+function materialStem(word){
+  return word.replace(/(ovacu|ovace|ovac|ove|ovy|ova|ych|emu|ami|ovi|em|ou|ku|ky|ka|u|y|a|e)$/,'');
+}
+export function parseMaterialChunk(chunk){
+  const words = materialWords(chunk);
+  if(!words.length) return null;
+  const quantity = NUMBER_WORDS[words[0]] ?? (/^\d+(?:[.,]\d+)?$/.test(words[0])?Number(words[0].replace(',','.')):null);
+  if(quantity==null) return null;
+  words.shift();
+  const unitAt = words.findIndex(word=>UNIT_WORDS[word]);
+  const unit = unitAt>=0?UNIT_WORDS[words.splice(unitAt,1)[0]]:'';
+  const name = words.join(' ');
+  if(!name) return null;
+  return {quantity, unit, name};
+}
+export function parseMaterialAddition(original){
+  const text = foldCzech(original);
+  const current = /\b(aktualni|teto)\b/.test(text);
+  const named = current?'':softenName(capture(original, [/zakáz(?:ce|ku)\s+(.+?)(?=\s+(?:\d|pět|dva|dvě|tři|čtyři|šest|sedm|osm|devět|deset|dvacet)\b|$)/iu]));
+  const body = text.replace(/^.*?\bpridej\b/,'').replace(/\bk aktualni zakazce\b/,'').replace(/\bk teto zakazce\b/,'').replace(/\bk zakazce\s+\S+/,'').replace(/\bmaterial(?:u|y)?\b/,'').trim();
+  const lines = body.split(/\s+a\s+/).map(parseMaterialChunk).filter(Boolean);
+  return {current, query:named, lines};
+}
+export function matchCatalogItem(name, items){
+  const wanted = materialWords(name).map(materialStem).filter(word=>word.length>1);
+  const scored = (items||[]).filter(item=>item.active!==false).map(item=>{
+    const have = materialWords(`${item.name} ${item.sku||''}`).map(materialStem).filter(word=>word.length>1);
+    const hits = have.filter(token=>wanted.includes(token)).length;
+    return {item, hits, coverage:have.length?hits/have.length:0};
+  }).filter(row=>row.hits>=Math.min(2, wanted.length)&&row.coverage>=0.5).sort((a,b)=>b.hits-a.hits||b.coverage-a.coverage);
+  if(!scored.length) return {missing:true};
+  const best = scored[0];
+  const ties = scored.filter(row=>row.hits===best.hits&&row.coverage===best.coverage);
+  if(ties.length>1) return {choices:ties.slice(0,4).map(row=>row.item)};
+  return {item:best.item};
+}
+export function planMaterialLines(lines, items){
+  const resolved = [];
+  for(const line of lines||[]){
+    const found = matchCatalogItem(line.name, items);
+    if(found.missing) return {error:`Položku „${line.name}“ v katalogu nevidím. Nic jsem nepřidal.`};
+    if(found.choices) return {error:`„${line.name}“ sedí na víc položek: ${found.choices.map(item=>`${item.name} (${item.unit})`).join(', ')}. Upřesněte název. Nic jsem nepřidal.`};
+    if(line.unit&&found.item.unit!==line.unit) return {error:`„${found.item.name}“ je v katalogu v jednotce ${found.item.unit}, ne ${line.unit}. Nic jsem nepřidal.`};
+    const previous = resolved.find(row=>row.itemId===found.item.id);
+    if(previous) previous.quantity = Math.round((previous.quantity+line.quantity)*1000)/1000;
+    else resolved.push({itemId:found.item.id, itemVersion:found.item.version, quantity:line.quantity, name:found.item.name, sku:found.item.sku||'', unit:found.item.unit, priceMinor:found.item.priceMinor, currency:found.item.currency||'CZK'});
+  }
+  if(!resolved.length) return {error:'V příkazu nevidím množství a název položky. Nic jsem nepřidal.'};
+  return {lines:resolved};
+}
+
 export function parseAssistantCommand(input, today){
   const original = String(input||'').trim().slice(0,500);
   const text = foldCzech(original);
@@ -113,14 +170,26 @@ export function parseAssistantCommand(input, today){
     return {intent:'jobs.status', params:{query:softenName(capture(original, [/zakázku\s+(.+?)\s+jako\s+/iu])), status}, text:original};
   }
   if(/\btyden/.test(text)&&/\b(prac|plan|zakaz|mame|navstev)\b/.test(text)&&!/vykaz|hodin|dochaz/.test(text)) return {intent:'jobs.week', params:{}, text:original};
+  if(/\b(zapis|dopln)\b/.test(text)&&/zavad|poznam/.test(text)){
+    const note = capture(original, [/závadu\s+(.+)/iu, /poznámku\s+(.+)/iu]);
+    return {intent:'protocol.note', params:{field:/zavad/.test(text)?'defects':'notes', note, current:/\b(aktualni|teto)\b/.test(text), query:capture(original, [/zakáz(?:ce|ku|ky)\s+(.+?)(?:\s+závadu|\s+poznámku|$)/iu]).replace(/[?.!,]+$/g,'').trim()}, text:original};
+  }
+  if(/\bpridej\b/.test(text)&&/\b(zakaz|aktualni)\b/.test(text)&&!/protokol/.test(text)){
+    const addition = parseMaterialAddition(original);
+    return {intent:'materials.add', params:addition, text:original};
+  }
 
   if(/\bmaterial/.test(text)){
     const query = materialQuery(capture(original, [/materiál(?:u|y)?\s+(.+)/iu]));
     const day = /\bdnes\b/.test(text)?'today':'tomorrow';
+    if(/nakup|dokoup/.test(text)) return {intent:'materials.shopping', params:{when:day}, text:original};
+    if(/pripraven|stav material|kontrola material/.test(text)) return {intent:'materials.readiness', params:{query, current:/\b(aktualni|teto)\b/.test(text)}, text:original};
+    if(/\b(cena|stoji|kolik)\b/.test(text)) return {intent:'materials.price', params:{query, current:/\b(aktualni|teto)\b/.test(text)}, text:original};
     if(/\b(najdi|hledej|ukaz)\b/.test(text)&&!/\b(zitra|zitre|dnes|zakaz)\b/.test(text)) return {intent:'materials.search', params:{query}, text:original};
     return {intent:'jobs.materials', params:{when:day, query}, text:original};
   }
   if(/protokol/.test(text)){
+    if(/kontrol|chybi|podpis|fotk|fotog/.test(text)) return {intent:'protocol.check', params:{query:capture(original, [/zakáz(?:ce|ku|ky)\s+(.+)/iu]).replace(/[?.!,]+$/g,'').trim(), current:/\b(aktualni|teto)\b/.test(text)}, text:original};
     return {intent:'protocol.draft', params:{query:softenName(capture(original, [/protokol(?:\s+(?:pro|k|na|ke))?\s+(.+)/iu]))}, text:original};
   }
   if(/realizac/.test(text) && /\b(hodin|strav|celkem)/.test(text)) return {intent:'jobs.realizationHours', params:{}, text:original};

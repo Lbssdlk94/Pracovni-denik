@@ -1,6 +1,7 @@
-import {parseAssistantCommand, assistantModeInfo, assistantSuggestions, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS} from '../web/assistant-commands.js';
+import {parseAssistantCommand, assistantModeInfo, assistantSuggestions, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, planMaterialLines} from '../web/assistant-commands.js';
 import {featureEnabled} from '../web/features.js';
 import {attendanceHours, attendanceInstant} from '../web/attendance-model.js';
+import {materialMoney, materialSummary, materialTotals} from '../web/material-model.js';
 import {installationInfo} from './installation.js';
 import {handleJobs} from './jobs.js';
 import {handleAttendance} from './attendance.js';
@@ -193,11 +194,13 @@ async function run(env, ctx, m, h, command, today, options){
   if(!options.propose&&intent==='jobs.depart'&&params.jobId) return applyDeparture(env, m, h, params);
   if(!options.propose&&intent==='attendance.arrive') return applyPunch(env, m, h, 'arrival', params);
   if(!options.propose&&intent==='attendance.leave') return applyPunch(env, m, h, 'departure', params);
+  if(!options.propose&&intent==='materials.add'&&params.jobId) return applyMaterialLines(env, ctx, m, h, params);
+  if(!options.propose&&intent==='protocol.note'&&params.jobId) return applyProtocolNote(env, ctx, m, h, params);
   if(intent==='unknown') return {reply:'Tomuhle příkazu nerozumím. Můžete zkusit některou z dostupných akcí.', suggestions:assistantSuggestions()};
   if(intent==='help') return {reply:'Umím zakázky, docházku, hodiny na zakázce z evidence, zákazníky, materiál a přípravu servisního protokolu. Zápis vždy nejdřív potvrdíte a stejné potvrzení se nespustí dvakrát. Mazání nechávám na stávajících obrazovkách.', suggestions:assistantSuggestions()};
   if(intent==='refused.destructive') return {reply:'Smazání nebo zrušení tady nespouštím, aby se nic omylem neztratilo. Použijte stávající obrazovku záznamu.'};
 
-  if(intent.startsWith('jobs.')||intent==='protocol.draft'){
+  if(intent.startsWith('jobs.')||intent.startsWith('protocol.')){
     if(!on(h.features,'jobs')) return {reply:'Zakázky jsou v nastavení firmy vypnuté.'};
   }
   if(intent.startsWith('attendance.')&&!on(h.features,'attendance')) return {reply:'Docházka je v nastavení firmy vypnutá.'};
@@ -245,6 +248,8 @@ async function run(env, ctx, m, h, command, today, options){
   if(intent==='attendance.hours'||intent==='attendance.report') return attendanceIntent(env, m, h, intent, params, today);
   if(intent==='customers.search'||intent==='customers.contact'||intent==='customers.history'||intent==='customers.tariffs') return customerIntent(env, m, h, intent, params);
   if(intent==='materials.search') return materialSearch(env, m, h, params.query||'');
+  if(intent==='materials.add'||intent==='materials.price'||intent==='materials.readiness'||intent==='materials.shopping') return materialCommand(env, ctx, m, h, intent, params, today, tomorrow, options);
+  if(intent==='protocol.check'||intent==='protocol.note') return protocolCommand(env, ctx, m, h, intent, params, options);
   return {reply:'Tomuhle příkazu nerozumím.', suggestions:assistantSuggestions()};
 }
 
@@ -491,7 +496,7 @@ async function protocolDraft(env, ctx, m, h, job, options){
   const existing = current.data.report;
   const result = await callJson(()=>handleServiceWork(write('/api/jobs/'+encodeURIComponent(job.id)+'/service','PUT',{
     operationId:crypto.randomUUID(), version, materialStatus:current.data.job.materialStatus||'unchecked',
-    report:{date:existing?.date||(job.dueDate&&job.dueDate<=pragueDate(new Date())?job.dueDate:pragueDate(new Date())), work:existing?.work||job.description||job.title, material:existing?.material||'', defects:existing?.defects||'', notes:existing?.notes||'Připraveno asistentem ke kontrole.', recommendations:existing?.recommendations||''}
+    report:{date:existing?.date||(job.dueDate&&job.dueDate<=pragueDate(new Date())?job.dueDate:pragueDate(new Date())), work:existing?.work||job.description||job.title, material:existing?.material||'', defects:existing?.defects||'', notes:existing?.notes||'Připraveno asistentem ke kontrole.', recommendations:existing?.recommendations||'', photoIds:existing?.photoIds||[]}
   }, h._headers), env, ctx, m, h));
   if(!result.ok) return {reply:result.data.error||'Protokol se nepodařilo připravit.'};
   const state = result.data.report?.documentState==='ready'?'připravený ke schválení':'rozpracovaný';
@@ -622,4 +627,124 @@ async function materialSearch(env, m, h, query){
   const needle = query.toLocaleLowerCase('cs');
   const items = (result.data.items||[]).filter(item=>`${item.name} ${item.sku}`.toLocaleLowerCase('cs').includes(needle));
   return {reply:'Materiál:\n'+lines(items, item=>`• ${item.name}${item.sku?' · '+item.sku:''} · ${item.unit}${item.active?'':' (skrytý)'}`, 'V načteném katalogu nic takového není.')+(result.data.nextCursor?'\nKatalog pokračuje další stránkou, zkuste přesnější název.':'')};
+}
+
+const MATERIAL_STATE = {unchecked:'nezkontrolovaný', checked:'zkontrolovaný', ready:'připravený', missing:'chybí'};
+async function namedJob(env, m, h, params, options){
+  if((params.current||!params.query)&&options.context?.jobId){
+    const loaded = await jobsGet(env,m,h,'/api/jobs/'+encodeURIComponent(options.context.jobId));
+    if(!loaded.ok) return {error:blocked(loaded)||'Otevřenou zakázku se nepodařilo načíst.'};
+    return {job:loaded.data.job};
+  }
+  const found = await findJobs(env, m, h, params.query||'');
+  if(found.error) return {error:found.error};
+  const picked = oneJob(found.jobs, params.query);
+  if(picked.error) return {error:picked.error};
+  if(picked.choices) return {error:'Našel jsem víc zakázek. Upřesněte název:\n'+lines(picked.choices, jobLine, '')};
+  return {job:picked.job};
+}
+function protocolBody(current, report){
+  return {operationId:crypto.randomUUID(), version:current.job.version, materialStatus:current.job.materialStatus||'unchecked', materialNote:current.job.materialNote||'', report};
+}
+function keptReport(current, patch){
+  const report = current.report||{};
+  return {date:report.date||pragueDate(new Date()), work:report.work||'', material:report.material||'', defects:report.defects||'', notes:report.notes||'', recommendations:report.recommendations||'', photoIds:report.photoIds||[], ...patch};
+}
+async function materialCommand(env, ctx, m, h, intent, params, today, tomorrow, options){
+  if(intent==='materials.shopping'){
+    const day = params.when==='today'?today:tomorrow;
+    const result = await jobsGet(env,m,h,`/api/jobs?state=active&order=schedule&month=${day.slice(0,7)}&day=${day}`);
+    if(!result.ok) return {reply:blocked(result)||'Zakázky se nepodařilo načíst.'};
+    const rows = (result.data.jobs||[]).filter(job=>['missing','unchecked'].includes(job.materialStatus||'unchecked'));
+    return {reply:`Nákup a příprava na ${day}:\n`+lines(rows, job=>`• ${job.title}: ${MATERIAL_STATE[job.materialStatus]||'nezkontrolovaný'}${job.materialNote?' · '+job.materialNote:''}`, 'Zakázku s chybějícím nebo nezkontrolovaným materiálem tu nevidím.')};
+  }
+  const picked = await namedJob(env, m, h, params, options);
+  if(picked.error) return {reply:picked.error};
+  const service = await serviceGet(env, ctx, m, h, picked.job.id);
+  if(!service.ok) return {reply:blocked(service)||'Zakázku se nepodařilo otevřít.'};
+  const current = service.data;
+  if(intent==='materials.readiness'){
+    const state = MATERIAL_STATE[current.job.materialStatus]||current.job.materialStatus||'neznámý';
+    const items = current.report?.materialItems||[];
+    return {reply:`Materiál u „${current.job.title}“ je ${state}.${current.job.materialNote?' '+current.job.materialNote:''}${items.length?'\nV protokolu: '+items.map(item=>`${item.name} ${item.quantity} ${item.unit}`).join(', '):'\nV protokolu zatím žádná katalogová položka není.'}`};
+  }
+  if(intent==='materials.price'){
+    const items = current.report?.materialItems||[];
+    if(!items.length) return {reply:`U „${current.job.title}“ není v protokolu materiál z katalogu, cenu tedy nepočítám.`};
+    const totals = materialTotals(items).map(row=>materialMoney(row.amount, row.currency)).join(', ');
+    return {reply:`Cena materiálu u „${current.job.title}“: ${totals}.\n`+items.map(materialSummary).join('\n')};
+  }
+  if(!writer(m)) return {reply:'Materiál do protokolu může zapsat pracovník nebo správce.'};
+  if(options.preview) return {reply:'V náhledu role materiál nezapisuji.'};
+  const catalog = await materialsGet(env, m, h);
+  if(!catalog.ok) return {reply:blocked(catalog)||'Katalog se nepodařilo načíst.'};
+  if(catalog.data.nextCursor) return {reply:'Katalog je delší než jedna stránka. Upřesněte položku v katalogu, ať nesáhnu vedle. Nic jsem nepřidal.'};
+  const plan = planMaterialLines(params.lines, catalog.data.items||[]);
+  if(plan.error) return {reply:plan.error};
+  const existing = current.report?.materialItems||[];
+  const preview = plan.lines.map(line=>{
+    const previous = existing.find(item=>item.itemId===line.itemId);
+    const quantity = previous?Math.round((previous.quantity+line.quantity)*1000)/1000:line.quantity;
+    return {...line, quantity, previous:previous?.quantity||0};
+  });
+  const totals = materialTotals(preview).map(row=>materialMoney(row.amount, row.currency)).join(', ');
+  const summary = `Přidat do protokolu „${current.job.title}“:\n`+preview.map(line=>`• ${line.name}: ${line.previous?`k ${line.previous} ${line.unit} přidat a bude `:''}${line.quantity} ${line.unit}`).join('\n')+`\nCena po přidání ${totals}. Uloží se až po potvrzení.`;
+  if(options.propose) return {reply:summary, confirm:await propose(env, m, {intent, params:{jobId:current.job.id, lines:plan.lines}}, summary)};
+  return applyMaterialLines(env, ctx, m, h, {jobId:current.job.id, lines:plan.lines});
+}
+async function applyMaterialLines(env, ctx, m, h, params){
+  if(!writer(m)) return {reply:'Materiál do protokolu může zapsat pracovník nebo správce.'};
+  const service = await serviceGet(env, ctx, m, h, params.jobId);
+  if(!service.ok) return {reply:blocked(service)||'Zakázku se nepodařilo otevřít.'};
+  const current = service.data;
+  const existing = (current.report?.materialItems||[]).map(line=>({itemId:line.itemId, itemVersion:line.itemVersion, quantity:line.quantity}));
+  const merged = new Map(existing.map(line=>[line.itemId, {...line}]));
+  for(const line of params.lines||[]){
+    const previous = merged.get(line.itemId);
+    if(previous) previous.quantity = Math.round((previous.quantity+line.quantity)*1000)/1000;
+    else merged.set(line.itemId, {itemId:line.itemId, itemVersion:line.itemVersion, quantity:line.quantity});
+  }
+  const result = await callJson(()=>handleServiceWork(write('/api/jobs/'+encodeURIComponent(params.jobId)+'/service','PUT', protocolBody(current, keptReport(current, {materialItems:[...merged.values()]})), h._headers), env, ctx, m, h));
+  if(!result.ok) return {reply:result.data.error||'Materiál se nepodařilo uložit. Nic dalšího jsem nezměnil.'};
+  const saved = result.data.report?.materialItems||[];
+  const totals = saved.length?materialTotals(saved).map(row=>materialMoney(row.amount, row.currency)).join(', '):'';
+  return {reply:`Materiál je v protokolu „${current.job.title}“.${totals?' Cena katalogových položek: '+totals+'.':''}`, mutated:'jobs'};
+}
+async function protocolCommand(env, ctx, m, h, intent, params, options){
+  const picked = await namedJob(env, m, h, params, options);
+  if(picked.error) return {reply:picked.error};
+  const service = await serviceGet(env, ctx, m, h, picked.job.id);
+  if(!service.ok) return {reply:blocked(service)||'Zakázku se nepodařilo otevřít.'};
+  const current = service.data;
+  if(intent==='protocol.check'){
+    const report = current.report;
+    if(!report) return {reply:`U „${current.job.title}“ servisní protokol zatím není. Podpis ani fotografie tu nejsou.`};
+    const gaps = [];
+    if(!report.customerSignature) gaps.push('chybí podpis zákazníka');
+    if(!(report.photoIds||[]).length) gaps.push('chybí fotografie');
+    if(!report.work&&!report.notes) gaps.push('chybí popis práce');
+    const state = report.documentState==='ready'?'připravený ke schválení':'rozpracovaný';
+    return {reply:gaps.length?`Protokol „${current.job.title}“ je ${state}.\n`+gaps.map(gap=>'• '+gap).join('\n'):`Protokol „${current.job.title}“ má podpis, fotografie i popis. Stav: ${state}.`};
+  }
+  const note = String(params.note||'').trim().slice(0,1000);
+  if(!note) return {reply:'Napište text závady nebo poznámky. Nic jsem nezapsal.'};
+  if(!writer(m)) return {reply:'Do protokolu může psát pracovník nebo správce.'};
+  if(options.preview) return {reply:'V náhledu role do protokolu nezapisuji.'};
+  const field = params.field==='notes'?'notes':'defects';
+  const label = field==='notes'?'poznámku':'závadu';
+  const summary = `Do protokolu „${current.job.title}“ doplnit ${label}: „${note}“? Ostatní údaje protokolu zůstanou.`;
+  if(options.propose) return {reply:summary, confirm:await propose(env, m, {intent, params:{jobId:current.job.id, field, note}}, summary)};
+  return applyProtocolNote(env, ctx, m, h, {jobId:current.job.id, field, note});
+}
+async function applyProtocolNote(env, ctx, m, h, params){
+  if(!writer(m)) return {reply:'Do protokolu může psát pracovník nebo správce.'};
+  const service = await serviceGet(env, ctx, m, h, params.jobId);
+  if(!service.ok) return {reply:blocked(service)||'Zakázku se nepodařilo otevřít.'};
+  const current = service.data;
+  const field = params.field==='notes'?'notes':'defects';
+  const previous = current.report?.[field]||'';
+  if(previous.includes(params.note)) return {reply:'Stejný text v protokolu už je. Podruhé ho nezapisuji.'};
+  const result = await callJson(()=>handleServiceWork(write('/api/jobs/'+encodeURIComponent(params.jobId)+'/service','PUT', protocolBody(current, keptReport(current, {[field]:[previous, params.note].filter(Boolean).join('\n')})), h._headers), env, ctx, m, h));
+  if(!result.ok) return {reply:result.data.error||'Do protokolu se nepodařilo zapsat. Ostatní údaje jsem neměnil.'};
+  return {reply:`Text je v protokolu „${current.job.title}“. Protokol zůstává ke kontrole.`, mutated:'jobs'};
 }

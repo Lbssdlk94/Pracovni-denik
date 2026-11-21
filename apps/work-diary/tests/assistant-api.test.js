@@ -157,4 +157,44 @@ test('Planning and attendance commands preview the change and write only after c
   }finally{env.sqlite.close();}
 });
 
+test('Material lines come from the catalogue and a protocol note waits for confirmation', async()=>{
+  const env = environment();
+  try{
+    await ready(env);
+    await call(env, '/api/materials/categories/cat-sprinkler', people.owner, 'PUT', {version:0, name:'Závlaha', sortOrder:1, active:true});
+    await call(env, '/api/materials/items/item-rvan', people.owner, 'PUT', {version:0, name:'Postřikovač R-VAN 14', categoryId:'cat-sprinkler', sku:'RV14', unit:'ks', priceMinor:12500, currency:'CZK', active:true});
+    await call(env, '/api/materials/items/item-pipe', people.owner, 'PUT', {version:0, name:'Potrubí PE 32 mm', categoryId:'cat-sprinkler', sku:'PE32', unit:'m', priceMinor:4500, currency:'CZK', active:true});
+    const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    const created = await call(env, '/api/jobs/job-water', people.owner, 'PUT', {version:0, title:'Závlaha Novák', status:'planned', jobType:'service', dueDate:today, customerName:'Novák', incompleteReason:'', assignedTo:people.owner.id});
+    assert.equal(created.status, 200, await created.clone().text());
+    const proposed = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Přidej k aktuální zakázce pět postřikovačů R-VAN 14 a dvacet metrů potrubí 32 mm.', context:{jobId:'job-water'}}));
+    assert.equal(proposed.status, 200, JSON.stringify(proposed.body));
+    assert.match(proposed.body.reply, /R-VAN 14/);
+    assert.match(proposed.body.reply, /5 ks/);
+    assert.match(proposed.body.reply, /20 m/);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM service_reports WHERE job_id=?').get('job-water').n, 0);
+    const rejected = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Přidej k aktuální zakázce pět metrů R-VAN 14.', context:{jobId:'job-water'}}));
+    assert.match(rejected.body.reply, /jednotce ks/);
+    assert.equal(rejected.body.confirm, null);
+    const saved = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:proposed.body.confirm.id}));
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    const items = JSON.parse(env.sqlite.prepare('SELECT material_items FROM service_reports WHERE job_id=?').get('job-water').material_items);
+    assert.deepEqual(items.map(item=>[item.itemId, item.quantity, item.unit, item.priceMinor]).sort(), [['item-pipe',20,'m',4500],['item-rvan',5,'ks',12500]]);
+    const price = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Kolik stojí materiál na aktuální zakázce?', context:{jobId:'job-water'}}));
+    assert.match(price.body.reply, /1[\s\u00a0]?525/);
+    const note = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Zapiš do protokolu závadu nefunguje sekce 3.', context:{jobId:'job-water'}}));
+    assert.ok(note.body.confirm?.id);
+    assert.match(env.sqlite.prepare('SELECT defects FROM service_reports WHERE job_id=?').get('job-water').defects, /^$/);
+    const written = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:note.body.confirm.id}));
+    assert.equal(written.status, 200, JSON.stringify(written.body));
+    const report = env.sqlite.prepare('SELECT defects, material_items FROM service_reports WHERE job_id=?').get('job-water');
+    assert.match(report.defects, /nefunguje sekce 3/);
+    assert.equal(JSON.parse(report.material_items).length, 2);
+    const check = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Zkontroluj protokol u zakázky Závlaha Novák.'}));
+    assert.match(check.body.reply, /podpis/);
+    assert.match(check.body.reply, /fotografie/);
+  }finally{env.sqlite.close();}
+});
+
+
 
