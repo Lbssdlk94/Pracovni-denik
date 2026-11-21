@@ -16,7 +16,8 @@ struct AssistantSheet: View {
     @State private var request: SFSpeechAudioBufferRecognitionRequest?
     @State private var task: SFSpeechRecognitionTask?
     private let engine = AVAudioEngine()
-    private let modes = [("basic","Základní", true),("local","V zařízení", false),("cloud","Cloud", false)]
+    @ObservedObject private var ministral = MinistralLibrary.shared
+    private let modes = [("basic","Základní", true),("local","V zařízení", true),("cloud","Cloud", false)]
     private let quick = ["Co máme dnes za práci?","Ukaž nedokončené zakázky.","Najdi zákazníka Nováka.","Kolik hodin odpracoval Marek v listopadu?","Jaký materiál potřebujeme na zítřek?","Vytvoř servisní protokol."]
 
     var body: some View {
@@ -25,6 +26,7 @@ struct AssistantSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
                         DiaryStatusBanner(text: modeNote, symbol: "sparkles")
+                        if mode == "local" { localModelCard }
                         if items.isEmpty {
                             Text("Napište běžný příkaz, nebo klepněte na rychlou akci. Změny se neuloží, dokud je nepotvrdíte.")
                                 .font(.callout).foregroundStyle(.secondary)
@@ -80,16 +82,29 @@ struct AssistantSheet: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("Zavřít") { stopVoice(); dismiss() } }
                 }
-                .onAppear { loadHistory() }
+                .onAppear { loadHistory(); ministral.refresh() }
                 .onChange(of: store.scope) { _, _ in loadHistory() }
         }
     }
     private var modeNote: String {
         switch mode {
-        case "local": return "Nedostupné. Model se nestahuje. Ministral 3B, Qwen ani Apple Foundation Models se v této verzi nezapínají."
+        case "local": return ministral.installed ? "Ministral 3B běží v telefonu. Firemní údaje dál bere ze serveru a zápis čeká na potvrzení." : "Ministral 3B se stáhne do telefonu, asi 2,2 GB. Do aplikace ani na server se model nevkládá."
         case "cloud": return "Nedostupné. Cloudový poskytovatel není zapojený a placené API se nevolá."
         default: return "Základní asistent bez AI. Stejná oprávnění jako ve zbytku deníku."
         }
+    }
+    @ViewBuilder private var localModelCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(ministral.message).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if ministral.downloading {
+                ProgressView(value: ministral.progress)
+                DiaryActionButton(title: "Zrušit stahování", symbol: "xmark") { ministral.cancel() }
+            } else if ministral.installed {
+                DiaryActionButton(title: "Smazat model z telefonu", symbol: "trash") { ministral.remove() }
+            } else {
+                DiaryActionButton(title: "Stáhnout Ministral 3B", symbol: "arrow.down.circle", prominent: true) { ministral.start() }
+            }
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
     func loadHistory() {
         let next = store.scope
@@ -98,11 +113,31 @@ struct AssistantSheet: View {
     func send(_ value: String = "", confirmId: String? = nil, cancelId: String? = nil) async {
         let clean = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !busy, confirmId != nil || cancelId != nil || !clean.isEmpty else { return }
-        if mode != "basic" && confirmId == nil && cancelId == nil {
+        if mode == "cloud" && confirmId == nil && cancelId == nil {
             say(modeNote, mine: false)
             return
         }
+        if mode == "local" && confirmId == nil && cancelId == nil {
+            guard ministral.installed else { say("Nejdřív stáhněte Ministral 3B. Nic jsem se neptal serveru.", mine: false); return }
+            say(clean, mine: true)
+            text = ""
+            busy = true
+            defer { busy = false }
+            let answer: String
+            do { answer = try await MinistralRuntime.answer(clean) }
+            catch { say(error.localizedDescription, mine: false); return }
+            if let command = MinistralCommand.extract(answer) {
+                say("Rozumím tomu jako: \(command)", mine: false)
+                await deliver(command)
+            } else {
+                say(answer + "\n\nTohle není údaj z deníku. Jména, hodiny a ceny beru jen z evidence.", mine: false)
+            }
+            return
+        }
         if confirmId == nil && cancelId == nil { say(clean, mine: true); text = "" }
+        await deliver(clean, confirmId: confirmId, cancelId: cancelId)
+    }
+    func deliver(_ clean: String, confirmId: String? = nil, cancelId: String? = nil) async {
         if !store.online {
             if confirmId != nil || cancelId != nil { say("Potvrzení bez připojení neodešlu. Nic se neuložilo.", mine: false); return }
             say(offlineReply(clean), mine: false)
