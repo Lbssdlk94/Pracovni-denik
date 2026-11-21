@@ -53,3 +53,12 @@ test('Disabled offline mode and role preview cannot read or mutate a cached ledg
  const f=await fixture();await f.client.read(f.path);f.online=false;f.session={...f.session,features:{...f.session.features,offline:false}};await assert.rejects(f.client.peekOwn(),/Offline přístup/);
  f.online=true;f.session={...f.session,rolePreview:{active:true}};await assert.rejects(f.client.write('/api/attendance/punch',{at:Date.now()},{}),/vlastním účtu/);
 });
+test('Discarding an offline prerequisite cannot leave a later break detached from its arrival',async()=>{
+ const f=await fixture(),at=Date.now()-600000;let base=await f.client.read(f.path);f.online=false;
+ await f.client.write('/api/attendance/punch',{mutationId:'required-arrival',kind:'arrival',at,gpsStatus:'unavailable'},base);base=await f.client.peekOwn();
+ await f.client.write('/api/attendance/activities',{operationId:'dependent-break',action:'break',at:at+1000,shiftId:base.activeShift.id,shiftVersion:1,version:0},base);
+ const arrival=[...f.records.values()].find(r=>r.payload.mutationId==='required-arrival'),pause=[...f.records.values()].find(r=>r.payload.operationId==='dependent-break');
+ await assert.rejects(f.client.discard(arrival.id),/navazující/);assert.equal(f.records.size,2);
+ await f.client.discard(pause.id);await f.client.discard(arrival.id);assert.equal(f.records.size,0);
+ assert.equal(f.env.sqlite.prepare('SELECT count(*) n FROM attendance_shifts').get().n,0);
+});

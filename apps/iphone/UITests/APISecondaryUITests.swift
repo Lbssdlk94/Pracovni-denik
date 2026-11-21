@@ -22,4 +22,13 @@ final class APISecondaryUITests:XCTestCase {
         XCTAssertTrue(app.buttons["Zavřít"].waitForExistence(timeout:10));capture("secondary-job-form",app)
         app.buttons["Zavřít"].tap();app.buttons["Zahodit koncept"].tap();XCTAssertTrue(app.buttons["Nová zakázka"].waitForExistence(timeout:10))
     }
+    func testWorkerCanExportOwnAttendanceWithoutTeamControls(){
+        continueAfterFailure=false
+        let app=XCUIApplication();app.launchArguments=["--native-api-testing","--native-api-attendance-redesign-testing","--native-api-worker-testing"];app.launch()
+        XCTAssertTrue(app.staticTexts["native-overview-title"].waitForExistence(timeout:15))
+        app.tabBars.buttons["Více"].tap();app.buttons["Nastavení"].tap()
+        let link=app.buttons["Export mé docházky"];XCTAssertTrue(link.waitForExistence(timeout:10));if !link.isHittable{app.swipeUp()};link.tap()
+        let save=app.buttons["personal-export-save"];XCTAssertTrue(save.waitForExistence(timeout:10));XCTAssertTrue(save.isEnabled)
+        XCTAssertFalse(app.segmentedControls["attendance-mode"].exists);XCTAssertEqual(app.webViews.count,0);capture("secondary-personal-export",app)
+    }
 }
