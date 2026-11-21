@@ -52,7 +52,7 @@ struct APIJobDiary:View {
         if entries.isEmpty && !snapshot.isNull{Text("Zatím žádný denní zápis.").foregroundStyle(.secondary)}
         if !nextCursor.isEmpty{Button("Starší zápisy"){Task{await load(more:true)}}}
         if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}
-    }.navigationTitle("Deník realizace").navigationBarTitleDisplayMode(.inline).task(id:store.scope+store.revision.uuidString){await load()}.refreshable{await store.resume();await load()}
+    }.secondaryChrome().navigationTitle("Deník realizace").navigationBarTitleDisplayMode(.inline).task(id:store.scope+store.revision.uuidString){await load()}.refreshable{await store.resume();await load()}
         .sheet(isPresented:$editorOpen){APIJobDiaryEditor(store:store,job:job,initial:editing ?? .null)}
         .confirmationDialog("Smazat denní zápis? Fotografie a servisní protokol zůstanou zachované.",isPresented:$confirmRemoval,titleVisibility:.visible){Button("Smazat zápis",role:.destructive){Task{await remove()}};Button("Zrušit",role:.cancel){}}
     }
@@ -82,7 +82,7 @@ struct APIJobDiaryEditor:View {
     var photoSelection:Binding<APIValue>{Binding(get:{value["photoIds"]},set:{value["photoIds"]=$0})}
     var body:some View{NavigationStack{Form{
         if loaded{
-            APIFieldsView(fields:fields,value:$value)
+            APISecondaryFormSections(fields:fields,value:$value)
             Section("Fotografie · povinné"){
                 Text("K zápisu přidejte alespoň jednu fotografii.").font(.footnote).foregroundStyle(.secondary)
                 APIFilesView(store:store,path:"/api/jobs/"+job.id+"/service",mode:.diary,record:job,attached:{id in var ids=value["photoIds"].array;if !ids.contains(.s(id)){ids.append(.s(id))};value["photoIds"] = .array(ids);photoUploads.append(id);persist()},selection:photoSelection,selectionLabel:"Zahrnout do denního zápisu")
@@ -90,7 +90,7 @@ struct APIJobDiaryEditor:View {
             if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}
             Button(saving ? "Ukládám…" : "Uložit denní zápis"){Task{await save()}}.disabled(saving||value["work"].string.trimmingCharacters(in:.whitespacesAndNewlines).isEmpty||value["photoIds"].array.isEmpty)
         }else{ProgressView()}
-    }.navigationTitle(initial.id.isEmpty ? "Dnešní zápis" : "Upravit zápis").toolbar{ToolbarItem(placement:.cancellationAction){Button("Zavřít"){persist();dismiss()}.disabled(saving)}}.task{if !loaded{let base=initial.isNull ? APIValue.object(["id":.s(UUID().uuidString),"version":.n(0),"date":.s(store.today),"work":.s(""),"material":.s(""),"notes":.s(""),"nextStep":.s(""),"photoIds":.array([])]) : initial;let draft=store.draft(key,fallback:base);value=draft.value;operationID=draft.operationID;photoUploads=value["photoIds"].array.map(\.string).filter{id in store.outbox.contains{$0.id==id}};loaded=true;store.beginEdit()}}
+    }.secondaryChrome().navigationTitle(initial.id.isEmpty ? "Dnešní zápis" : "Upravit zápis").toolbar{ToolbarItem(placement:.cancellationAction){Button("Zavřít"){persist();dismiss()}.disabled(saving)}}.task{if !loaded{let base=initial.isNull ? APIValue.object(["id":.s(UUID().uuidString),"version":.n(0),"date":.s(store.today),"work":.s(""),"material":.s(""),"notes":.s(""),"nextStep":.s(""),"photoIds":.array([])]) : initial;let draft=store.draft(key,fallback:base);value=draft.value;operationID=draft.operationID;photoUploads=value["photoIds"].array.map(\.string).filter{id in store.outbox.contains{$0.id==id}};loaded=true;store.beginEdit()}}
       .onChange(of:value){_,_ in if loaded{persist()}}.onDisappear{persist();if loaded{store.endEdit()}}
     }}
     func persist(){guard loaded else{return};store.saveDraft(key,draft:APIDraft(value:value,baseVersion:value["version"].int,operationID:operationID,updatedAt:Date()))}

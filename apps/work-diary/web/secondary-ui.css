@@ -1,7 +1,7 @@
 /* Shared tenant web surfaces; approved native iOS screens have separate SwiftUI components. */
 .pd-secondary{--secondary-gap:16px}
 .pd-secondary .main{min-width:0}
-.pd-secondary :is(.storage-card,.garden-card,.folder-card,.defect-card,.subscription-card,.material-group,.vehicle-card){border-radius:20px;padding:16px;box-shadow:var(--pd-shadow-card)}
+.pd-secondary :is(.storage-card,.garden-card,.folder-card,.defect-card,.subscription-card,.material-group,.vehicle-card,.customer-card,.record-card,.overview-card,.jobs-calendar,.job-side-panel,.planning-backlog,.jobs-table-wrap){border-radius:20px;padding:16px;box-shadow:var(--pd-shadow-card)}
 .pd-secondary :is(h1,h2,h3,p){overflow-wrap:anywhere}
 .pd-secondary .page-title{gap:12px;margin-bottom:16px;align-items:center}
 .pd-secondary .page-title h1{font-size:clamp(25px,3vw,32px);line-height:1.2}

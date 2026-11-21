@@ -30,7 +30,7 @@ struct APIMaterialReview:View {
         ForEach(Array(APIMaterialSelection.duplicateGroups(rows).enumerated()),id:\.offset){_,group in Button{selection=APIMaterialReviewGroup(rows:group)}label:{VStack(alignment:.leading){Text(group[0].title).font(.headline);Text("\(group.count) položek · "+APIFormat.money(group[0]["priceMinor"],currency:group[0]["currency"].string)).font(.caption)}}.frame(minHeight:44)}
         if APIMaterialSelection.duplicateGroups(rows).isEmpty{Text("Žádné položky se shodným názvem, cenou, měnou a jednotkou.")}
         if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}
-    }.navigationTitle("Kontrola podobných položek").task(id:store.revision){do{rows=try await APIDomainLogic.referenceRows("allMaterials",store:store);categories=(try await store.get("/api/materials"))["categories"].array}catch{problem=error.localizedDescription}}
+    }.secondaryChrome().navigationTitle("Kontrola podobných položek").task(id:store.revision){do{rows=try await APIDomainLogic.referenceRows("allMaterials",store:store);categories=(try await store.get("/api/materials"))["categories"].array}catch{problem=error.localizedDescription}}
         .sheet(item:$selection){group in APIMaterialPreferredEditor(store:store,rows:group.rows,categories:categories)}
     }
 }

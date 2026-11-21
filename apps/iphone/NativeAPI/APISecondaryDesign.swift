@@ -133,6 +133,14 @@ enum APIAppearance: String, CaseIterable, Identifiable {
     var title:String{self == .system ? "Podle systému" : self == .light ? "Světlý" : "Tmavý"}
     var scheme:ColorScheme?{self == .system ? nil : self == .light ? .light:.dark}
 }
+extension View {
+    func secondaryChrome() -> some View { modifier(APISecondaryChrome()) }
+}
+struct APISecondaryChrome: ViewModifier {
+    func body(content: Content) -> some View {
+        content.listStyle(.insetGrouped).scrollContentBackground(.hidden).background(DiaryStyle.background).tint(DiaryStyle.accent)
+    }
+}
 struct APIAppAppearance: ViewModifier {
     @AppStorage("diary-interface-appearance") private var preference="system"
     func body(content:Content)->some View {
