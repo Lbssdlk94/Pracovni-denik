@@ -1,0 +1,401 @@
+import {parseAssistantCommand, assistantModeInfo, assistantSuggestions} from '../web/assistant-commands.js';
+import {featureEnabled} from '../web/features.js';
+import {attendanceHours, attendanceInstant} from '../web/attendance-model.js';
+import {handleJobs} from './jobs.js';
+import {handleAttendance} from './attendance.js';
+import {handleCustomers} from './customers.js';
+import {handleMaterials} from './materials.js';
+import {handleServiceWork} from './service-work.js';
+import {handleJobDiary} from './job-diary.js';
+import {handleSubscriptions} from './subscriptions.js';
+
+const MANAGERS = ['owner','administrator','admin'];
+const STATUS = {planned:'plánovaná', on_way:'na cestě', in_progress:'probíhá', done:'hotová', incomplete:'nedokončená'};
+let auditReady = null;
+
+function pragueDate(now){
+  return new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
+}
+function addDays(iso, days){
+  const date = new Date(iso+'T12:00:00Z');
+  date.setUTCDate(date.getUTCDate()+days);
+  return date.toISOString().slice(0,10);
+}
+function weekRange(today){
+  const day = new Date(today+'T12:00:00Z').getUTCDay()||7;
+  const start = addDays(today, 1-day);
+  return {start, end:addDays(start, 6)};
+}
+function manager(member){return MANAGERS.includes(member.role);}
+function writer(member){return manager(member)||member.role==='worker';}
+function on(features, key){return featureEnabled(key, features);}
+function lines(items, render, empty){
+  if(!items.length) return empty;
+  const shown = items.slice(0,8).map(render);
+  return shown.join('\n')+(items.length>8?`\n…a dalších ${items.length-8}.`: '');
+}
+function jobLine(job){
+  const when = [job.dueDate, job.startTime&&job.endTime?job.startTime+'–'+job.endTime:job.startTime].filter(Boolean).join(' ');
+  const who = [job.customerName, job.assignedName].filter(Boolean).join(' · ');
+  return `• ${when?when+' · ':''}${job.title}${who?' · '+who:''} (${STATUS[job.status]||job.status})`;
+}
+function reply(mode, text, extra={}){
+  const info = assistantModeInfo(mode);
+  return {mode:info.id, modeLabel:info.label, modeNote:info.detail, reply:text, suggestions:extra.suggestions||[], confirm:extra.confirm||null, mutated:extra.mutated||null};
+}
+
+async function ensureAudit(env){
+  if(!auditReady){
+    auditReady = env.DB.prepare(`CREATE TABLE IF NOT EXISTS assistant_events (
+    id TEXT PRIMARY KEY,
+    actor_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    action TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER,
+    committed_at INTEGER
+  )`).run().catch(error=>{auditReady=null;throw error;});
+  }
+  await auditReady;
+}
+async function callJson(run){
+  try{
+    const response = await run();
+    const data = await response.json().catch(()=>({}));
+    return {ok:response.ok, status:response.status, data};
+  }catch(error){
+    if(error?.status) return {ok:false, status:error.status, data:{error:error.message, ...(error.extra||{})}};
+    throw error;
+  }
+}
+function get(path, headers){return new Request('https://diary.internal'+path,{method:'GET',headers});}
+function write(path, method, body, headers){
+  return new Request('https://diary.internal'+path,{method,headers:{...Object.fromEntries(headers.entries()),'content-type':'application/json'},body:JSON.stringify(body)});
+}
+
+async function jobsGet(env, m, h, path){return callJson(()=>handleJobs(get(path, h._headers), env, m, h));}
+async function customersGet(env, m, h, path){return callJson(()=>handleCustomers(get(path, h._headers), env, m, h));}
+async function attendanceGet(env, m, h, path){return callJson(()=>handleAttendance(get(path, h._headers), env, m, h, h.features));}
+async function materialsGet(env, m, h){return callJson(()=>handleMaterials(get('/api/materials', h._headers), env, m, h));}
+async function serviceGet(env, ctx, m, h, id){return callJson(()=>handleServiceWork(get('/api/jobs/'+encodeURIComponent(id)+'/service', h._headers), env, ctx, m, h));}
+async function diaryGet(env, m, h, id){return callJson(()=>handleJobDiary(get('/api/jobs/'+encodeURIComponent(id)+'/diary', h._headers), env, m, h));}
+async function subscriptionsGet(env, m, h, path){return callJson(()=>handleSubscriptions(get(path, h._headers), env, m, h));}
+
+function blocked(result, fallback){
+  if(result.ok) return null;
+  if(result.status===403) return result.data.error||'K těmto údajům nemáte oprávnění.';
+  if(result.status===404) return fallback;
+  return result.data.error||'Údaje se nepodařilo načíst.';
+}
+function oneJob(list, label){
+  if(!list.length) return {error:`Zakázku${label?' „'+label+'“':''} jsem nenašel, nebo k ní nemáte přístup.`};
+  if(list.length>1) return {choices:list};
+  return {job:list[0]};
+}
+
+async function propose(env, m, action, summary){
+  await ensureAudit(env);
+  const id = crypto.randomUUID(), now = Date.now();
+  await env.DB.prepare('INSERT INTO assistant_events(id,actor_id,kind,action,payload,summary,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?)')
+    .bind(id, m.user_id, 'proposal', action.intent, JSON.stringify(action), summary.slice(0,500), now, now+10*60*1000).run();
+  return {id, title:'Potvrdit akci', detail:summary};
+}
+async function auditCommit(env, row, summary){
+  await env.DB.prepare("UPDATE assistant_events SET kind='committed', summary=?, committed_at=? WHERE id=? AND kind='proposal'")
+    .bind(summary.slice(0,500), Date.now(), row.id).run();
+}
+
+export async function handleAssistant(request, env, ctx, m, h){
+  const body = await h.body(request, 8000);
+  if(!body||typeof body!=='object'||Array.isArray(body)) h.fail(400,'Neplatný příkaz.');
+  const mode = assistantModeInfo(typeof body.mode==='string'?body.mode:'basic').id;
+  const preview = request.headers.get('x-work-diary-preview-role');
+  h._headers = request.headers;
+  if(body.confirmId) return h.json(await confirm(env, ctx, m, h, body.confirmId, mode, preview));
+  const today = pragueDate(new Date());
+  const command = parseAssistantCommand(typeof body.text==='string'?body.text:'', today);
+  const answer = await run(env, ctx, m, h, command, today, {propose:true, preview});
+  return h.json(reply(mode, answer.reply, answer));
+}
+
+async function confirm(env, ctx, m, h, id, mode, preview){
+  if(typeof id!=='string'||!/^[-a-zA-Z0-9_]{1,100}$/.test(id)) h.fail(400,'Neplatné potvrzení.');
+  if(preview) h.fail(403,'V náhledu role nelze ukládat změny. Nejdříve se vraťte ke své roli.',{code:'role_preview_readonly'});
+  await ensureAudit(env);
+  const row = await env.DB.prepare('SELECT * FROM assistant_events WHERE id=? AND actor_id=?').bind(id, m.user_id).first();
+  if(!row) h.fail(404,'Potvrzení už není platné. Zadejte příkaz znovu.');
+  if(row.kind==='committed') return reply(mode, 'Tato akce už byla provedena. '+row.summary);
+  if(row.expires_at<Date.now()) h.fail(409,'Potvrzení vypršelo. Zadejte příkaz znovu.');
+  const action = JSON.parse(row.payload);
+  const done = await run(env, ctx, m, h, action, pragueDate(new Date()), {propose:false, preview});
+  if(done.confirm) h.fail(409,'Akci se nepodařilo dokončit. Zadejte ji znovu.');
+  await auditCommit(env, row, done.reply);
+  return reply(mode, done.reply, {mutated:done.mutated||null});
+}
+
+async function run(env, ctx, m, h, command, today, options){
+  const {intent, params} = command;
+  const tomorrow = addDays(today, 1);
+  if(!options.propose&&intent==='protocol.draft'&&params.jobId) return protocolDraft(env, ctx, m, h, {id:params.jobId, title:params.title, description:params.description||'', dueDate:params.dueDate||''}, options);
+  if(!options.propose&&intent==='jobs.create'&&params.dueDate) return createJob(env, m, h, params, today, tomorrow, options);
+  if(intent==='unknown') return {reply:'Tomuhle příkazu nerozumím. Můžete zkusit některou z dostupných akcí.', suggestions:assistantSuggestions()};
+  if(intent==='help') return {reply:'Umím zakázky, docházku, zákazníky, materiál a přípravu servisního protokolu. Zápis vždy nejdřív potvrdíte. Mazání nechávám na stávajících obrazovkách.', suggestions:assistantSuggestions()};
+  if(intent==='refused.destructive') return {reply:'Smazání nebo zrušení tady nespouštím, aby se nic omylem neztratilo. Použijte stávající obrazovku záznamu.'};
+
+  if(intent.startsWith('jobs.')||intent==='protocol.draft'){
+    if(!on(h.features,'jobs')) return {reply:'Zakázky jsou v nastavení firmy vypnuté.'};
+  }
+  if(intent.startsWith('attendance.')&&!on(h.features,'attendance')) return {reply:'Docházka je v nastavení firmy vypnutá.'};
+  if(intent.startsWith('customers.')&&!on(h.features,'customers')) return {reply:'Zákazníci jsou v nastavení firmy vypnutí.'};
+  if(intent.startsWith('materials.')&&!on(h.features,'materials')) return {reply:'Materiál je v nastavení firmy vypnutý.'};
+
+  if(intent==='jobs.today'||intent==='jobs.tomorrow'){
+    const day = intent==='jobs.today'?today:tomorrow;
+    const result = await jobsGet(env,m,h,`/api/jobs?state=all&order=schedule&month=${day.slice(0,7)}&day=${day}`);
+    const error = blocked(result,'Zakázky se nepodařilo načíst.');
+    if(error) return {reply:error};
+    const label = intent==='jobs.today'?'Dnes':'Zítra';
+    return {reply:`${label} (${day}):\n`+lines(result.data.jobs||[], jobLine, 'Žádná návštěva v tento den není.')};
+  }
+  if(intent==='jobs.upcoming'||intent==='jobs.plannedServices'){
+    const type = intent==='jobs.plannedServices'?'&type=service':'';
+    const result = await jobsGet(env,m,h,`/api/jobs?state=active&order=schedule&after=${today}${type}`);
+    const error = blocked(result);
+    if(error) return {reply:error};
+    const title = intent==='jobs.plannedServices'?'Plánované servisy':'Nadcházející zakázky';
+    return {reply:`${title}:\n`+lines(result.data.jobs||[], jobLine, 'Nic dalšího v plánu není.')};
+  }
+  if(intent==='jobs.incomplete'){
+    const result = await jobsGet(env,m,h,'/api/jobs?state=incomplete&order=schedule');
+    const error = blocked(result);
+    if(error) return {reply:error};
+    return {reply:'Nedokončené zakázky:\n'+lines(result.data.jobs||[], jobLine, 'Nedokončená zakázka tu není.')};
+  }
+  if(intent==='jobs.search'||intent==='jobs.history'||intent==='jobs.hours'||intent==='jobs.materials'||intent==='protocol.draft'){
+    return jobIntent(env, ctx, m, h, intent, params, today, tomorrow, options);
+  }
+  if(intent==='jobs.create') return createJob(env, m, h, params, today, tomorrow, options);
+  if(intent==='attendance.hours'||intent==='attendance.report') return attendanceIntent(env, m, h, intent, params, today);
+  if(intent==='customers.search'||intent==='customers.contact'||intent==='customers.history'||intent==='customers.tariffs') return customerIntent(env, m, h, intent, params);
+  if(intent==='materials.search') return materialSearch(env, m, h, params.query||'');
+  return {reply:'Tomuhle příkazu nerozumím.', suggestions:assistantSuggestions()};
+}
+
+async function findJobs(env, m, h, query){
+  const q = query?`&q=${encodeURIComponent(query.slice(0,100))}`:'';
+  const result = await jobsGet(env,m,h,`/api/jobs?state=all${q}`);
+  const error = blocked(result);
+  if(error) return {error};
+  return {jobs:result.data.jobs||[]};
+}
+
+async function jobIntent(env, ctx, m, h, intent, params, today, tomorrow, options){
+  if(intent==='jobs.materials'&&!params.query){
+    const day = params.when==='today'?today:tomorrow;
+    const result = await jobsGet(env,m,h,`/api/jobs?state=all&order=schedule&month=${day.slice(0,7)}&day=${day}`);
+    const error = blocked(result);
+    if(error) return {reply:error};
+    return materialForJobs(env, ctx, m, h, result.data.jobs||[], day);
+  }
+  const found = await findJobs(env, m, h, params.query||'');
+  if(found.error) return {reply:found.error};
+  if(intent==='jobs.search') return {reply:params.query?`Zakázky pro „${params.query}“:\n`+lines(found.jobs, jobLine, 'Nic jsem nenašel.'):'Napište, jakou zakázku mám hledat.'};
+  const picked = oneJob(found.jobs, params.query);
+  if(picked.error) return {reply:picked.error};
+  if(picked.choices) return {reply:`Našel jsem víc zakázek. Upřesněte název:\n`+lines(picked.choices, jobLine, '')};
+  const job = picked.job;
+  if(intent==='jobs.history') return jobHistory(env, ctx, m, h, job);
+  if(intent==='jobs.hours') return jobHours(job, params.person);
+  if(intent==='jobs.materials') return materialForJobs(env, ctx, m, h, [job], job.dueDate||today);
+  return protocolDraft(env, ctx, m, h, job, options);
+}
+
+function jobHours(job, person){
+  const names = String(job.assignedName||'').split(',').map(name=>name.trim()).filter(Boolean);
+  const wanted = person?names.filter(name=>name.toLocaleLowerCase('cs').includes(person.toLocaleLowerCase('cs'))):names;
+  let minutes = 0;
+  if(job.startTime&&job.endTime){
+    const [sh,sm] = job.startTime.split(':').map(Number), [eh,em] = job.endTime.split(':').map(Number);
+    minutes = (eh*60+em)-(sh*60+sm);
+  }else if(job.estimatedMinutes) minutes = job.estimatedMinutes;
+  const who = (wanted.length?wanted:names).join(', ')||'nepřiřazeno';
+  const planned = minutes>0?attendanceHours(minutes*60*1000*(wanted.length||1)):'čas návštěvy není vyplněný';
+  return {reply:`${job.title}: plánovaný čas je ${planned} (${who}). Docházka se na konkrétní zakázku neváže, proto sem nepočítám píchačky. Odpracované hodiny lidí jsou v měsíčním přehledu docházky.`};
+}
+
+async function jobHistory(env, ctx, m, h, job){
+  const service = await serviceGet(env, ctx, m, h, job.id);
+  const report = service.ok?service.data.report:null;
+  const history = manager(m)&&service.ok?(service.data.history||[]):[];
+  let diary = '';
+  if(job.jobType==='installation'){
+    const entries = await diaryGet(env, m, h, job.id);
+    if(entries.ok&&entries.data.entries?.length) diary = '\nDeník realizace:\n'+entries.data.entries.slice(0,5).map(entry=>`• ${entry.date} ${entry.work}`).join('\n');
+  }
+  const protocol = report?`Protokol ${report.documentState==='ready'?'je připravený ke schválení':'je rozpracovaný'} (${report.date}). ${report.work||report.notes||''}`:'Servisní protokol zatím není.';
+  const older = history.length?`\nStarší verze: ${history.length}.`: '';
+  return {reply:`${job.title}\n${jobLine(job)}\n${protocol}${older}${diary}`.trim()};
+}
+
+async function materialForJobs(env, ctx, m, h, list, day){
+  if(!list.length) return {reply:`Na ${day} není zakázka, ke které bych materiál vypsal.`};
+  const chunks = [];
+  for(const job of list.slice(0,8)){
+    const service = on(h.features,'jobs')?await serviceGet(env, ctx, m, h, job.id):{ok:false};
+    const items = service.ok?service.data.report?.materialItems||[]:[];
+    const note = [service.ok?service.data.job?.materialNote:'', service.ok?service.data.report?.material:''].filter(Boolean).join(' ');
+    const status = service.ok?service.data.job?.materialStatus:'';
+    const body = items.length?items.map(item=>`${item.name||'položka'} ${item.quantity??''} ${item.unit||''}`.trim()).join(', '):note||'seznam materiálu není vyplněný';
+    chunks.push(`• ${job.title}: ${body}${status?` [${status}]`:''}`);
+  }
+  return {reply:`Materiál na ${day}:\n`+chunks.join('\n')+(list.length>8?`\n…a dalších ${list.length-8} zakázek.`:'')};
+}
+
+async function protocolDraft(env, ctx, m, h, job, options){
+  if(!writer(m)) return {reply:'Protokol může připravit pracovník nebo správce. Máte přístup jen ke čtení.'};
+  if(options.preview) return {reply:'V náhledu role protokol neukládám.'};
+  const summary = `Připravit rozpracovaný servisní protokol pro „${job.title}“? Údaje se doplní ze zakázky a protokol zůstane ke schválení, neodesílá se.`;
+  if(options.propose){
+    const confirm = await propose(env, m, {intent:'protocol.draft', params:{jobId:job.id, version:job.version, title:job.title, description:job.description||'', dueDate:job.dueDate||''}}, summary);
+    return {reply:summary, confirm};
+  }
+  const current = await serviceGet(env, ctx, m, h, job.id);
+  if(!current.ok) return {reply:current.data.error||'Zakázku se nepodařilo otevřít.'};
+  const version = current.data.job.version;
+  const existing = current.data.report;
+  const result = await callJson(()=>handleServiceWork(write('/api/jobs/'+encodeURIComponent(job.id)+'/service','PUT',{
+    operationId:crypto.randomUUID(), version, materialStatus:current.data.job.materialStatus||'unchecked',
+    report:{date:existing?.date||(job.dueDate&&job.dueDate<=pragueDate(new Date())?job.dueDate:pragueDate(new Date())), work:existing?.work||job.description||job.title, material:existing?.material||'', defects:existing?.defects||'', notes:existing?.notes||'Připraveno asistentem ke kontrole.', recommendations:existing?.recommendations||''}
+  }, h._headers), env, ctx, m, h));
+  if(!result.ok) return {reply:result.data.error||'Protokol se nepodařilo připravit.'};
+  const state = result.data.report?.documentState==='ready'?'připravený ke schválení':'rozpracovaný';
+  return {reply:`Servisní protokol pro „${job.title}“ je ${state}. Zkontrolujte ho v zakázce před odesláním.`, mutated:'jobs'};
+}
+
+async function createJob(env, m, h, params, today, tomorrow, options){
+  if(!manager(m)) return {reply:'Novou zakázku zakládá vlastník nebo správce.'};
+  if(options.preview) return {reply:'V náhledu role zakázku nezakládám.'};
+  const dueDate = params.dueDate||(params.when==='tomorrow'?tomorrow:today);
+  const title = String(params.title||'Nová zakázka').slice(0,120);
+  const summary = `Vytvořit zakázku „${title}“ na ${dueDate}? Bude plánovaná a bez přiřazení, dokud ji neupravíte.`;
+  if(options.propose){
+    const discipline = m._workspace?.selectedDiscipline&&m._workspace.selectedDiscipline!=='all'?m._workspace.selectedDiscipline:m._workspace?.disciplines?.[0];
+    const confirm = await propose(env, m, {intent:'jobs.create', params:{title, dueDate, discipline:discipline||null}}, summary);
+    return {reply:summary, confirm};
+  }
+  const id = crypto.randomUUID();
+  const result = await callJson(()=>handleJobs(write('/api/jobs/'+id,'PUT',{
+    version:0, title, jobType:'service', status:'planned', incompleteReason:'', description:'Vytvořeno z pracovního asistenta.',
+    dueDate, customerName:'', assignedTo:'', assignedTos:[], ...(params.discipline?{discipline:params.discipline}:{})
+  }, h._headers), env, m, h));
+  if(!result.ok) return {reply:result.data.error||'Zakázku se nepodařilo vytvořit.'};
+  return {reply:`Zakázka „${result.data.job?.title||title}“ je založená na ${dueDate}.`, mutated:'jobs'};
+}
+
+async function attendanceIntent(env, m, h, intent, params, today){
+  const month = params.month||today.slice(0,7);
+  const people = await attendanceGet(env, m, h, `/api/attendance?month=${month}`+(manager(m)?'&userId=all':''));
+  const error = blocked(people, 'Docházku se nepodařilo načíst.');
+  if(error) return {reply:error};
+  let userId = m.user_id, userName = m.name;
+  if(params.person){
+    const employees = people.data.employees||[{id:m.user_id, name:m.name}];
+    const hits = employees.filter(person=>person.name.toLocaleLowerCase('cs').includes(params.person.toLocaleLowerCase('cs')));
+    if(!hits.length) return {reply:manager(m)?`Pracovníka „${params.person}“ v docházce nevidím.`:'Můžete zobrazit jen vlastní docházku.'};
+    if(hits.length>1) return {reply:'Vyhovuje víc lidí: '+hits.map(person=>person.name).join(', ')+'.'};
+    userId = hits[0].id; userName = hits[0].name;
+    if(!manager(m)&&userId!==m.user_id) return {reply:'Můžete zobrazit jen vlastní docházku.'};
+  }
+  const period = params.period||'month';
+  const range = period==='week'?weekRange(today):period==='today'?{start:today,end:today}:null;
+  const months = range&&range.start.slice(0,7)!==range.end.slice(0,7)?[range.start.slice(0,7), range.end.slice(0,7)]:[month];
+  let shifts = [];
+  for(const value of months){
+    const page = value===month&&(manager(m)?userId:m.user_id)?people:await attendanceGet(env,m,h,`/api/attendance?month=${value}&userId=${encodeURIComponent(userId)}`);
+    if(!page.ok) return {reply:blocked(page)||'Docházku se nepodařilo načíst.'};
+    shifts = shifts.concat((page.data.shifts||[]).filter(shift=>!params.person||shift.userId===userId));
+  }
+  const unique = [...new Map(shifts.map(shift=>[shift.id, shift])).values()];
+  let total = 0;
+  if(range){
+    const start = attendanceInstant(range.start+'T00:00'), end = attendanceInstant(addDays(range.end,1)+'T00:00'), now = Date.now();
+    for(const shift of unique){
+      const stop = shift.endAt==null?now:shift.endAt;
+      total += Math.max(0, Math.min(stop, end)-Math.max(shift.startAt, start));
+    }
+  }else{
+    const row = (people.data.summary||[]).find(item=>item.userId===userId);
+    total = row?.durationMs||0;
+  }
+  const label = period==='week'?'tento týden':period==='today'?'dnes':month;
+  const sentence = `${userName}: ${attendanceHours(total)} (${label}).`;
+  if(intent==='attendance.report'){
+    if(range){
+      const startAt = attendanceInstant(range.start+'T00:00'), endAt = attendanceInstant(addDays(range.end,1)+'T00:00'), now = Date.now();
+      const byUser = new Map();
+      for(const shift of unique){
+        const stop = shift.endAt==null?now:shift.endAt;
+        const slice = Math.max(0, Math.min(stop, endAt)-Math.max(shift.startAt, startAt));
+        const row = byUser.get(shift.userId)||{userName:shift.userName, durationMs:0};
+        row.durationMs += slice;
+        byUser.set(shift.userId, row);
+      }
+      const rows = params.person?[{userName, durationMs:total}]:[...byUser.values()];
+      const body = rows.map(row=>`• ${row.userName}: ${attendanceHours(row.durationMs||0)}`).join('\n')||sentence;
+      return {reply:`Pracovní výkaz ${label}\n${body}\nOtevřená směna se počítá jen do teď.`};
+    }
+    const rows = manager(m)&&!params.person?(people.data.summary||[]):[{userName, durationMs:total}];
+    const body = rows.map(row=>`• ${row.userName}: ${attendanceHours(row.durationMs||0)}`).join('\n')||sentence;
+    return {reply:`Pracovní výkaz ${label}\n${body}\nOtevřené směny se do součtu uzavřených hodin nepočítají.`};
+  }
+  return {reply:sentence};
+}
+
+function customerCard(customer, contact){
+  const phones = (customer.phones||[]).map(phone=>phone.number).filter(Boolean).join(', ')||'telefon není vyplněný';
+  const addresses = (customer.addresses||[]).map(address=>[address.address, address.city].filter(Boolean).join(', ')).filter(Boolean).join('; ');
+  const base = `${customer.name}${customer.email?' · '+customer.email:''}`;
+  return contact?`${base}\n${phones}${addresses?'\n'+addresses:''}`:base;
+}
+async function customerIntent(env, m, h, intent, params){
+  if(intent==='customers.tariffs'&&!on(h.features,'subscriptions')) return {reply:'Předplatné a tarify jsou v nastavení firmy vypnuté.'};
+  const query = params.query||'';
+  if((intent==='customers.search'||intent==='customers.contact'||intent==='customers.history')&&!query) return {reply:'Napište jméno zákazníka.'};
+  const result = await customersGet(env,m,h,'/api/customers'+(query?`?q=${encodeURIComponent(query.slice(0,100))}`:''));
+  const error = blocked(result);
+  if(error) return {reply:error};
+  const list = result.data.customers||[];
+  if(!list.length) return {reply:`Zákazníka „${query}“ nevidím, nebo k němu nemáte přístup.`};
+  if(intent==='customers.search') return {reply:'Zákazníci:\n'+lines(list, customer=>`• ${customerCard(customer,false)}`, '')};
+  if(list.length>1&&intent!=='customers.tariffs') return {reply:'Vyhovuje víc zákazníků:\n'+lines(list, customer=>`• ${customer.name}`, '')};
+  const customer = list[0];
+  if(intent==='customers.contact') return {reply:customerCard(customer, true)};
+  if(intent==='customers.history'){
+    const visits = await jobsGet(env,m,h,`/api/jobs?state=all&q=${encodeURIComponent(customer.name.slice(0,100))}`);
+    const subs = on(h.features,'subscriptions')?await subscriptionsGet(env,m,h,`/api/subscriptions?customerId=${encodeURIComponent(customer.id)}`):{ok:false,data:{}};
+    const work = visits.ok?lines(visits.data.jobs||[], jobLine, 'Servisní zakázka k němu zatím není.'):'Zakázky se nepodařilo načíst.';
+    const plans = subs.ok?(subs.data.subscriptions||[]).slice(0,5).map(item=>`• ${item.status||'předplatné'} ${item.customerName||customer.name}`).join('\n'):'';
+    return {reply:`${customer.name}\n${work}${plans?'\nTarif / předplatné:\n'+plans:''}`};
+  }
+  const subs = await subscriptionsGet(env,m,h,query?`/api/subscriptions?q=${encodeURIComponent(query.slice(0,100))}`:'/api/subscriptions?status=active');
+  if(!subs.ok) return {reply:blocked(subs)||'Tarify se nepodařilo načíst.'};
+  const rows = (subs.data.subscriptions||[]).slice(0,8);
+  let catalog = '';
+  if(manager(m)){
+    const tariffs = await subscriptionsGet(env,m,h,'/api/tariffs');
+    if(tariffs.ok) catalog = '\nKatalog tarifů:\n'+lines(tariffs.data.tariffs||[], tariff=>`• ${tariff.definition?.name||tariff.name||'Tarif'}${tariff.active===false?' (vypnutý)':''}`, 'Katalog je prázdný.');
+  }
+  return {reply:'Zákaznické tarify:\n'+lines(rows, item=>`• ${item.customerName||'Zákazník'} · ${item.status||'stav'}`, 'Aktivní předplatné jsem nenašel.')+catalog};
+}
+
+async function materialSearch(env, m, h, query){
+  if(!query) return {reply:'Napište název nebo kód materiálu.'};
+  const result = await materialsGet(env, m, h);
+  const error = blocked(result);
+  if(error) return {reply:error};
+  const needle = query.toLocaleLowerCase('cs');
+  const items = (result.data.items||[]).filter(item=>`${item.name} ${item.sku}`.toLocaleLowerCase('cs').includes(needle));
+  return {reply:'Materiál:\n'+lines(items, item=>`• ${item.name}${item.sku?' · '+item.sku:''} · ${item.unit}${item.active?'':' (skrytý)'}`, 'V načteném katalogu nic takového není.')+(result.data.nextCursor?'\nKatalog pokračuje další stránkou, zkuste přesnější název.':'')};
+}
