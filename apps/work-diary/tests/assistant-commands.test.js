@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseAssistantCommand, assistantModeInfo, ASSISTANT_MODES, foldCzech} from '../web/assistant-commands.js';
+import {parseAssistantCommand, assistantModeInfo, ASSISTANT_MODES, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, foldCzech} from '../web/assistant-commands.js';
+import {answerOffline} from '../web/assistant-offline.js';
 
 const today = '2026-11-21';
 const intent = text => parseAssistantCommand(text, today).intent;
@@ -17,6 +18,17 @@ test('Czech examples map to safe intents without an AI model', ()=>{
   assert.equal(intent('Vytvoř servisní protokol.'), 'protocol.draft');
   assert.equal(intent('Jaký materiál potřebujeme na zítřek?'), 'jobs.materials');
   assert.equal(parseAssistantCommand('Jaký materiál potřebujeme na zítřek?', today).params.when, 'tomorrow');
+  assert.equal(intent('Kolik hodin jsem dnes odpracoval?'), 'attendance.hours');
+  assert.equal(parseAssistantCommand('Kolik hodin jsem dnes odpracoval?', today).params.period, 'today');
+  assert.equal(parseAssistantCommand('Kolik hodin jsem dnes odpracoval?', today).params.person, '');
+  const onJob = parseAssistantCommand('Kolik hodin strávil Marek na této zakázce?', today);
+  assert.equal(onJob.intent, 'jobs.hours');
+  assert.equal(onJob.params.person, 'Marek');
+  assert.equal(onJob.params.current, true);
+  assert.equal(intent('Kolik hodin jsme celkem strávili na realizaci?'), 'jobs.realizationHours');
+  assert.equal(intent('Kteří zákazníci čekají na servis?'), 'customers.waitingService');
+  assert.equal(intent('Vytvoř pracovní výkaz za tento měsíc.'), 'attendance.report');
+  assert.equal(parseAssistantCommand('Vytvoř pracovní výkaz za tento měsíc.', today).params.period, 'month');
 });
 
 test('Synonyms, destructive refusals and mode registry stay local', ()=>{
@@ -30,6 +42,25 @@ test('Synonyms, destructive refusals and mode registry stay local', ()=>{
   assert.deepEqual(ASSISTANT_MODES.map(mode=>mode.id), ['basic','local','cloud']);
   assert.equal(assistantModeInfo('cloud').id, 'cloud');
   assert.equal(assistantModeInfo('nope').id, 'basic');
+  assert.equal(assistantModeInfo('local').available, false);
+  assert.equal(assistantModeInfo('cloud').available, false);
   assert.match(assistantModeInfo('local').detail, /nestahuje/);
   assert.match(assistantModeInfo('cloud').detail, /není zapojený/);
+  assert.deepEqual(ASSISTANT_PROVIDERS.filter(item=>item.available).map(item=>item.id), ['basic']);
+  assert.ok(ASSISTANT_PROVIDERS.some(item=>item.id==='ministral-3b'&&item.available===false));
+  assert.ok(ASSISTANT_PROVIDERS.some(item=>item.id==='qwen'&&item.available===false));
+  assert.ok(ASSISTANT_PROVIDERS.some(item=>item.id==='apple-foundation'&&item.available===false));
+  assert.deepEqual(KNOWLEDGE_KINDS.map(item=>item.available), [false, false, false]);
+});
+
+test('Offline answers stay inside the stored snapshot', ()=>{
+  const today = '2026-11-21';
+  const jobs = [{title:'Kontrola', dueDate:today, status:'planned', customerName:'Novák', jobType:'service'}];
+  const todayReply = answerOffline(parseAssistantCommand('Co máme dnes za práci?', today), {jobs, today, tomorrow:'2026-11-22'});
+  assert.match(todayReply.reply, /Kontrola/);
+  const missing = answerOffline(parseAssistantCommand('Kolik hodin jsem dnes odpracoval?', today), {jobs, today});
+  assert.equal(missing.missing, true);
+  assert.match(missing.reply, /nevymyslel/);
+  const empty = answerOffline(parseAssistantCommand('Co máme dnes za práci?', today), {});
+  assert.equal(empty.missing, true);
 });

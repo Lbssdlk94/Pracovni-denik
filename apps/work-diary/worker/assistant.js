@@ -1,6 +1,7 @@
-import {parseAssistantCommand, assistantModeInfo, assistantSuggestions} from '../web/assistant-commands.js';
+import {parseAssistantCommand, assistantModeInfo, assistantSuggestions, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS} from '../web/assistant-commands.js';
 import {featureEnabled} from '../web/features.js';
 import {attendanceHours, attendanceInstant} from '../web/attendance-model.js';
+import {installationInfo} from './installation.js';
 import {handleJobs} from './jobs.js';
 import {handleAttendance} from './attendance.js';
 import {handleCustomers} from './customers.js';
@@ -11,7 +12,7 @@ import {handleSubscriptions} from './subscriptions.js';
 
 const MANAGERS = ['owner','administrator','admin'];
 const STATUS = {planned:'plánovaná', on_way:'na cestě', in_progress:'probíhá', done:'hotová', incomplete:'nedokončená'};
-let auditReady = null;
+let auditReady = new WeakMap();
 
 function pragueDate(now){
   return new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
@@ -41,14 +42,21 @@ function jobLine(job){
 }
 function reply(mode, text, extra={}){
   const info = assistantModeInfo(mode);
-  return {mode:info.id, modeLabel:info.label, modeNote:info.detail, reply:text, suggestions:extra.suggestions||[], confirm:extra.confirm||null, mutated:extra.mutated||null};
+  return {mode:info.id, modeLabel:info.label, modeNote:info.detail, available:info.available===true, reply:text, suggestions:extra.suggestions||[], confirm:extra.confirm||null, mutated:extra.mutated||null, unavailable:extra.unavailable===true||info.available!==true};
 }
 
+async function companyOf(env, m){
+  const installation = await installationInfo(env);
+  const workspace = m?._workspace?.workspaceId || '';
+  return String(`${installation.id}:${workspace}`).slice(0, 120);
+}
 async function ensureAudit(env){
-  if(!auditReady){
-    auditReady = env.DB.prepare(`CREATE TABLE IF NOT EXISTS assistant_events (
+  if(!auditReady.has(env)){
+    auditReady.set(env, (async()=>{
+      await env.DB.prepare(`CREATE TABLE IF NOT EXISTS assistant_events (
     id TEXT PRIMARY KEY,
     actor_id TEXT NOT NULL,
+    company_id TEXT NOT NULL DEFAULT 'installation',
     kind TEXT NOT NULL,
     action TEXT NOT NULL,
     payload TEXT NOT NULL,
@@ -56,9 +64,11 @@ async function ensureAudit(env){
     created_at INTEGER NOT NULL,
     expires_at INTEGER,
     committed_at INTEGER
-  )`).run().catch(error=>{auditReady=null;throw error;});
+  )`).run();
+      await env.DB.prepare('ALTER TABLE assistant_events ADD COLUMN company_id TEXT').run().catch(()=>{});
+    })().catch(error=>{auditReady.delete(env);throw error;}));
   }
-  await auditReady;
+  await auditReady.get(env);
 }
 async function callJson(run){
   try{
@@ -97,40 +107,77 @@ function oneJob(list, label){
 
 async function propose(env, m, action, summary){
   await ensureAudit(env);
-  const id = crypto.randomUUID(), now = Date.now();
-  await env.DB.prepare('INSERT INTO assistant_events(id,actor_id,kind,action,payload,summary,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?)')
-    .bind(id, m.user_id, 'proposal', action.intent, JSON.stringify(action), summary.slice(0,500), now, now+10*60*1000).run();
+  const id = crypto.randomUUID(), now = Date.now(), company = await companyOf(env, m);
+  await env.DB.prepare('INSERT INTO assistant_events(id,actor_id,company_id,kind,action,payload,summary,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?)')
+    .bind(id, m.user_id, company, 'proposal', action.intent, JSON.stringify(action), summary.slice(0,500), now, now+10*60*1000).run();
   return {id, title:'Potvrdit akci', detail:summary};
 }
+async function ownEvent(env, id, m){
+  return env.DB.prepare('SELECT * FROM assistant_events WHERE id=? AND actor_id=? AND company_id=?').bind(id, m.user_id, await companyOf(env, m)).first();
+}
 async function auditCommit(env, row, summary){
-  await env.DB.prepare("UPDATE assistant_events SET kind='committed', summary=?, committed_at=? WHERE id=? AND kind='proposal'")
-    .bind(summary.slice(0,500), Date.now(), row.id).run();
+  const result = await env.DB.prepare("UPDATE assistant_events SET kind='committed', summary=?, committed_at=? WHERE id=? AND actor_id=? AND kind='committing'")
+    .bind(summary.slice(0,500), Date.now(), row.id, row.actor_id).run();
+  if(!result.meta.changes) throw Error('Potvrzení už není rozpracované.');
 }
 
 export async function handleAssistant(request, env, ctx, m, h){
   const body = await h.body(request, 8000);
   if(!body||typeof body!=='object'||Array.isArray(body)) h.fail(400,'Neplatný příkaz.');
   const mode = assistantModeInfo(typeof body.mode==='string'?body.mode:'basic').id;
+  const info = assistantModeInfo(mode);
+  if(body.catalog===true) return h.json({mode:info.id, modeLabel:info.label, modeNote:info.detail, available:info.available===true, providers:ASSISTANT_PROVIDERS, knowledge:KNOWLEDGE_KINDS, reply:'Katalog režimů a znalostí. Modely ani manuály se nestahují.'});
+  if(info.available!==true) return h.json(reply(mode, info.detail, {unavailable:true}));
   const preview = request.headers.get('x-work-diary-preview-role');
   h._headers = request.headers;
+  if(body.cancelId) return h.json(await cancel(env, m, h, body.cancelId, mode));
   if(body.confirmId) return h.json(await confirm(env, ctx, m, h, body.confirmId, mode, preview));
   const today = pragueDate(new Date());
   const command = parseAssistantCommand(typeof body.text==='string'?body.text:'', today);
-  const answer = await run(env, ctx, m, h, command, today, {propose:true, preview});
+  const answer = await run(env, ctx, m, h, command, today, {propose:true, preview, context:body.context&&typeof body.context==='object'?body.context:null});
   return h.json(reply(mode, answer.reply, answer));
+}
+
+async function cancel(env, m, h, id, mode){
+  if(typeof id!=='string'||!/^[-a-zA-Z0-9_]{1,100}$/.test(id)) h.fail(400,'Neplatné potvrzení.');
+  await ensureAudit(env);
+  const company = await companyOf(env, m);
+  const result = await env.DB.prepare("UPDATE assistant_events SET kind='cancelled', summary=? WHERE id=? AND actor_id=? AND company_id=? AND kind='proposal'")
+    .bind('Potvrzení je zrušené. Nic jsem neuložil.', id, m.user_id, company).run();
+  if(result.meta.changes) return reply(mode, 'Potvrzení je zrušené. Nic jsem neuložil.');
+  const row = await ownEvent(env, id, m);
+  if(row?.kind==='committed') return reply(mode, 'Tato akce už byla provedena. '+row.summary);
+  if(row?.kind==='cancelled') return reply(mode, 'Potvrzení už je zrušené. Nic se neuložilo.');
+  h.fail(404,'Potvrzení už není platné. Zadejte příkaz znovu.');
 }
 
 async function confirm(env, ctx, m, h, id, mode, preview){
   if(typeof id!=='string'||!/^[-a-zA-Z0-9_]{1,100}$/.test(id)) h.fail(400,'Neplatné potvrzení.');
   if(preview) h.fail(403,'V náhledu role nelze ukládat změny. Nejdříve se vraťte ke své roli.',{code:'role_preview_readonly'});
   await ensureAudit(env);
-  const row = await env.DB.prepare('SELECT * FROM assistant_events WHERE id=? AND actor_id=?').bind(id, m.user_id).first();
+  const company = await companyOf(env, m), now = Date.now();
+  const claimed = await env.DB.prepare("UPDATE assistant_events SET kind='committing' WHERE id=? AND actor_id=? AND company_id=? AND kind='proposal' AND expires_at>=?")
+    .bind(id, m.user_id, company, now).run();
+  const row = await ownEvent(env, id, m);
   if(!row) h.fail(404,'Potvrzení už není platné. Zadejte příkaz znovu.');
-  if(row.kind==='committed') return reply(mode, 'Tato akce už byla provedena. '+row.summary);
-  if(row.expires_at<Date.now()) h.fail(409,'Potvrzení vypršelo. Zadejte příkaz znovu.');
+  if(!claimed.meta.changes){
+    if(row.kind==='committed') return reply(mode, 'Tato akce už byla provedena. '+row.summary);
+    if(row.kind==='cancelled') return reply(mode, 'Potvrzení je zrušené. Nic jsem neuložil.');
+    if(row.kind==='committing') return reply(mode, 'Toto potvrzení se právě zpracovává. Znovu ho nespouštím.');
+    h.fail(409,'Potvrzení vypršelo. Zadejte příkaz znovu.');
+  }
   const action = JSON.parse(row.payload);
-  const done = await run(env, ctx, m, h, action, pragueDate(new Date()), {propose:false, preview});
-  if(done.confirm) h.fail(409,'Akci se nepodařilo dokončit. Zadejte ji znovu.');
+  let done;
+  try{
+    done = await run(env, ctx, m, h, action, pragueDate(new Date()), {propose:false, preview});
+  }catch(error){
+    await env.DB.prepare("UPDATE assistant_events SET kind='proposal' WHERE id=? AND actor_id=? AND company_id=? AND kind='committing'").bind(id, m.user_id, company).run();
+    throw error;
+  }
+  if(done.confirm){
+    await env.DB.prepare("UPDATE assistant_events SET kind='proposal' WHERE id=? AND kind='committing'").bind(id).run();
+    h.fail(409,'Akci se nepodařilo dokončit. Zadejte ji znovu.');
+  }
   await auditCommit(env, row, done.reply);
   return reply(mode, done.reply, {mutated:done.mutated||null});
 }
@@ -141,7 +188,7 @@ async function run(env, ctx, m, h, command, today, options){
   if(!options.propose&&intent==='protocol.draft'&&params.jobId) return protocolDraft(env, ctx, m, h, {id:params.jobId, title:params.title, description:params.description||'', dueDate:params.dueDate||''}, options);
   if(!options.propose&&intent==='jobs.create'&&params.dueDate) return createJob(env, m, h, params, today, tomorrow, options);
   if(intent==='unknown') return {reply:'Tomuhle příkazu nerozumím. Můžete zkusit některou z dostupných akcí.', suggestions:assistantSuggestions()};
-  if(intent==='help') return {reply:'Umím zakázky, docházku, zákazníky, materiál a přípravu servisního protokolu. Zápis vždy nejdřív potvrdíte. Mazání nechávám na stávajících obrazovkách.', suggestions:assistantSuggestions()};
+  if(intent==='help') return {reply:'Umím zakázky, docházku, hodiny na zakázce z evidence, zákazníky, materiál a přípravu servisního protokolu. Zápis vždy nejdřív potvrdíte a stejné potvrzení se nespustí dvakrát. Mazání nechávám na stávajících obrazovkách.', suggestions:assistantSuggestions()};
   if(intent==='refused.destructive') return {reply:'Smazání nebo zrušení tady nespouštím, aby se nic omylem neztratilo. Použijte stávající obrazovku záznamu.'};
 
   if(intent.startsWith('jobs.')||intent==='protocol.draft'){
@@ -173,6 +220,14 @@ async function run(env, ctx, m, h, command, today, options){
     if(error) return {reply:error};
     return {reply:'Nedokončené zakázky:\n'+lines(result.data.jobs||[], jobLine, 'Nedokončená zakázka tu není.')};
   }
+  if(intent==='customers.waitingService'){
+    if(!on(h.features,'jobs')) return {reply:'Zakázky jsou v nastavení firmy vypnuté.'};
+    const result = await jobsGet(env,m,h,'/api/jobs?state=active&type=service&order=schedule');
+    const error = blocked(result);
+    if(error) return {reply:error};
+    return {reply:'Zákazníci, kteří čekají na servis:\n'+lines(result.data.jobs||[], job=>`• ${job.customerName||'Zákazník bez jména'} · ${job.title} (${STATUS[job.status]||job.status})`, 'Žádný otevřený servis v zakázkách nevidím.')};
+  }
+  if(intent==='jobs.realizationHours') return realizationHours(env, m, h);
   if(intent==='jobs.search'||intent==='jobs.history'||intent==='jobs.hours'||intent==='jobs.materials'||intent==='protocol.draft'){
     return jobIntent(env, ctx, m, h, intent, params, today, tomorrow, options);
   }
@@ -199,6 +254,14 @@ async function jobIntent(env, ctx, m, h, intent, params, today, tomorrow, option
     if(error) return {reply:error};
     return materialForJobs(env, ctx, m, h, result.data.jobs||[], day);
   }
+  if(intent==='jobs.hours'&&params.current&&!params.query){
+    const id = options.context?.jobId;
+    if(typeof id!=='string'||!/^[-a-zA-Z0-9_]{1,80}$/.test(id)) return {reply:'Napište název zakázky. Otevřenou zakázku v tomto příkazu nevidím a čas z rozvrhu neodhaduji.'};
+    const one = await jobsGet(env,m,h,'/api/jobs/'+encodeURIComponent(id));
+    const error = blocked(one, 'Zakázku se nepodařilo načíst.');
+    if(error) return {reply:error};
+    return recordedJobHours(env, m, h, one.data.job, params.person);
+  }
   const found = await findJobs(env, m, h, params.query||'');
   if(found.error) return {reply:found.error};
   if(intent==='jobs.search') return {reply:params.query?`Zakázky pro „${params.query}“:\n`+lines(found.jobs, jobLine, 'Nic jsem nenašel.'):'Napište, jakou zakázku mám hledat.'};
@@ -207,22 +270,47 @@ async function jobIntent(env, ctx, m, h, intent, params, today, tomorrow, option
   if(picked.choices) return {reply:`Našel jsem víc zakázek. Upřesněte název:\n`+lines(picked.choices, jobLine, '')};
   const job = picked.job;
   if(intent==='jobs.history') return jobHistory(env, ctx, m, h, job);
-  if(intent==='jobs.hours') return jobHours(job, params.person);
+  if(intent==='jobs.hours') return recordedJobHours(env, m, h, job, params.person);
   if(intent==='jobs.materials') return materialForJobs(env, ctx, m, h, [job], job.dueDate||today);
   return protocolDraft(env, ctx, m, h, job, options);
 }
 
-function jobHours(job, person){
-  const names = String(job.assignedName||'').split(',').map(name=>name.trim()).filter(Boolean);
-  const wanted = person?names.filter(name=>name.toLocaleLowerCase('cs').includes(person.toLocaleLowerCase('cs'))):names;
-  let minutes = 0;
-  if(job.startTime&&job.endTime){
-    const [sh,sm] = job.startTime.split(':').map(Number), [eh,em] = job.endTime.split(':').map(Number);
-    minutes = (eh*60+em)-(sh*60+sm);
-  }else if(job.estimatedMinutes) minutes = job.estimatedMinutes;
-  const who = (wanted.length?wanted:names).join(', ')||'nepřiřazeno';
-  const planned = minutes>0?attendanceHours(minutes*60*1000*(wanted.length||1)):'čas návštěvy není vyplněný';
-  return {reply:`${job.title}: plánovaný čas je ${planned} (${who}). Docházka se na konkrétní zakázku neváže, proto sem nepočítám píchačky. Odpracované hodiny lidí jsou v měsíčním přehledu docházky.`};
+function jobHoursUnavailable(){
+  return {reply:'Odpracované hodiny na zakázce v téhle evidenci nemám. Plánovaný čas z rozvrhu nepoužívám, abych nic neodhadoval.'};
+}
+async function recordedJobHours(env, m, h, job, person){
+  let handleJobTime;
+  try{({handleJobTime} = await import('./job-time.js'));}
+  catch{return jobHoursUnavailable();}
+  const result = await callJson(()=>handleJobTime(get('/api/jobs/'+encodeURIComponent(job.id)+'/time', h._headers), env, m, h));
+  if(!result.ok) return {reply:blocked(result)||'Hodiny zakázky se nepodařilo načíst.'};
+  const summary = result.data.summary;
+  if(!summary?.total) return jobHoursUnavailable();
+  const workers = summary.workers||[];
+  const wanted = person?workers.filter(worker=>String(worker.name||'').toLocaleLowerCase('cs').includes(person.toLocaleLowerCase('cs'))):workers;
+  if(person&&!wanted.length) return {reply:`V evidenci zakázky „${job.title}“ nevidím hodiny člověka „${person}“. Plánovaný čas z rozvrhu nepoužívám.`};
+  const rows = (person?wanted:workers).map(worker=>`• ${worker.name}: práce ${attendanceHours(worker.workMs||0)}, cesta ${attendanceHours(worker.travelMs||0)}`);
+  const workMs = (person?wanted:[{workMs:summary.total.workMs}]).reduce((sum,worker)=>sum+(worker.workMs||0),0);
+  const travelMs = (person?wanted:[{travelMs:summary.total.travelMs}]).reduce((sum,worker)=>sum+(worker.travelMs||0),0);
+  const who = person?wanted.map(worker=>worker.name).join(', '):'celkem';
+  return {reply:`${job.title}, ${who}: práce ${attendanceHours(workMs)}, cesta ${attendanceHours(travelMs)}.\n`+rows.join('\n'), workMs, travelMs};
+}
+async function realizationHours(env, m, h){
+  if(!on(h.features,'jobs')) return {reply:'Zakázky jsou v nastavení firmy vypnuté.'};
+  const result = await jobsGet(env,m,h,'/api/jobs?state=all&type=installation&order=schedule');
+  const error = blocked(result);
+  if(error) return {reply:error};
+  const jobs = result.data.jobs||[];
+  if(!jobs.length) return {reply:'Žádnou zakázku typu realizace nevidím, nebo k ní nemáte přístup.'};
+  let work = 0, travel = 0;
+  const sample = jobs.slice(0, 12);
+  for(const job of sample){
+    const hours = await recordedJobHours(env, m, h, job);
+    if(hours.workMs==null) return hours;
+    work += hours.workMs;
+    travel += hours.travelMs||0;
+  }
+  return {reply:`Realizace, součet z evidence (${sample.length} zakázek): práce ${attendanceHours(work)}, cesta ${attendanceHours(travel)}.${jobs.length>sample.length?' Další zakázky v tomto součtu nejsou, upřesněte název.':''}`};
 }
 
 async function jobHistory(env, ctx, m, h, job){

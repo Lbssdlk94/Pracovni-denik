@@ -3,9 +3,24 @@
 // this parser; they must still call the existing authorized actions.
 
 export const ASSISTANT_MODES = [
-  {id:'basic', label:'Základní asistent', detail:'Příkazy podle pravidel nad stávajícími daty. Bez AI a bez dalšího předplatného.'},
-  {id:'local', label:'V zařízení', detail:'Připraveno pro pozdější lokální model (Apple Foundation Models nebo WebGPU). V této verzi se žádný model nestahuje a použijí se stejné bezpečné funkce.'},
-  {id:'cloud', label:'Cloud', detail:'Volitelný cloudový poskytovatel není zapojený. Použijí se stejné bezpečné funkce jako u základního asistenta.'}
+  {id:'basic', label:'Základní asistent', available:true, kind:'rules', detail:'Příkazy podle pravidel nad stávajícími daty. Bez AI a bez dalšího předplatného.'},
+  {id:'local', label:'V zařízení', available:false, kind:'local', detail:'Nedostupné. Model se nestahuje. Ministral 3B, Qwen ani Apple Foundation Models se v této verzi nezapínají.'},
+  {id:'cloud', label:'Cloud', available:false, kind:'cloud', detail:'Nedostupné. Cloudový poskytovatel není zapojený a placené API se nevolá.'}
+];
+
+// Future runtimes. None of these download a model or call a paid API.
+export const ASSISTANT_PROVIDERS = [
+  {id:'basic', label:'Základní', available:true, kind:'rules'},
+  {id:'ministral-3b', label:'Ministral 3B', available:false, kind:'local'},
+  {id:'qwen', label:'Qwen', available:false, kind:'local'},
+  {id:'apple-foundation', label:'Apple Foundation Models', available:false, kind:'device'},
+  {id:'cloud', label:'Cloud', available:false, kind:'cloud'}
+];
+
+export const KNOWLEDGE_KINDS = [
+  {id:'company', label:'Firemní znalosti', available:false},
+  {id:'manual', label:'Servisní manuály', available:false},
+  {id:'correction', label:'Schválené opravy odpovědí', available:false}
 ];
 
 const MONTHS = ['leden','unor','brezen','duben','kveten','cerven','cervenec','srpen','zari','rijen','listopad','prosinec'];
@@ -21,7 +36,10 @@ export function assistantSuggestions(){
     'Najdi zákazníka Nováka.',
     'Kolik hodin odpracoval Marek v listopadu?',
     'Jaký materiál potřebujeme na zítřek?',
-    'Vytvoř servisní protokol.'
+    'Vytvoř servisní protokol.',
+    'Kolik hodin jsem dnes odpracoval?',
+    'Kteří zákazníci čekají na servis?',
+    'Vytvoř pracovní výkaz za tento měsíc.'
   ];
 }
 
@@ -75,16 +93,20 @@ export function parseAssistantCommand(input, today){
   if(/protokol/.test(text)){
     return {intent:'protocol.draft', params:{query:softenName(capture(original, [/protokol(?:\s+(?:pro|k|na|ke))?\s+(.+)/iu]))}, text:original};
   }
+  if(/realizac/.test(text) && /\b(hodin|strav|celkem)/.test(text)) return {intent:'jobs.realizationHours', params:{}, text:original};
+  if(/cekaj/.test(text) && /servis/.test(text) && /zakaz/.test(text)) return {intent:'customers.waitingService', params:{}, text:original};
   if(/\b(hodin|dochaz|smen|vykaz|odprac)/.test(text)){
     if(/zakaz/.test(text)){
       return {intent:'jobs.hours', params:{
-        person:softenName(capture(original, [/hodiny?\s+(.+?)\s+na\s+zakáz/iu, /odpracoval\s+(.+?)\s+na\s+zakáz/iu])),
-        query:softenName(capture(original, [/zakáz(?:ce|ku|ka|ky)\s+(.+)/iu]))
+        person:softenName(capture(original, [/strávil\s+(\p{L}+)/iu, /odpracoval\s+(\p{L}+)/iu, /hodiny?\s+(\p{L}+)\s+na\s+/iu])),
+        query:softenName(capture(original, [/zakáz(?:ce|ku|ka|ky)\s+(.+)/iu])),
+        current:/\bteto\b/.test(text)
       }, text:original};
     }
-    const person = softenName(capture(original, [/odpracoval\s+(.+?)(?:\s+v\s+|\s+za\s+|$)/iu, /hodiny?\s+(.+?)(?:\s+v\s+|\s+za\s+|$)/iu]));
+    const person = /\b(jsem|jsme)\b/.test(text) ? '' : softenName(capture(original, [/odpracoval\s+(.+?)(?:\s+v\s+|\s+za\s+|$)/iu, /hodiny?\s+(.+?)(?:\s+v\s+|\s+za\s+|$)/iu]));
+    const self = !person && /\b(jsem|me|moje|muj)\b/.test(text);
     const period = month?'month':/\btydn/.test(text)?'week':/\bdnes\b/.test(text)?'today':'month';
-    return {intent:/vykaz/.test(text)?'attendance.report':'attendance.hours', params:{person, period, month}, text:original};
+    return {intent:/vykaz/.test(text)?'attendance.report':'attendance.hours', params:{person, self, period, month}, text:original};
   }
   if(/nedokonc/.test(text)) return {intent:'jobs.incomplete', params:{}, text:original};
   if(/histori/.test(text)&&/zakazk/.test(text)) return {intent:'jobs.history', params:{query:softenName(capture(original, [/zakáz(?:ky|ku|ka|ce)\s+(.+)/iu]))}, text:original};
