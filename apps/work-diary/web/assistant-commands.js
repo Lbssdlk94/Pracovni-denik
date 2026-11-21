@@ -24,6 +24,22 @@ export const KNOWLEDGE_KINDS = [
 ];
 
 const MONTHS = ['leden','unor','brezen','duben','kveten','cerven','cervenec','srpen','zari','rijen','listopad','prosinec'];
+const WEEKDAYS = ['nedele','pondeli','utery','streda','ctvrtek','patek','sobota'];
+
+export function nextWeekday(today, name){
+  const target = WEEKDAYS.indexOf(name);
+  if(target<0) return '';
+  const current = new Date(today+'T12:00:00Z').getUTCDay();
+  let delta = (target-current+7)%7;
+  if(delta===0) delta = 7;
+  const date = new Date(today+'T12:00:00Z');
+  date.setUTCDate(date.getUTCDate()+delta);
+  return date.toISOString().slice(0,10);
+}
+
+function weekdayIn(text){
+  return WEEKDAYS.find(name=>text.includes(name))||'';
+}
 
 export function foldCzech(value){
   return String(value||'').toLocaleLowerCase('cs').normalize('NFD').replace(/\p{M}/gu,'').replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
@@ -83,6 +99,20 @@ export function parseAssistantCommand(input, today){
   if(!text) return unknown;
   if(/\b(smaz|odstran|vymaz|zrus zakaz|zrus protokol)\b/.test(text)) return {intent:'refused.destructive', params:{}, text:original};
   if(/^(napoveda|pomoc|co umis|co umite|jak fungujes)\b/.test(text)) return {intent:'help', params:{}, text:original};
+  if(/jsem na ceste/.test(text)) return {intent:'jobs.depart', params:{query:softenName(capture(original, [/k\s+(.+)/iu])), current:/\bteto\b|\bzakaznikovi\b/.test(text)}, text:original};
+  if(/\b(zacni|zacina|zapis prichod|prichod)\b/.test(text)&&/dochaz|smen|praci/.test(text)) return {intent:'attendance.arrive', params:{}, text:original};
+  if(/\b(ukonci|ukoncit|odchod)\b/.test(text)&&/dochaz|smen|praci/.test(text)) return {intent:'attendance.leave', params:{}, text:original};
+  if(/aktivni/.test(text)&&/dochaz|smen/.test(text)) return {intent:'attendance.active', params:{}, text:original};
+  if(/\b(presun|preloz)\b/.test(text)){
+    const dayName = weekdayIn(text);
+    return {intent:'jobs.reschedule', params:{query:softenName(capture(original, [/zakázku\s+(?:u\s+)?(.+?)\s+na\s+/iu, /u\s+(.+?)\s+na\s+/iu])), dueDate:dayName?nextWeekday(today, dayName):(/\bzitra|zitre/.test(text)?'tomorrow':''), weekday:dayName}, text:original};
+  }
+  if(/\bprirad\b/.test(text)) return {intent:'jobs.assign', params:{person:softenName(capture(original, [/přiřaď\s+(\p{L}+)/iu])), query:softenName(capture(original, [/zakáz(?:ce|ku|ce)\s+(.+)/iu, /realizaci\s+(.+)/iu, /k\s+(.+)/iu]))}, text:original};
+  if(/\b(oznac|nastav stav)\b/.test(text)&&/zakaz/.test(text)){
+    const status = /nedokonc/.test(text)?'incomplete':/hotov|dokonc/.test(text)?'done':/probiha|v praci/.test(text)?'in_progress':/plan/.test(text)?'planned':'';
+    return {intent:'jobs.status', params:{query:softenName(capture(original, [/zakázku\s+(.+?)\s+jako\s+/iu])), status}, text:original};
+  }
+  if(/\btyden/.test(text)&&/\b(prac|plan|zakaz|mame|navstev)\b/.test(text)&&!/vykaz|hodin|dochaz/.test(text)) return {intent:'jobs.week', params:{}, text:original};
 
   if(/\bmaterial/.test(text)){
     const query = materialQuery(capture(original, [/materiál(?:u|y)?\s+(.+)/iu]));

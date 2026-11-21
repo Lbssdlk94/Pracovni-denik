@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {api} from '../worker/api.js';
 import {environment, people, request} from './fixtures.mjs';
+import {nextWeekday} from '../web/assistant-commands.js';
 
 const ctx = {waitUntil:task=>task.catch(()=>{})};
 const call = (env, path, person, method='GET', value, extra)=>api(request(path, person, method, value, extra), env, ctx);
@@ -119,4 +120,41 @@ test('Job hours come from recorded time, not a schedule estimate', async()=>{
     assert.match(realization.body.reply, /nevidím|nemám|nepoužívám/);
   }finally{env.sqlite.close();}
 });
+
+test('Planning and attendance commands preview the change and write only after confirmation', async()=>{
+  const env = environment();
+  try{
+    await ready(env);
+    await call(env, '/api/invitations', people.owner, 'POST', {email:people.worker.email, role:'worker'});
+    await call(env, '/api/me', people.worker);
+    const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    const created = await call(env, '/api/jobs/job-beta', people.owner, 'PUT', {version:0, title:'Beta', status:'planned', jobType:'service', dueDate:today, customerName:'Novák', incompleteReason:'', assignedTo:people.owner.id});
+    assert.equal(created.status, 200, await created.clone().text());
+    const friday = nextWeekday(today, 'patek');
+    const proposed = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Přesuň zakázku Beta na pátek.'}));
+    assert.equal(proposed.status, 200, JSON.stringify(proposed.body));
+    assert.match(proposed.body.reply, new RegExp(friday));
+    assert.equal(env.sqlite.prepare('SELECT due_date FROM jobs WHERE id=?').get('job-beta').due_date, today);
+    const blocked = await json(await call(env, '/api/assistant', people.worker, 'POST', {text:'Přesuň zakázku Beta na pátek.'}));
+    assert.match(blocked.body.reply, /správce/);
+    const moved = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:proposed.body.confirm.id}));
+    assert.equal(moved.status, 200, JSON.stringify(moved.body));
+    assert.equal(env.sqlite.prepare('SELECT due_date FROM jobs WHERE id=?').get('job-beta').due_date, friday);
+    const week = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Co máme tento týden za práci?'}));
+    assert.match(week.body.reply, /Beta|Tento týden/);
+    const status = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Označ zakázku Beta jako probíhá.'}));
+    assert.ok(status.body.confirm?.id);
+    const started = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:status.body.confirm.id}));
+    assert.equal(started.status, 200, JSON.stringify(started.body));
+    assert.equal(env.sqlite.prepare('SELECT status FROM jobs WHERE id=?').get('job-beta').status, 'in_progress');
+    const arrival = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Začni docházku.'}));
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM attendance_shifts').get().n, 0);
+    const punched = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:arrival.body.confirm.id}));
+    assert.equal(punched.status, 200, JSON.stringify(punched.body));
+    assert.match(punched.body.reply, /Příchod/);
+    const active = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Kdo má stále aktivní docházku?'}));
+    assert.match(active.body.reply, /Otevřená docházka/);
+  }finally{env.sqlite.close();}
+});
+
 

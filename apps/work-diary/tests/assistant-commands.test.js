@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseAssistantCommand, assistantModeInfo, ASSISTANT_MODES, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, foldCzech} from '../web/assistant-commands.js';
+import {parseAssistantCommand, assistantModeInfo, ASSISTANT_MODES, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, foldCzech, nextWeekday} from '../web/assistant-commands.js';
 import {answerOffline} from '../web/assistant-offline.js';
 
 const today = '2026-11-21';
@@ -29,6 +29,23 @@ test('Czech examples map to safe intents without an AI model', ()=>{
   assert.equal(intent('Kteří zákazníci čekají na servis?'), 'customers.waitingService');
   assert.equal(intent('Vytvoř pracovní výkaz za tento měsíc.'), 'attendance.report');
   assert.equal(parseAssistantCommand('Vytvoř pracovní výkaz za tento měsíc.', today).params.period, 'month');
+  assert.equal(intent('Co máme zítra za práci?'), 'jobs.tomorrow');
+  assert.equal(intent('Co máme tento týden za práci?'), 'jobs.week');
+  assert.equal(intent('Ukaž všechny nedokončené zakázky.'), 'jobs.incomplete');
+  assert.equal(intent('Jsem na cestě k zákazníkovi.'), 'jobs.depart');
+  assert.equal(intent('Kdo má stále aktivní docházku?'), 'attendance.active');
+  assert.equal(intent('Začni docházku.'), 'attendance.arrive');
+  assert.equal(intent('Ukonči docházku.'), 'attendance.leave');
+  const move = parseAssistantCommand('Přesuň zakázku u Nováka na pátek.', today);
+  assert.equal(move.intent, 'jobs.reschedule');
+  assert.equal(move.params.query, 'Novák');
+  assert.equal(move.params.dueDate, '2026-11-27');
+  assert.equal(nextWeekday('2026-11-21', 'patek'), '2026-11-27');
+  const assign = parseAssistantCommand('Přiřaď Marka k realizaci v Plzni.', today);
+  assert.equal(assign.intent, 'jobs.assign');
+  assert.equal(assign.params.person, 'Mark');
+  assert.equal(intent('Označ zakázku Beta jako probíhá.'), 'jobs.status');
+  assert.equal(parseAssistantCommand('Označ zakázku Beta jako probíhá.', today).params.status, 'in_progress');
 });
 
 test('Synonyms, destructive refusals and mode registry stay local', ()=>{

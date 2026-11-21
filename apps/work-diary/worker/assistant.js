@@ -175,8 +175,8 @@ async function confirm(env, ctx, m, h, id, mode, preview){
     throw error;
   }
   if(done.confirm){
-    await env.DB.prepare("UPDATE assistant_events SET kind='proposal' WHERE id=? AND kind='committing'").bind(id).run();
-    h.fail(409,'Akci se nepodařilo dokončit. Zadejte ji znovu.');
+    await auditCommit(env, row, 'Vyžaduje další potvrzení. '+done.reply);
+    return reply(mode, done.reply, {confirm:done.confirm});
   }
   await auditCommit(env, row, done.reply);
   return reply(mode, done.reply, {mutated:done.mutated||null});
@@ -187,6 +187,12 @@ async function run(env, ctx, m, h, command, today, options){
   const tomorrow = addDays(today, 1);
   if(!options.propose&&intent==='protocol.draft'&&params.jobId) return protocolDraft(env, ctx, m, h, {id:params.jobId, title:params.title, description:params.description||'', dueDate:params.dueDate||''}, options);
   if(!options.propose&&intent==='jobs.create'&&params.dueDate) return createJob(env, m, h, params, today, tomorrow, options);
+  if(!options.propose&&intent==='jobs.reschedule'&&params.jobId) return applyJobChange(env, m, h, params);
+  if(!options.propose&&intent==='jobs.assign'&&params.jobId) return applyJobChange(env, m, h, params);
+  if(!options.propose&&intent==='jobs.status'&&params.jobId) return applyStatus(env, m, h, params);
+  if(!options.propose&&intent==='jobs.depart'&&params.jobId) return applyDeparture(env, m, h, params);
+  if(!options.propose&&intent==='attendance.arrive') return applyPunch(env, m, h, 'arrival', params);
+  if(!options.propose&&intent==='attendance.leave') return applyPunch(env, m, h, 'departure', params);
   if(intent==='unknown') return {reply:'Tomuhle příkazu nerozumím. Můžete zkusit některou z dostupných akcí.', suggestions:assistantSuggestions()};
   if(intent==='help') return {reply:'Umím zakázky, docházku, hodiny na zakázce z evidence, zákazníky, materiál a přípravu servisního protokolu. Zápis vždy nejdřív potvrdíte a stejné potvrzení se nespustí dvakrát. Mazání nechávám na stávajících obrazovkách.', suggestions:assistantSuggestions()};
   if(intent==='refused.destructive') return {reply:'Smazání nebo zrušení tady nespouštím, aby se nic omylem neztratilo. Použijte stávající obrazovku záznamu.'};
@@ -206,12 +212,14 @@ async function run(env, ctx, m, h, command, today, options){
     const label = intent==='jobs.today'?'Dnes':'Zítra';
     return {reply:`${label} (${day}):\n`+lines(result.data.jobs||[], jobLine, 'Žádná návštěva v tento den není.')};
   }
-  if(intent==='jobs.upcoming'||intent==='jobs.plannedServices'){
+  if(intent==='jobs.upcoming'||intent==='jobs.plannedServices'||intent==='jobs.week'){
     const type = intent==='jobs.plannedServices'?'&type=service':'';
-    const result = await jobsGet(env,m,h,`/api/jobs?state=active&order=schedule&after=${today}${type}`);
+    const range = weekRange(today);
+    const span = intent==='jobs.week'?`&from=${range.start}&to=${range.end}`:`&after=${today}`;
+    const result = await jobsGet(env,m,h,`/api/jobs?state=active&order=schedule${intent==='jobs.week'?span:'&after='+today}${type}`);
     const error = blocked(result);
     if(error) return {reply:error};
-    const title = intent==='jobs.plannedServices'?'Plánované servisy':'Nadcházející zakázky';
+    const title = intent==='jobs.plannedServices'?'Plánované servisy':intent==='jobs.week'?`Tento týden (${range.start} až ${range.end})`:'Nadcházející zakázky';
     return {reply:`${title}:\n`+lines(result.data.jobs||[], jobLine, 'Nic dalšího v plánu není.')};
   }
   if(intent==='jobs.incomplete'){
@@ -228,6 +236,8 @@ async function run(env, ctx, m, h, command, today, options){
     return {reply:'Zákazníci, kteří čekají na servis:\n'+lines(result.data.jobs||[], job=>`• ${job.customerName||'Zákazník bez jména'} · ${job.title} (${STATUS[job.status]||job.status})`, 'Žádný otevřený servis v zakázkách nevidím.')};
   }
   if(intent==='jobs.realizationHours') return realizationHours(env, m, h);
+  if(intent==='jobs.reschedule'||intent==='jobs.assign'||intent==='jobs.depart'||intent==='jobs.status') return prepareJobCommand(env, m, h, intent, params, today, tomorrow, options);
+  if(intent==='attendance.active'||intent==='attendance.arrive'||intent==='attendance.leave') return attendanceCommand(env, m, h, intent, params, today, options);
   if(intent==='jobs.search'||intent==='jobs.history'||intent==='jobs.hours'||intent==='jobs.materials'||intent==='protocol.draft'){
     return jobIntent(env, ctx, m, h, intent, params, today, tomorrow, options);
   }
@@ -244,6 +254,132 @@ async function findJobs(env, m, h, query){
   const error = blocked(result);
   if(error) return {error};
   return {jobs:result.data.jobs||[]};
+}
+
+function jobBody(job, patch){
+  const assignedTo = patch.assignedTo??job.assignedTo??'';
+  const body = {
+    version:job.version, title:job.title, jobType:job.jobType||'service', customerId:job.customerId??null, customerAddressId:job.customerAddressId??null,
+    customerName:job.customerName||'', city:job.city||'', description:job.description||'', address:job.address||'', gardenId:job.gardenId??null,
+    assignedTo, assignedTos:patch.assignedTos||(assignedTo?[assignedTo]:[]), dueDate:(patch.dueDate??job.dueDate)||'', startTime:job.startTime||'', endTime:job.endTime||'',
+    status:patch.status||job.status, incompleteReason:(patch.incompleteReason??job.incompleteReason)||''
+  };
+  if(job.discipline) body.discipline = job.discipline;
+  if(job.plannedStart){body.plannedStart=job.plannedStart; body.estimatedMinutes=job.estimatedMinutes; body.arrivalWindowStart=job.arrivalWindowStart||''; body.arrivalWindowEnd=job.arrivalWindowEnd||''; body.legacyTimeMeaning=job.legacyTimeMeaning||'unknown';}
+  if(patch.allowOverlaps){body.allowOverlaps=true; body.previewRevision=patch.previewRevision;}
+  return body;
+}
+function arrivalPlan(now=new Date()){
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(now).map(part=>[part.type,part.value]));
+  let hour = Number(parts.hour)+1, day = `${parts.year}-${parts.month}-${parts.day}`;
+  if(hour>23){hour=8; day=addDays(day,1);}
+  return {arrivalDate:day, arrivalTime:`${String(hour).padStart(2,'0')}:${parts.minute}`};
+}
+async function prepareJobCommand(env, m, h, intent, params, today, tomorrow, options){
+  if((intent==='jobs.reschedule'||intent==='jobs.assign')&&!manager(m)) return {reply:'Termín a přiřazení mění vlastník nebo správce.'};
+  if(intent==='jobs.status'&&!params.status) return {reply:'Řekněte, jaký stav mám nastavit: plánovaná, probíhá, hotová nebo nedokončená.'};
+  if(intent==='jobs.reschedule'&&!params.dueDate) return {reply:'Řekněte den, třeba pátek nebo zítra. Termín jsem nezměnil.'};
+  const dueDate = params.dueDate==='tomorrow'?tomorrow:params.dueDate;
+  let found;
+  if(params.current&&!params.query&&options.context?.jobId) found = {jobs:[]};
+  else found = await findJobs(env, m, h, params.query||'');
+  if(found.error) return {reply:found.error};
+  let job;
+  if(params.current&&options.context?.jobId){
+    const loaded = await jobsGet(env,m,h,'/api/jobs/'+encodeURIComponent(options.context.jobId));
+    if(!loaded.ok) return {reply:blocked(loaded)||'Otevřenou zakázku se nepodařilo načíst.'};
+    job = loaded.data.job;
+  }else{
+    const picked = oneJob(found.jobs, params.query);
+    if(picked.error) return {reply:picked.error};
+    if(picked.choices) return {reply:'Našel jsem víc zakázek. Upřesněte název:\n'+lines(picked.choices, jobLine, '')};
+    job = picked.job;
+  }
+  if(intent==='jobs.assign'){
+    const people = await attendanceGet(env, m, h, `/api/attendance?month=${today.slice(0,7)}`+(manager(m)?'&userId=all':''));
+    if(!people.ok) return {reply:blocked(people)||'Kolegy se nepodařilo načíst.'};
+    const hits = (people.data.employees||[]).filter(person=>person.name.toLocaleLowerCase('cs').includes(String(params.person||'').toLocaleLowerCase('cs')));
+    if(!params.person||!hits.length) return {reply:params.person?`Pracovníka „${params.person}“ v týmu nevidím.`:'Řekněte, koho mám přiřadit.'};
+    if(hits.length>1) return {reply:'Vyhovuje víc lidí: '+hits.map(person=>person.name).join(', ')+'.'};
+    const summary = `Přiřadit ${hits[0].name} k zakázce „${job.title}“? Dosavadní přiřazení se nahradí tímto člověkem.`;
+    if(options.propose) return {reply:summary, confirm:await propose(env, m, {intent, params:{jobId:job.id, assignedTo:hits[0].id, assignedTos:[hits[0].id]}}, summary)};
+  }
+  if(intent==='jobs.reschedule'){
+    const summary = `Přesunout zakázku „${job.title}“ z ${job.dueDate||'bez termínu'} na ${dueDate}? Čas návštěvy zůstane ${job.startTime||'bez času'}.`;
+    if(options.propose) return {reply:summary, confirm:await propose(env, m, {intent, params:{jobId:job.id, dueDate}}, summary)};
+  }
+  if(intent==='jobs.status'){
+    const summary = `Změnit stav zakázky „${job.title}“ na ${STATUS[params.status]||params.status}?`;
+    if(options.propose) return {reply:summary, confirm:await propose(env, m, {intent, params:{jobId:job.id, status:params.status, version:job.version}}, summary)};
+  }
+  if(intent==='jobs.depart'){
+    const plan = arrivalPlan();
+    const summary = `Označit „${job.title}“ jako na cestě a příjezd ${plan.arrivalDate} v ${plan.arrivalTime}? Stav se změní jen když jste k zakázce přiřazený.`;
+    if(options.propose) return {reply:summary, confirm:await propose(env, m, {intent, params:{jobId:job.id, version:job.version, ...plan}}, summary)};
+  }
+  return applyStored(env, m, h, intent, {...params, jobId:job.id, dueDate});
+}
+async function applyStored(env, m, h, intent, params){
+  if(intent==='jobs.reschedule'||intent==='jobs.assign') return applyJobChange(env, m, h, params);
+  if(intent==='jobs.status') return applyStatus(env, m, h, params);
+  return applyDeparture(env, m, h, params);
+}
+async function applyJobChange(env, m, h, params){
+  if(!manager(m)) return {reply:'Termín a přiřazení mění vlastník nebo správce.'};
+  const loaded = await jobsGet(env,m,h,'/api/jobs/'+encodeURIComponent(params.jobId));
+  if(!loaded.ok) return {reply:blocked(loaded)||'Zakázku se nepodařilo načíst.'};
+  const job = loaded.data.job;
+  const result = await callJson(()=>handleJobs(write('/api/jobs/'+encodeURIComponent(job.id),'PUT', jobBody(job, params), h._headers), env, m, h));
+  if(!result.ok&&result.data.code==='job_schedule_warning'){
+    const summary = `V plánu je kolize. Uložit „${job.title}“ přesto? ${result.data.error||''}`;
+    const confirm = await propose(env, m, {intent:params.assignedTo?'jobs.assign':'jobs.reschedule', params:{...params, allowOverlaps:true, previewRevision:result.data.preview?.revision}}, summary);
+    return {reply:summary, confirm};
+  }
+  if(!result.ok) return {reply:result.data.error||'Zakázku se nepodařilo změnit.'};
+  return {reply:`Zakázka „${result.data.job?.title||job.title}“ je uložená${params.dueDate?' na '+params.dueDate:''}.`, mutated:'jobs'};
+}
+async function applyStatus(env, m, h, params){
+  const loaded = await jobsGet(env,m,h,'/api/jobs/'+encodeURIComponent(params.jobId));
+  if(!loaded.ok) return {reply:blocked(loaded)||'Zakázku se nepodařilo načíst.'};
+  const result = await callJson(()=>handleJobs(write('/api/jobs/'+encodeURIComponent(params.jobId)+'/status','PATCH',{version:loaded.data.job.version, status:params.status, incompleteReason:params.status==='incomplete'?'Označeno asistentem po potvrzení.':''}, h._headers), env, m, h));
+  if(!result.ok) return {reply:result.data.error||'Stav se nepodařilo změnit.'};
+  return {reply:`Zakázka „${result.data.job?.title||''}“ je teď ${STATUS[result.data.job?.status]||params.status}.`, mutated:'jobs'};
+}
+async function applyDeparture(env, m, h, params){
+  const loaded = await jobsGet(env,m,h,'/api/jobs/'+encodeURIComponent(params.jobId));
+  if(!loaded.ok) return {reply:blocked(loaded)||'Zakázku se nepodařilo načíst.'};
+  const result = await callJson(()=>handleJobs(write('/api/jobs/'+encodeURIComponent(params.jobId)+'/departure','POST',{version:loaded.data.job.version, arrivalDate:params.arrivalDate, arrivalTime:params.arrivalTime}, h._headers), env, m, h));
+  if(!result.ok) return {reply:result.data.error||'Odjezd se nepodařilo zapsat.'};
+  return {reply:`U zakázky „${result.data.job?.title||''}“ je stav na cestě, příjezd ${params.arrivalDate} v ${params.arrivalTime}.`, mutated:'jobs'};
+}
+async function attendanceCommand(env, m, h, intent, params, today, options){
+  if(!on(h.features,'attendance')) return {reply:'Docházka je v nastavení firmy vypnutá.'};
+  const month = today.slice(0,7);
+  const people = await attendanceGet(env, m, h, `/api/attendance?month=${month}`+(manager(m)&&intent==='attendance.active'?'&userId=all':''));
+  if(!people.ok) return {reply:blocked(people)||'Docházku se nepodařilo načíst.'};
+  if(intent==='attendance.active'){
+    const open = (people.data.shifts||[]).filter(shift=>shift.endAt==null);
+    return {reply:open.length?('Otevřená docházka:\n'+open.map(shift=>`• ${shift.userName}`).join('\n')):'Nikdo nemá otevřenou docházku.'};
+  }
+  if(options.preview) return {reply:'V náhledu role docházku nezapisuji.'};
+  if(intent==='attendance.arrive'){
+    if(people.data.activeShift) return {reply:'Příchod už máte zaznamenaný. Nejdříve zapište odchod.'};
+    const summary = 'Zapsat váš příchod teď? Poloha se neukládá, GPS stav bude nedostupný.';
+    if(options.propose) return {reply:summary, confirm:await propose(env, m, {intent, params:{}}, summary)};
+  }
+  if(intent==='attendance.leave'){
+    const shift = people.data.activeShift;
+    if(!shift) return {reply:'Nemáte otevřenou docházku, odchod není kam zapsat.'};
+    const summary = 'Zapsat váš odchod teď?';
+    if(options.propose) return {reply:summary, confirm:await propose(env, m, {intent, params:{shiftId:shift.id, version:shift.version}}, summary)};
+  }
+  return applyPunch(env, m, h, intent==='attendance.arrive'?'arrival':'departure', params);
+}
+async function applyPunch(env, m, h, kind, params){
+  const body = {mutationId:crypto.randomUUID(), kind, gpsStatus:'unavailable', ...(kind==='departure'?{shiftId:params.shiftId, version:params.version}:{})};
+  const result = await callJson(()=>handleAttendance(write('/api/attendance/punch','POST', body, h._headers), env, m, h, h.features));
+  if(!result.ok) return {reply:result.data.error||'Docházku se nepodařilo zapsat.'};
+  return {reply:kind==='arrival'?'Příchod je zapsaný.':'Odchod je zapsaný.', mutated:'attendance'};
 }
 
 async function jobIntent(env, ctx, m, h, intent, params, today, tomorrow, options){
