@@ -52,6 +52,8 @@ targets:
         NSCameraUsageDescription: Kamera slouží k fotodokumentaci zakázky a zahrady a k pořízení účtenky.
         NSPhotoLibraryUsageDescription: Vyberte fotografie, které chcete připojit k pracovnímu záznamu.
         NSLocationWhenInUseUsageDescription: Poloha se používá při evidenci docházky, navigaci a označení místa práce.
+        NSSpeechRecognitionUsageDescription: Hlas slouží jen k nadiktování příkazu pracovnímu asistentovi v této aplikaci.
+        NSMicrophoneUsageDescription: Mikrofon slouží k hlasovému zadání příkazu pracovnímu asistentovi.
         UILaunchScreen:
           UIColorName: LaunchBackground
         UISupportedInterfaceOrientations:

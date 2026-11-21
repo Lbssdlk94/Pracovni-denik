@@ -9,6 +9,7 @@ struct APIRoot:View {
     @State private var outbox=false
     @State private var inbox=false
     @State private var followUp:APIPhoneFollowUp?
+    @State private var assistant=false
     var body:some View {
         ZStack{
             if store.needsPasswordChange{APIPasswordView(store:store,mandatory:true)}
@@ -18,7 +19,7 @@ struct APIRoot:View {
                     if store.enabled("jobs"){NavigationStack{APIJobsScreen(store:store)}.tabItem{Label("Zakázky",systemImage:"list.clipboard")}.tag(1)}
                     if store.enabled("attendance"){NavigationStack{APIAttendanceView(store:store)}.tabItem{Label("Docházka",systemImage:"clock")}.tag(2)}
                     if store.enabled("customers"){NavigationStack{APIResourceList(store:store,resource:APIResource(entity:.customers))}.tabItem{Label("Zákazníci",systemImage:"person.crop.rectangle")}.tag(3)}
-                    NavigationStack{APIMore(store:store)}.tabItem{Label("Více",systemImage:"ellipsis")}.tag(4)
+                    NavigationStack{APIMore(store:store,assistant:$assistant)}.tabItem{Label("Více",systemImage:"ellipsis")}.tag(4)
                 }.id(store.presentationID)
             }else{APILogin(store:store)}
             if scenePhase != .active{DiaryStyle.background.ignoresSafeArea().overlay{Text("Pracovní deník").font(.title2.bold())}}
@@ -38,12 +39,14 @@ struct APIRoot:View {
             .sheet(isPresented:$outbox){NavigationStack{APIOutboxView(store:store)}}
             .sheet(isPresented:$push.showSettings){NativePushSettings(push:push)}
             .sheet(isPresented:$watch.showSettings){WatchPhoneSettings()}
+            .sheet(isPresented:$assistant){AssistantSheet(store:store)}
+            .overlay(alignment:.bottomTrailing){if store.authenticated && !store.needsPasswordChange {Button{assistant=true}label:{Image(systemName:"sparkles").font(.title3.weight(.semibold)).frame(width:56,height:56).background(DiaryStyle.actionFill,in:Circle()).foregroundStyle(.white).shadow(color:.black.opacity(0.12),radius:10,y:4)}.buttonStyle(.plain).accessibilityLabel("Pracovní asistent").padding(.trailing,16).padding(.bottom,72)}}
             .onChange(of:push.inboxRequest){_,_ in openInbox()}
             .onChange(of:watch.pendingJobId){_,_ in Task{await openWatchRequest()}}
             .onChange(of:store.authenticated){_,authenticated in if authenticated{openInbox()}}
             .onChange(of:store.editing){_,editing in if !editing{openInbox();Task{await openWatchRequest()}}}
             .onChange(of:scenePhase){_,phase in if phase == .active{Task{await store.resume();await push.refresh()}}else{try? store.vault?.persist()}}
-            .onChange(of:store.scope){_,_ in outbox=false;inbox=false;followUp=nil;push.invalidatePresentation();watch.invalidate()}
+            .onChange(of:store.scope){_,_ in outbox=false;inbox=false;followUp=nil;assistant=false;push.invalidatePresentation();watch.invalidate()}
             .task{
                 await store.start();push.attach(store);watch.attach(store);await push.refresh()
                 // Keep work data current; resume does not rediscover permissions.
@@ -84,7 +87,9 @@ struct APIHeader:ToolbarContent {
 }
 struct APIMore:View {
     @ObservedObject var store:APIStore
+    @Binding var assistant:Bool
     var body:some View{ScrollView{VStack(spacing:16){HStack{Image(systemName:"person.crop.circle.fill").font(.largeTitle);VStack(alignment:.leading){Text(store.me["user"]["name"].string).font(.headline);Text(store.company).foregroundStyle(.secondary)}}.diaryCard()
+        Button{assistant=true}label:{row("Pracovní asistent","sparkles")}
         category("Práce v terénu","leaf",entities:[.gardens,.defects,.shafts])
         category("Firemní agenda","building.2",entities:[.materials,.vehicles,.subscriptions])
         if store.manager && store.enabled("teamManagement"){NavigationLink{APIResourceList(store:store,resource:APIResource(entity:.team))}label:{row("Tým","person.2")}}
