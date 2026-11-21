@@ -22,7 +22,7 @@ import SwiftUI
             NavigationStack{APIJobsScreen(store:store,previewRows:rows)}.tabItem{Label("Zakázky",systemImage:"list.clipboard")}.tag(1)
             NavigationStack{APIAttendanceView(store:store)}.tabItem{Label("Docházka",systemImage:"clock")}.tag(2)
             NavigationStack{APIResourceList(store:store,resource:APIResource(entity:.customers))}.tabItem{Label("Zákazníci",systemImage:"person.crop.rectangle")}.tag(3)
-            NavigationStack{APIMore(store:store)}.tabItem{Label("Více",systemImage:"ellipsis")}.tag(4)
+            NavigationStack{APIMore(store:store,assistant:.constant(false))}.tabItem{Label("Více",systemImage:"ellipsis")}.tag(4)
         }.tint(DiaryStyle.accent).diaryBubble().preferredColorScheme(dark ? .dark : .light).dynamicTypeSize(large ? .accessibility3 : .large)
             .safeAreaInset(edge:.top){Text("NÁVRH · UKÁZKOVÁ DATA").font(.caption2).foregroundStyle(.secondary)}
     }

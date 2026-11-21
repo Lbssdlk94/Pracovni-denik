@@ -32,7 +32,7 @@ struct APIDashboardPreviewHost:View {
             NavigationStack{APIJobsScreen(store:store)}.tabItem{Label("Zakázky",systemImage:"list.clipboard")}
             NavigationStack{APIAttendanceView(store:store)}.tabItem{Label("Docházka",systemImage:"clock")}
             NavigationStack{APIResourceList(store:store,resource:APIResource(entity:.customers))}.tabItem{Label("Zákazníci",systemImage:"person.crop.rectangle")}
-            NavigationStack{APIMore(store:store)}.tabItem{Label("Více",systemImage:"ellipsis")}
+            NavigationStack{APIMore(store:store,assistant:.constant(false))}.tabItem{Label("Více",systemImage:"ellipsis")}
         }.tint(DiaryStyle.accent).diaryBubble().preferredColorScheme(appearance).dynamicTypeSize(largeText ? .accessibility3 : .large)
             .safeAreaInset(edge:.top,spacing:0){Text("NÁVRH · UKÁZKOVÁ DATA").font(.caption2).foregroundStyle(.secondary).padding(4)}
     }
