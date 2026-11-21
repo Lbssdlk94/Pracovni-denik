@@ -43,6 +43,7 @@ import {handleDrive,nativeDriveMember} from './drive.js';
 import {handleJobPhotos} from './job-photos.js';
 import {handleJobs} from './jobs.js';
 import {handleJobTime} from './job-time.js';
+import {handleAssistant} from './assistant.js';
 import {handleBlowout} from './blowout.js';
 import {handleAttendance} from './attendance.js';
 import {DEFAULT_FEATURES,normalizeFeatures,FEATURE_OPTIONS,licensedFeature,featureEnabled} from '../web/features.js';
@@ -243,6 +244,7 @@ async function workspaceRawApi(request,env,ctx){
     const granularFeature=path==='/api/materials'||path.startsWith('/api/materials/')?'materials':path==='/api/work-rates'?'workCharges':/\/jobs\/[^/]+\/handoffs$/.test(path)?'jobHandoffs':path==='/api/jobs/backlog'?'jobBacklog':/\/jobs\/[^/]+\/departure$/.test(path)?'jobTravel':/\/jobs\/[^/]+\/service\/photos\//.test(path)&&method==='PUT'?'protocolPhotos':null;
     if(granularFeature){const {features}=await featureSettingsOnce();if(!featureEnabled(granularFeature,features))fail(403,'Tato funkce je v nastavení firmy vypnutá.',{code:'feature_disabled',feature:granularFeature});}
     const deliver=()=>ctx.waitUntil(dispatchNotifications(env).catch(()=>{}));
+    if(path==='/api/assistant'&&method==='POST'){const {features}=await featureSettingsOnce();return await handleAssistant(request,env,ctx,m,{all,one,execute,body,fail,json,validId,cleanText,expectedVersion,features,boundedBytes,checkGeocodeRate});}
     if(path==='/api/record-links'){const {features}=await featureSettingsOnce();return await handleRecordLinks(request,env,m,{all,json,fail,features});}
     if(path==='/api/defects'||path.startsWith('/api/defects/')||/^\/api\/gardens\/[-\w]+\/history$/.test(path)){const {features}=await featureSettingsOnce();if(!features.gardens)fail(403,'Zahrady jsou v nastavení vypnuté.');return await handleGardenHistory(request,env,m,{all,one,body,json,fail,validId,cleanText,features});}
     if(path==='/api/email-settings')return await handleEmailConfiguration(request,env,m,{body,fail,json});
