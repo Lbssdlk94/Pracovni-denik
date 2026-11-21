@@ -208,7 +208,8 @@ private enum MinistralEngine {
         if tokens.count > 900 { throw MinistralError.tooLong }
         let promptCount = Int32(tokens.count)
         let decoded = tokens.withUnsafeMutableBufferPointer { buffer -> Int32 in
-            llama_decode(context, llama_batch_get_one(buffer.baseAddress, promptCount))
+            guard let base = buffer.baseAddress else { return -1 }
+            return llama_decode(context, llama_batch_get_one(base, promptCount))
         }
         if decoded != 0 { throw MinistralError.decodeFailed }
         var chain = llama_sampler_chain_default_params()
@@ -226,7 +227,8 @@ private enum MinistralEngine {
             if MinistralCommand.extract(output) != nil { break }
             var one = [token]
             let step = one.withUnsafeMutableBufferPointer { buffer -> Int32 in
-                llama_decode(context, llama_batch_get_one(buffer.baseAddress, 1))
+                guard let base = buffer.baseAddress else { return -1 }
+                return llama_decode(context, llama_batch_get_one(base, 1))
             }
             if step != 0 { break }
         }
