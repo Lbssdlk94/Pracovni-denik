@@ -84,6 +84,7 @@ struct AssistantSheet: View {
         case "local": return "Režim v zařízení. Model se nestahuje, používají se stejné bezpečné funkce."
         case "cloud": return "Cloudový poskytovatel není zapojený. Používají se stejné bezpečné funkce."
         default: return "Základní asistent bez AI. Stejná oprávnění jako ve zbytku deníku."
+        }
     }
     func send(_ value: String = "", confirmId: String? = nil) async {
         let clean = value.trimmingCharacters(in: .whitespacesAndNewlines)
