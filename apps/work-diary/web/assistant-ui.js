@@ -48,7 +48,7 @@ export function mountWorkAssistant({db, getSession, onChanged}={}){
       <div class="assistant-log">${messages||'<div class="assistant-bubble assistant">Napište běžný příkaz, nebo klepněte na rychlou akci. Změny se neuloží, dokud je nepotvrdíte.</div>'}</div>
       <div class="assistant-modes" aria-label="Režim">${ASSISTANT_MODES.map(item=>`<button type="button" data-mode="${item.id}" aria-pressed="${item.id===mode.id}" ${item.available?'':'disabled'}>${esc(item.label)}${item.available?'':' · nedostupné'}</button>`).join('')}</div>
       <div class="assistant-quick">${quick}</div>
-      <form class="assistant-form"><textarea rows="1" maxlength="500" aria-label="Příkaz" placeholder="Například: Co máme dnes za práci?"></textarea>${Speech?`<button type="button" class="voice" data-voice aria-pressed="${state.listening}" aria-label="Hlasové zadání">Mluvit</button>`:''}<button type="submit" ${state.busy?'disabled':''}>Odeslat</button></form>
+      <form class="assistant-form"><textarea rows="1" maxlength="500" aria-label="Příkaz" placeholder="Příkaz, nebo přiložte CSV se zákazníky či materiálem."></textarea><label class="file">Soubor<input data-file type="file" accept=".csv,.txt,.tsv,text/csv,text/plain" aria-label="Vložit tabulku CSV"></label>${Speech?`<button type="button" class="voice" data-voice aria-pressed="${state.listening}" aria-label="Hlasové zadání">Mluvit</button>`:''}<button type="submit" ${state.busy?'disabled':''}>Odeslat</button></form>
     </section>`;
     const log = root.querySelector('.assistant-log');
     log.scrollTop = log.scrollHeight;
@@ -59,6 +59,11 @@ export function mountWorkAssistant({db, getSession, onChanged}={}){
     root.querySelector('[data-confirm]')?.addEventListener('click', event=>ask('', event.currentTarget.dataset.confirm));
     const form = root.querySelector('form'), field = form.querySelector('textarea');
     form.onsubmit = event=>{event.preventDefault();ask(field.value);};
+    root.querySelector('[data-file]').onchange = event=>{
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      if(file) readImportFile(file, field.value);
+    };
     root.querySelector('[data-voice]')?.addEventListener('click', ()=>toggleVoice(field));
     field.focus();
   };
@@ -83,10 +88,18 @@ export function mountWorkAssistant({db, getSession, onChanged}={}){
     paint();
     try{recognition.start();}catch{state.listening=false;push('assistant','Mikrofon se nepodařilo zapnout.');}
   }
-  async function ask(text, confirmId, cancelId){
+  async function readImportFile(file, hint){
+    const name = file.name||'soubor';
+    if(/\.(pdf|xlsx|xls|doc|docx|png|jpe?g)$/i.test(name)){push('assistant','PDF, Excel a fotky zatím nečtu. Uložte tabulku jako CSV. Nic jsem neuložil.');return;}
+    if(file.size>100000){push('assistant','Soubor je větší než 100 kB. Rozdělte tabulku. Nic jsem neuložil.');return;}
+    let text = '';
+    try{text = await file.text();}catch{push('assistant','Soubor se nepodařilo přečíst.');return;}
+    ask(hint||'Načti tento soubor.', null, null, {name, text});
+  }
+  async function ask(text, confirmId, cancelId, file){
     const clean = String(text||'').trim();
-    if(!confirmId&&!cancelId&&!clean||state.busy) return;
-    if(!confirmId&&!cancelId) push('user', clean);
+    if(!confirmId&&!cancelId&&!clean&&!file||state.busy) return;
+    if(!confirmId&&!cancelId) push('user', file?`Soubor ${file.name}${clean?': '+clean:''}`:clean);
     const selected = ASSISTANT_MODES.find(item=>item.id===state.mode)||ASSISTANT_MODES[0];
     if(!selected.available){push('assistant', selected.detail);return;}
     state.busy = true; paint();
@@ -94,6 +107,7 @@ export function mountWorkAssistant({db, getSession, onChanged}={}){
     try{
       if(session?.rolePreview?.active&&(confirmId||cancelId)){push('assistant','V náhledu role změny neukládám.');return;}
       if(!navigator.onLine && !confirmId && !cancelId){
+        if(file){push('assistant','Soubor bez připojení neukládám. Až budete online, vložte ho znovu. Nic se teď nezměnilo.');return;}
         const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
         const command = parseAssistantCommand(clean, today);
         let jobs = null;
@@ -104,7 +118,7 @@ export function mountWorkAssistant({db, getSession, onChanged}={}){
         return;
       }
       if(!navigator.onLine){push('assistant','Potvrzení bez připojení neodešlu. Nic se neuložilo.');return;}
-      const data = await db.request('/api/assistant',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:clean, mode:state.mode, ...(confirmId?{confirmId}:{}), ...(cancelId?{cancelId}:{})})});
+      const data = await db.request('/api/assistant',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:clean, mode:state.mode, ...(file?{file}:{}), ...(confirmId?{confirmId}:{}), ...(cancelId?{cancelId}:{})})});
       push('assistant', data.reply||'Hotovo.', {confirm:data.confirm, suggestions:data.suggestions});
       if(data.mutated) onChanged?.(data.mutated);
     }catch(error){

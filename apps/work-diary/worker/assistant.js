@@ -1,6 +1,7 @@
 import {parseAssistantCommand, assistantModeInfo, assistantSuggestions, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, planMaterialLines} from '../web/assistant-commands.js';
 import {featureEnabled} from '../web/features.js';
 import {attendanceHours, attendanceInstant} from '../web/attendance-model.js';
+import {readImportSheet} from '../web/assistant-import.js';
 import {materialMoney, materialSummary, materialTotals} from '../web/material-model.js';
 import {installationInfo} from './installation.js';
 import {handleJobs} from './jobs.js';
@@ -123,7 +124,7 @@ async function auditCommit(env, row, summary){
 }
 
 export async function handleAssistant(request, env, ctx, m, h){
-  const body = await h.body(request, 8000);
+  const body = await h.body(request, 120000);
   if(!body||typeof body!=='object'||Array.isArray(body)) h.fail(400,'Neplatný příkaz.');
   const mode = assistantModeInfo(typeof body.mode==='string'?body.mode:'basic').id;
   const info = assistantModeInfo(mode);
@@ -133,6 +134,10 @@ export async function handleAssistant(request, env, ctx, m, h){
   h._headers = request.headers;
   if(body.cancelId) return h.json(await cancel(env, m, h, body.cancelId, mode));
   if(body.confirmId) return h.json(await confirm(env, ctx, m, h, body.confirmId, mode, preview));
+  if(body.file){
+    const answer = await fileImport(env, m, h, body, preview);
+    return h.json(reply(mode, answer.reply, answer));
+  }
   const today = pragueDate(new Date());
   const command = parseAssistantCommand(typeof body.text==='string'?body.text:'', today);
   const answer = await run(env, ctx, m, h, command, today, {propose:true, preview, context:body.context&&typeof body.context==='object'?body.context:null});
@@ -196,6 +201,8 @@ async function run(env, ctx, m, h, command, today, options){
   if(!options.propose&&intent==='attendance.leave') return applyPunch(env, m, h, 'departure', params);
   if(!options.propose&&intent==='materials.add'&&params.jobId) return applyMaterialLines(env, ctx, m, h, params);
   if(!options.propose&&intent==='protocol.note'&&params.jobId) return applyProtocolNote(env, ctx, m, h, params);
+  if(!options.propose&&intent==='import.customers') return applyCustomerImport(env, m, h, params);
+  if(!options.propose&&intent==='import.materials') return applyMaterialImport(env, m, h, params);
   if(intent==='unknown') return {reply:'Tomuhle příkazu nerozumím. Můžete zkusit některou z dostupných akcí.', suggestions:assistantSuggestions()};
   if(intent==='help') return {reply:'Umím zakázky, docházku, hodiny na zakázce z evidence, zákazníky, materiál a přípravu servisního protokolu. Zápis vždy nejdřív potvrdíte a stejné potvrzení se nespustí dvakrát. Mazání nechávám na stávajících obrazovkách.', suggestions:assistantSuggestions()};
   if(intent==='refused.destructive') return {reply:'Smazání nebo zrušení tady nespouštím, aby se nic omylem neztratilo. Použijte stávající obrazovku záznamu.'};
@@ -747,4 +754,76 @@ async function applyProtocolNote(env, ctx, m, h, params){
   const result = await callJson(()=>handleServiceWork(write('/api/jobs/'+encodeURIComponent(params.jobId)+'/service','PUT', protocolBody(current, keptReport(current, {[field]:[previous, params.note].filter(Boolean).join('\n')})), h._headers), env, ctx, m, h));
   if(!result.ok) return {reply:result.data.error||'Do protokolu se nepodařilo zapsat. Ostatní údaje jsem neměnil.'};
   return {reply:`Text je v protokolu „${current.job.title}“. Protokol zůstává ke kontrole.`, mutated:'jobs'};
+}
+
+async function fileImport(env, m, h, body, preview){
+  const file = body.file;
+  if(!file||typeof file!=='object'||Array.isArray(file)||typeof file.text!=='string'||file.text.length>100000) return {reply:'Soubor se nepodařilo přečíst. Pošlete textovou tabulku do 100 kB. Nic jsem neuložil.'};
+  const name = String(file.name||'soubor.txt').slice(0,120);
+  if(/\.(pdf|xlsx|xls|doc|docx|png|jpe?g)$/i.test(name)) return {reply:'PDF, Excel a fotky zatím nečtu. Uložte tabulku jako CSV. Nic jsem neuložil.'};
+  const sheet = readImportSheet(file.text, typeof body.text==='string'?body.text:'');
+  if(sheet.error) return {reply:sheet.error};
+  if(!manager(m)) return {reply:'Zákazníky a katalog materiálu zakládá vlastník nebo správce. Nic jsem neuložil.'};
+  if(preview) return {reply:'V náhledu role soubor neukládám.'};
+  if(sheet.kind==='customers'&&!on(h.features,'customers')) return {reply:'Zákazníci jsou v nastavení firmy vypnutí. Nic jsem neuložil.'};
+  if(sheet.kind==='materials'&&!on(h.features,'materials')) return {reply:'Materiál je v nastavení firmy vypnutý. Nic jsem neuložil.'};
+  const skipped = [...sheet.skipped];
+  const records = [];
+  if(sheet.kind==='customers'){
+    for(const record of sheet.records){
+      const existing = await customersGet(env,m,h,'/api/customers?q='+encodeURIComponent(record.name.slice(0,100)));
+      if(!existing.ok) return {reply:blocked(existing)||'Stávající zákazníky se nepodařilo porovnat. Nic jsem neuložil.'};
+      if((existing.data.customers||[]).some(customer=>customer.name.toLocaleLowerCase('cs')===record.name.toLocaleLowerCase('cs'))) skipped.push(`${record.name}: už v evidenci je`);
+      else records.push(record);
+    }
+    if(!records.length) return {reply:'Žádného nového zákazníka jsem nenašel.\n'+skipped.slice(0,8).join('\n')};
+    const lines = records.slice(0,8).map(record=>`• ${record.name}${record.phone?' · '+record.phone:''}${record.address?' · '+[record.address, record.city].filter(Boolean).join(', '):''}`).join('\n');
+    const garden = on(h.features,'gardens')?' Ke každému se podle stávající evidence založí i zahrada se stejným názvem.':'';
+    const summary = `Ze souboru ${name} připravím ${records.length} zákazníků.${garden}\n${lines}${records.length>8?'\n…':''}${skipped.length?'\nPřeskočeno: '+skipped.slice(0,5).join('; '):''}\nChybějící údaje nedoplňuji. Uloží se až po potvrzení.`;
+    return {reply:summary, confirm:await propose(env, m, {intent:'import.customers', params:{records}}, summary)};
+  }
+  const catalog = await materialsGet(env, m, h);
+  if(!catalog.ok) return {reply:blocked(catalog)||'Katalog se nepodařilo načíst. Nic jsem neuložil.'};
+  const categories = (catalog.data.categories||[]).filter(category=>category.active);
+  const hint = foldHint(body.text);
+  const category = categories.length===1?categories[0]:categories.find(item=>hint.includes(foldHint(item.name)));
+  if(!category) return {reply:categories.length?`Katalog má víc kategorií: ${categories.map(item=>item.name).join(', ')}. Napište, do které položky patří. Nic jsem neuložil.`:'V katalogu není aktivní kategorie. Nejdřív ji založte ve stávající evidenci. Nic jsem neuložil.'};
+  for(const record of sheet.records){
+    const hit = (catalog.data.items||[]).find(item=>item.active&&item.name.toLocaleLowerCase('cs')===record.name.toLocaleLowerCase('cs')&&item.unit===record.unit);
+    if(hit) skipped.push(`${record.name}: stejná položka už v katalogu je`);
+    else records.push(record);
+  }
+  if(!records.length) return {reply:'Žádnou novou položku jsem nenašel.\n'+skipped.slice(0,8).join('\n')};
+  const lines = records.slice(0,8).map(record=>`• ${record.name} · ${record.unit} · ${materialMoney(record.priceMinor, 'CZK')}`).join('\n');
+  const summary = `Ze souboru ${name} přidám ${records.length} položek do kategorie ${category.name}. Ceny jsou v Kč.\n${lines}${skipped.length?'\nPřeskočeno: '+skipped.slice(0,5).join('; '):''}\nUloží se až po potvrzení.`;
+  return {reply:summary, confirm:await propose(env, m, {intent:'import.materials', params:{categoryId:category.id, records}}, summary)};
+}
+function foldHint(value){return String(value||'').toLocaleLowerCase('cs').normalize('NFD').replace(/\p{M}/gu,'').replace(/[^a-z0-9 ]+/g,' ').trim();}
+async function applyCustomerImport(env, m, h, params){
+  if(!manager(m)) return {reply:'Zákazníky zakládá vlastník nebo správce. Nic jsem neuložil.'};
+  let saved = 0; const problems = [];
+  for(const record of params.records||[]){
+    const existing = await customersGet(env,m,h,'/api/customers?q='+encodeURIComponent(record.name.slice(0,100)));
+    if(existing.ok&&(existing.data.customers||[]).some(customer=>customer.name.toLocaleLowerCase('cs')===record.name.toLocaleLowerCase('cs'))){problems.push(`${record.name}: už v evidenci je`); continue;}
+    const result = await callJson(()=>handleCustomers(write('/api/customers/'+crypto.randomUUID(),'PUT',{
+      version:0, name:record.name, email:record.email||'', irrigationOrigin:'unknown',
+      phones:record.phone?[{id:crypto.randomUUID(), label:'', number:record.phone}]:[],
+      addresses:record.address?[{id:crypto.randomUUID(), label:'', address:record.address, city:record.city||''}]:[]
+    }, h._headers), env, m, h));
+    if(!result.ok) problems.push(`${record.name}: ${result.data.error||'nepodařilo se uložit'}`);
+    else saved++;
+  }
+  return {reply:`Uloženo ${saved} z ${(params.records||[]).length} zákazníků.${problems.length?'\n'+problems.slice(0,8).join('\n'):''}`, mutated:saved?'customers':null};
+}
+async function applyMaterialImport(env, m, h, params){
+  if(!manager(m)) return {reply:'Katalog upravuje vlastník nebo správce. Nic jsem neuložil.'};
+  let saved = 0; const problems = [];
+  for(const record of params.records||[]){
+    const result = await callJson(()=>handleMaterials(write('/api/materials/items/'+crypto.randomUUID(),'PUT',{
+      version:0, name:record.name, categoryId:params.categoryId, sku:record.sku||'', unit:record.unit, priceMinor:record.priceMinor, currency:'CZK', active:true
+    }, h._headers), env, m, h));
+    if(!result.ok) problems.push(`${record.name}: ${result.data.error||'nepodařilo se uložit'}`);
+    else saved++;
+  }
+  return {reply:`Uloženo ${saved} z ${(params.records||[]).length} položek materiálu.${problems.length?'\n'+problems.slice(0,8).join('\n'):''}`, mutated:saved?'materials':null};
 }

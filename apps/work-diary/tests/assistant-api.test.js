@@ -196,5 +196,44 @@ test('Material lines come from the catalogue and a protocol note waits for confi
   }finally{env.sqlite.close();}
 });
 
+test('A CSV file is previewed and written only after confirmation', async()=>{
+  const env = environment();
+  try{
+    await ready(env);
+    await call(env, '/api/invitations', people.owner, 'POST', {email:people.worker.email, role:'worker'});
+    await call(env, '/api/me', people.worker);
+    const csv = 'Jméno;Telefon;E-mail;Adresa;Město\nNovák;777111222;;Lesní 1;Plzeň\nŠpatný;abc;;;\n';
+    const blocked = await json(await call(env, '/api/assistant', people.worker, 'POST', {text:'Načti zákazníky', file:{name:'zakaznici.csv', text:csv}}));
+    assert.match(blocked.body.reply, /správce/);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM customers').get().n, 0);
+    const excel = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Načti zákazníky', file:{name:'zakaznici.xlsx', text:csv}}));
+    assert.match(excel.body.reply, /CSV/);
+    const proposed = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Načti zákazníky', file:{name:'zakaznici.csv', text:csv}}));
+    assert.equal(proposed.status, 200, JSON.stringify(proposed.body));
+    assert.match(proposed.body.reply, /Novák/);
+    assert.match(proposed.body.reply, /777111222/);
+    assert.match(proposed.body.reply, /zahrada/);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM customers').get().n, 0);
+    const saved = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:proposed.body.confirm.id}));
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    const customer = env.sqlite.prepare("SELECT id, phones, addresses FROM customers WHERE name='Novák'").get();
+    assert.ok(customer);
+    assert.match(customer.phones, /777111222/);
+    assert.match(customer.addresses, /Lesní 1/);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM gardens WHERE customer_id=?').get(customer.id).n, 1);
+    assert.equal(env.sqlite.prepare("SELECT count(*) n FROM customers WHERE name='Špatný'").get().n, 0);
+    await call(env, '/api/materials/categories/cat-import', people.owner, 'PUT', {version:0, name:'Závlaha', sortOrder:1, active:true});
+    const materials = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Načti materiál do kategorie Závlaha', file:{name:'material.csv', text:'Název;Jednotka;Cena\nPostřikovač R-VAN 14;ks;125,50\nPotrubí;m;\n'}}));
+    assert.match(materials.body.reply, /125,50|125.50|125/);
+    const imported = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:materials.body.confirm.id}));
+    assert.equal(imported.status, 200, JSON.stringify(imported.body));
+    const item = env.sqlite.prepare("SELECT unit, price_minor FROM material_items WHERE name='Postřikovač R-VAN 14'").get();
+    assert.equal(item.unit, 'ks');
+    assert.equal(item.price_minor, 12550);
+    assert.equal(env.sqlite.prepare("SELECT count(*) n FROM material_items WHERE name='Potrubí'").get().n, 0);
+  }finally{env.sqlite.close();}
+});
+
+
 
 
