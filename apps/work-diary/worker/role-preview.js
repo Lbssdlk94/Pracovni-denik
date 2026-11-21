@@ -3,7 +3,7 @@ import {rolePreviewTargets} from '../web/role-preview-model.js';
 export function denyRolePreviewMutation(request,fail){
  if(!request.headers.get('x-work-diary-preview-role'))return;
  const path=new URL(request.url).pathname;
- const read=(['GET','HEAD'].includes(request.method)&&!['/api/drive/oauth/callback','/api/drive/native-start'].includes(path))||request.method==='POST'&&path==='/api/workspace/manifest';
+ const read=(['GET','HEAD'].includes(request.method)&&!['/api/drive/oauth/callback','/api/drive/native-start'].includes(path))||request.method==='POST'&&['/api/workspace/manifest','/api/assistant'].includes(path);
  if(!read)fail(403,'V náhledu role nelze ukládat změny. Nejdříve se vraťte ke své roli.',{code:'role_preview_readonly'});
 }
 export function validateRolePreviewRequest(request,member,fail){

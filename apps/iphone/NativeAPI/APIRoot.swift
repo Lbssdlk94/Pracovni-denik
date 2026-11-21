@@ -9,6 +9,7 @@ struct APIRoot:View {
     @State private var outbox=false
     @State private var inbox=false
     @State private var followUp:APIPhoneFollowUp?
+    @State private var assistant=false
     var body:some View {
         ZStack{
             if store.needsPasswordChange{APIPasswordView(store:store,mandatory:true)}
@@ -38,6 +39,8 @@ struct APIRoot:View {
             .sheet(isPresented:$outbox){NavigationStack{APIOutboxView(store:store)}}
             .sheet(isPresented:$push.showSettings){NativePushSettings(push:push)}
             .sheet(isPresented:$watch.showSettings){WatchPhoneSettings()}
+            .sheet(isPresented:$assistant){AssistantSheet(store:store)}
+            .overlay(alignment:.bottomTrailing){if store.authenticated && !store.needsPasswordChange {Button{assistant=true}label:{Image(systemName:"sparkles").font(.title3.weight(.semibold)).frame(width:56,height:56).background(DiaryStyle.actionFill,in:Circle()).foregroundStyle(.white).shadow(color:.black.opacity(0.12),radius:10,y:4)}.buttonStyle(.plain).accessibilityLabel("Pracovní asistent").padding(.trailing,16).padding(.bottom,72)}}
             .onChange(of:push.inboxRequest){_,_ in openInbox()}
             .onChange(of:watch.pendingJobId){_,_ in Task{await openWatchRequest()}}
             .onChange(of:store.authenticated){_,authenticated in if authenticated{openInbox()}}
