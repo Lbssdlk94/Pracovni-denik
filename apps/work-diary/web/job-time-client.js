@@ -4,16 +4,17 @@ export const timeRecordKey=(user,job,suffix='index')=>user+'|'+job+'|jobTime|'+s
 export function projectJobTime(snapshot,records,jobId){
  const result=structuredClone(snapshot),states=new Map(result.states.map(s=>[s.userId,s]));
  for(const record of records.filter(r=>r.kind==='jobTimeIndex'&&r.snapshot&&r.expiresAt>Date.now()))for(const state of record.snapshot.states||[]){if((states.get(state.userId)?.version??-1)<state.version)states.set(state.userId,structuredClone(state));}
- for(const record of records.filter(r=>r.kind==='jobTimeAction'&&r.pending&&!r.blocked&&!r.conflict).sort((a,b)=>a.payload.at-b.payload.at||a.updatedAt-b.updatedAt)){
-  const p=record.payload,target=p.targetJobId||record.jobId;
-  p.workers.forEach((worker,index)=>{
+ for(const record of records.filter(r=>['jobTimeAction','jobTimeAttendanceAction'].includes(r.kind)&&r.pending&&!r.blocked&&!r.conflict).sort((a,b)=>a.payload.at-b.payload.at||a.updatedAt-b.updatedAt)){
+  const p=record.payload,attendance=record.kind==='jobTimeAttendanceAction';if(attendance&&record.path==='/api/attendance/punch'&&p.kind==='arrival')continue;
+  const members=attendance?[{userId:record.ownerId,version:record.path==='/api/attendance/punch'?record.stateVersion:p.version}]:p.workers;
+  members.forEach((worker,index)=>{const current=states.get(worker.userId),kind=attendance?(record.path==='/api/attendance/punch'?'stop':p.action==='resume'?(p.resumeKind||'stop'):p.action==='stop'?'stop':p.action):p.action==='move'?'work':p.action,target=attendance?(p.action==='resume'?p.resumeJobId:current?.active?.jobId)||null:p.targetJobId||record.jobId;
    const state=states.get(worker.userId)||{userId:worker.userId,version:worker.version,name:worker.userId,active:null};
    if(state.version!==worker.version)return;
-   const kind=p.action==='move'?'work':p.action,same=state.active?.jobId===target&&state.active.kind===kind;
+   const same=state.active?.jobId===target&&state.active.kind===kind;
    if(state.active&&!same){const old=result.intervals.find(i=>i.id===state.active.id);if(old){old.endAt=p.at;old.version++;old.pending=true;}}
    let active=state.active;
    if(kind==='stop')active=null;
-   else if(!same){active={id:p.operationId+'_'+index,jobId:target,userId:worker.userId,userName:state.name,kind,startAt:p.at,endAt:null,arrivalDate:p.arrivalDate,arrivalTime:p.arrivalTime,version:1,approval:'pending',pending:true};if(target===jobId)result.intervals.push(active);}
+   else if(!same){active={id:attendance?p.operationId+'_interval':p.operationId+'_'+index,jobId:target,userId:worker.userId,userName:state.name,kind,startAt:p.at,endAt:null,arrivalDate:p.arrivalDate,arrivalTime:p.arrivalTime,version:1,approval:'pending',pending:true};if(target===jobId)result.intervals.push(active);}
    states.set(worker.userId,{...state,version:state.version+1,active,pending:true});
   });
  }
@@ -34,7 +35,7 @@ export function createJobTimeClient({all,change,send,request,getSession,isLocked
  async function sendOrdered(id){
   const who=binding(),records=await all();assertBinding(who);const record=records.find(r=>r.id===id);if(!record)return;if(record.ownerId!==session()?.user.id)throw Error('Změna patří jinému účtu.');
   const ids=new Set(record.payload.workers.map(w=>w.userId)),order=(a,b)=>a.payload.at-b.payload.at||a.updatedAt-b.updatedAt||a.id.localeCompare(b.id);
-  const previous=records.filter(r=>r.kind==='jobTimeAction'&&r.pending&&r.ownerId===record.ownerId&&r.accessRole===record.accessRole&&order(r,record)<0&&r.payload.workers.some(w=>ids.has(w.userId))).sort(order);
+  const previous=records.filter(r=>['jobTimeAction','jobTimeAttendanceAction'].includes(r.kind)&&r.pending&&r.ownerId===record.ownerId&&r.accessRole===record.accessRole&&order(r,record)<0&&(r.kind==='jobTimeAttendanceAction'?ids.has(r.ownerId):r.payload.workers.some(w=>ids.has(w.userId)))).sort(order);
   try{for(const row of previous){if(row.blocked||row.conflict)throw Object.assign(Error('Předchozí interval vyžaduje porovnání.'),{status:409,code:'job_time_dependency'});await send(row.id);assertBinding(who);}}
   catch(e){assertBinding(who);await change(id,r=>r?{...r,conflict:!!e.status&&e.status<500,error:'Nejdříve dokončete odeslání předchozího intervalu. '+e.message,blockedCode:'job_time_dependency'}:r);throw e;}
   return send(id);
@@ -43,7 +44,7 @@ export function createJobTimeClient({all,change,send,request,getSession,isLocked
   checkWrite();const s=await valid(),who=binding();if(isPreview()||!s.permissions.write)throw Error('Pracovní dobu zapisuje přihlášený pracovník.');
   const snapshot=await load(jobId,false);assertBinding(who);const ids=value.userIds||[s.user.id];if(!snapshot.canManage&&ids.some(id=>id!==s.user.id))throw Error('Pracovní dobu ostatních mění vedoucí nebo správce.');
   const selected=ids.map(id=>{const state=snapshot.states.find(v=>v.userId===id);if(!state)throw Error('Pracovník není v načteném týmu.');return state;});
-  if((await all()).some(r=>r.kind==='jobTimeAction'&&r.pending&&(r.blocked||r.conflict||r.expiresAt<=Date.now())&&r.payload.workers.some(w=>ids.includes(w.userId))))throw Error('Nejdříve vyřešte předchozí neodeslanou změnu tohoto pracovníka.');
+  if((await all()).some(r=>['jobTimeAction','jobTimeAttendanceAction'].includes(r.kind)&&r.pending&&(r.blocked||r.conflict||r.expiresAt<=Date.now())&&(r.kind==='jobTimeAttendanceAction'?ids.includes(r.ownerId):r.payload.workers.some(w=>ids.includes(w.userId)))))throw Error('Nejdříve vyřešte předchozí neodeslanou změnu tohoto pracovníka.');
   const target=value.targetJobId||jobId;
   if(value.action!=='stop'&&!value.allowSwitch&&selected.some(v=>v.active&&v.active.jobId!==target))throw Object.assign(Error('Ukončit předchozí otevřený interval a přejít na tuto zakázku?'),{code:'job_time_switch'});
   assertBinding(who);const operationId=crypto.randomUUID(),payload={operationId,action:value.action,at:value.at??Date.now(),workers:selected.map(s=>({userId:s.userId,version:s.version})),...(value.allowSwitch?{allowSwitch:true}:{}),...(value.targetJobId?{targetJobId:value.targetJobId}:{}),...(value.arrivalDate?{arrivalDate:value.arrivalDate,arrivalTime:value.arrivalTime}:{})},id=key(jobId,operationId);

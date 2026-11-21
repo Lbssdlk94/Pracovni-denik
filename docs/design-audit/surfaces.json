@@ -1,0 +1,4916 @@
+{
+  "baseline": "27f2165",
+  "protectionScope": "Only jointly redesigned native iOS screens; web redesign is allowed by the user clarification.",
+  "roles": [
+    "owner",
+    "administrator",
+    "admin",
+    "worker",
+    "reader",
+    "Super Admin (separate central API/TOTP)"
+  ],
+  "entries": [
+    {
+      "platform": "ios",
+      "id": "APIActionEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIActions.swift",
+      "line": 15,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobStatusEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIActions.swift",
+      "line": 34,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDepartureEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIActions.swift",
+      "line": 69,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIOutboxView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAdministration.swift",
+      "line": 5,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIRecordLinksView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAdministration.swift",
+      "line": 17,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDriveSettings",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAdministration.swift",
+      "line": 63,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolEmailView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAdministration.swift",
+      "line": 82,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDraftDestination",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAdministration.swift",
+      "line": 103,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceAction",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAttendance.swift",
+      "line": 42,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceLiveCard",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIAttendanceComponents.swift",
+      "line": 4,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceMetrics",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIAttendanceComponents.swift",
+      "line": 55,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceDayRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIAttendanceComponents.swift",
+      "line": 60,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendancePersonRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIAttendanceComponents.swift",
+      "line": 71,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceChart",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAttendanceComponents.swift",
+      "line": 76,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceMonthPicker",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAttendanceComponents.swift",
+      "line": 102,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceDayView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAttendanceDayView.swift",
+      "line": 4,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceRepairView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAttendanceDayView.swift",
+      "line": 70,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceCorrectionRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIAttendanceDayView.swift",
+      "line": 76,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceJobDaySummary",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIAttendanceDayView.swift",
+      "line": 89,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendancePreviewHost",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAttendancePreviews.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAttendanceView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIAttendanceScreen.swift",
+      "line": 4,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIBackupsView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIBackups.swift",
+      "line": 14,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APISubscriptionContent",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIBusinessModules.swift",
+      "line": 3,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APISubscriptionActivation",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIBusinessModules.swift",
+      "line": 32,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIVehiclesHome",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIBusinessModules.swift",
+      "line": 54,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDefectBadge",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIBusinessModules.swift",
+      "line": 71,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIHistoryVisit",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIBusinessModules.swift",
+      "line": 75,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APINoticeContent",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIBusinessModules.swift",
+      "line": 90,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "DiaryBadge",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIComponents.swift",
+      "line": 3,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "DiaryTile",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIComponents.swift",
+      "line": 11,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "NativeJobCard",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIComponents.swift",
+      "line": 23,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIConflictReview",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIConflictReview.swift",
+      "line": 3,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIOverview",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIDashboard.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDashboardFreshness",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIDashboardComponents.swift",
+      "line": 8,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDashboardStat",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIDashboardComponents.swift",
+      "line": 22,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDashboardStats",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIDashboardComponents.swift",
+      "line": 31,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDashboardPersonRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIDashboardComponents.swift",
+      "line": 56,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDashboardProjectRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIDashboardComponents.swift",
+      "line": 70,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDashboardVisitRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIDashboardComponents.swift",
+      "line": 82,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDashboardPreviewHost",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIDashboardPreviews.swift",
+      "line": 5,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDashboardCurrentJob",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIDashboardWork.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDashboardAttendanceCard",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIDashboardWork.swift",
+      "line": 47,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIFieldsView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIForms.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIFieldEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIForms.swift",
+      "line": 17,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIEntityEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIForms.swift",
+      "line": 78,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobsMap",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIGeometry.swift",
+      "line": 26,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIZonesView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIGeometry.swift",
+      "line": 56,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIShaftEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIGeometry.swift",
+      "line": 64,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIPlanView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIGeometry.swift",
+      "line": 101,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIBlowoutView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIGeometry.swift",
+      "line": 139,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobActionBar",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobActionBar.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobCompletionSummary",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobCompletion.swift",
+      "line": 18,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobCompletionCard",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobCompletion.swift",
+      "line": 33,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobCompletionCompactContent",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobCompletion.swift",
+      "line": 46,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobCompletionEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobCompletion.swift",
+      "line": 84,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobStatusBadge",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobDetailComponents.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobAvatarStack",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobDetailComponents.swift",
+      "line": 9,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobCompactHeader",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobDetailComponents.swift",
+      "line": 21,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobTimeOverview",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobDetailComponents.swift",
+      "line": 45,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobMetric",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobDetailComponents.swift",
+      "line": 86,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobWorkerRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobDetailComponents.swift",
+      "line": 97,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobDetailContent",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobDetailContent.swift",
+      "line": 4,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobSettingsRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobDetailContent.swift",
+      "line": 171,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobQuickLabel",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobDetailContent.swift",
+      "line": 185,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobSupplementary",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobDetailContent.swift",
+      "line": 190,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobRecordManagement",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobDetailContent.swift",
+      "line": 202,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobDetailPreviewHost",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobDetailPreviews.swift",
+      "line": 7,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobDiary",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobDiary.swift",
+      "line": 10,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobDiaryEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobDiary.swift",
+      "line": 69,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobListRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobListRow.swift",
+      "line": 3,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobRowWorkSheet",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIJobListRow.swift",
+      "line": 129,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIUpcomingVisits",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobListRow.swift",
+      "line": 163,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobTimeView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobTime.swift",
+      "line": 81,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIWorkTimeConflictView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobTime.swift",
+      "line": 199,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIWorkTimeActionEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobTime.swift",
+      "line": 244,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIWorkTimeProposalEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobTime.swift",
+      "line": 290,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIWorkTimeAdministration",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobTime.swift",
+      "line": 298,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobsFilterSheet",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobsFilters.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobsCalendarSheet",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobsFilters.swift",
+      "line": 60,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobsPreviewHost",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobsPreviews.swift",
+      "line": 4,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIJobsScreen",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIJobsScreen.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIMaterialReview",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIMaterialReview.swift",
+      "line": 22,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIMaterialPreferredEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIMaterialReview.swift",
+      "line": 38,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIAuthenticatedImage",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIMedia.swift",
+      "line": 18,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIQuickLook",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIMedia.swift",
+      "line": 43,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APICamera",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIMedia.swift",
+      "line": 50,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIFilesView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIMedia.swift",
+      "line": 82,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APISignature",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIMedia.swift",
+      "line": 170,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIPhotoGrid",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIPhotoGrid.swift",
+      "line": 3,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocol.swift",
+      "line": 4,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolCatalog",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolCatalog.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolMaterialTotals",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolCatalog.swift",
+      "line": 38,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolMaterialLine",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolCatalog.swift",
+      "line": 42,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolSectionLabel",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIProtocolComponents.swift",
+      "line": 4,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolWorkSection",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolComponents.swift",
+      "line": 8,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolTimeSection",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolComponents.swift",
+      "line": 20,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolPhotos",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolComponents.swift",
+      "line": 24,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolReview",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolComponents.swift",
+      "line": 38,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolShare",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolComponents.swift",
+      "line": 51,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIWorkChargesEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolPDF.swift",
+      "line": 5,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolPreviewHost",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolPreviews.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolSignatureScreen",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolSignature.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolTemplateManager",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolTemplates.swift",
+      "line": 4,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolTemplateEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIProtocolTemplates.swift",
+      "line": 12,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIResourceList",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "line": 3,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIRecordRow",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "line": 64,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIEntityDetail",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "line": 96,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIReadFields",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "line": 319,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIDataPairs",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "line": 334,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIRolePreviewPicker",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIRolePreview.swift",
+      "line": 7,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIRolePreviewBanner",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIRolePreview.swift",
+      "line": 15,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIRoot",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIRoot.swift",
+      "line": 4,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APILogin",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIRoot.swift",
+      "line": 57,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIHeader",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APIRoot.swift",
+      "line": 77,
+      "status": "locked",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "approved reference / shared protected component",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "APIMore",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIRoot.swift",
+      "line": 85,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APISessionsView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISecurity.swift",
+      "line": 3,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIPrivacyView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISecurity.swift",
+      "line": 13,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIProtocolPhotoPicker",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISecurity.swift",
+      "line": 21,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APISettings",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 3,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIConfigView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 45,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIPasswordView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 55,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APITeamContent",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 67,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APILocalAccountEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 80,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIHealthView",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 92,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIShaftCanvas",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIShaftCanvas.swift",
+      "line": 4,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIShaftContent",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIShaftCanvas.swift",
+      "line": 26,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APIPlanCanvas",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APIShaftCanvas.swift",
+      "line": 34,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "APISubscriptionPlanEditor",
+      "kind": "view",
+      "file": "apps/iphone/NativeAPI/APISubscriptionPlan.swift",
+      "line": 4,
+      "status": "partial",
+      "roles": "existing APIResource/module gates; see source",
+      "reason": "existing native component; review layout and remaining form/detail work",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "access-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/access-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createAccessUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "attendance-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/attendance-ui.js",
+      "status": "partial",
+      "forms": [
+        "attendance-correction-form",
+        "attendance-delete-form",
+        "attendance-review-form"
+      ],
+      "entryPoints": [
+        "createAttendanceUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "Web is permitted to change after user clarification; match native iOS reference.",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "blowout-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/blowout-ui.js",
+      "status": "partial",
+      "forms": [
+        "blowout-form"
+      ],
+      "entryPoints": [
+        "createBlowoutUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "customers-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/customers-ui.js",
+      "status": "partial",
+      "forms": [
+        "customer-attach-form",
+        "customer-form",
+        "customers-search",
+        "garden-customer-form"
+      ],
+      "entryPoints": [
+        "customerContactMarkup",
+        "createCustomersUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "Web is permitted to change after user clarification; match native iOS reference.",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "device-permissions-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/device-permissions-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createDevicePermissionsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "drive-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/drive-ui.js",
+      "status": "partial",
+      "forms": [
+        "drive-config-form"
+      ],
+      "entryPoints": [
+        "createDriveUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "email-settings-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/email-settings-ui.js",
+      "status": "partial",
+      "forms": [
+        "email-settings-form"
+      ],
+      "entryPoints": [
+        "createEmailSettingsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "garden-history-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/garden-history-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createGardenHistoryUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "garden-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/garden-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "gardenTabsMarkup"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "invoice-settings-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/invoice-settings-ui.js",
+      "status": "partial",
+      "forms": [
+        "invoice-company-form"
+      ],
+      "entryPoints": [
+        "createInvoiceSettingsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-backlog-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-backlog-ui.js",
+      "status": "partial",
+      "forms": [
+        "planning-reserve-form"
+      ],
+      "entryPoints": [
+        "backlogMarkup"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-completion-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-completion-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "jobCompletionMarkup",
+        "bindJobCompletion"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-diary-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-diary-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createJobDiaryUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-handoffs-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-handoffs-ui.js",
+      "status": "partial",
+      "forms": [
+        "handoff-form"
+      ],
+      "entryPoints": [
+        "handoffSummary",
+        "createJobHandoffsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-map-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-map-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createJobMapUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-photos-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-photos-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createJobPhotosUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-table-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-table-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "sortJobTable",
+        "jobTableMarkup"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-time-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-time-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createJobTimeUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-timeline-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-timeline-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "jobTimelineMarkup",
+        "bindTimelineInfo"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-week-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/job-week-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "jobWeekDays",
+        "jobWeekMarkup"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "jobs-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/jobs-ui.js",
+      "status": "partial",
+      "forms": [
+        "job-departure-form",
+        "job-edit-form",
+        "job-status-form",
+        "jobs-filters"
+      ],
+      "entryPoints": [
+        "createJobsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "Web is permitted to change after user clarification; match native iOS reference.",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "local-auth-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/local-auth-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createPasswordUI",
+        "createAccountUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "materials-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/materials-ui.js",
+      "status": "partial",
+      "forms": [
+        "material-delete-form",
+        "material-edit-form"
+      ],
+      "entryPoints": [
+        "createMaterialsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "nearby-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/nearby-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createNearbyUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "notifications-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/notifications-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createNotificationsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "operations-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/operations-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createOperationsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "overview-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/overview-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "overviewVisits",
+        "createOverviewUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "Web is permitted to change after user clarification; match native iOS reference.",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "plan-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/plan-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createPlanUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "position-map-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/position-map-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "openPositionMap"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "protocol-email-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/protocol-email-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createProtocolEmailUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "record-links-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/record-links-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createRecordLinksUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "reminder-settings-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/reminder-settings-ui.js",
+      "status": "partial",
+      "forms": [
+        "material-reminder-form"
+      ],
+      "entryPoints": [
+        "createReminderSettingsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "service-work-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/service-work-ui.js",
+      "status": "partial",
+      "forms": [
+        "service-work-form"
+      ],
+      "entryPoints": [
+        "createServiceWorkUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "settings-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/settings-ui.js",
+      "status": "partial",
+      "forms": [
+        "features-form"
+      ],
+      "entryPoints": [
+        "settingsPage",
+        "bindSettings"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "subscriptions-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/subscriptions-ui.js",
+      "status": "partial",
+      "forms": [
+        "subscription-contract",
+        "subscription-filters",
+        "tariff-form"
+      ],
+      "entryPoints": [
+        "createSubscriptionsUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "vehicles-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/vehicles-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createVehiclesUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "volume-test-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/volume-test-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "selectVolumeIds",
+        "createVolumeJob",
+        "runVolumeImport",
+        "createVolumeTestUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "work-charges-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/work-charges-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "createWorkChargesUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "workspace-recovery-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/workspace-recovery-ui.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "workspaceRecoveryArchive",
+        "readWorkspaceRecoveryArchive",
+        "createWorkspaceRecoveryUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "workspace-ui",
+      "kind": "module",
+      "file": "apps/work-diary/web/workspace-ui.js",
+      "status": "partial",
+      "forms": [
+        "workspace-membership-form"
+      ],
+      "entryPoints": [
+        "workspaceBadge",
+        "workspaceDisciplineField",
+        "workspaceFilterMarkup",
+        "createWorkspaceUI"
+      ],
+      "roles": "existing server permission checks, module gates and tenant context",
+      "reason": "existing business logic, scoped UI modernization only",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "admin",
+      "kind": "module",
+      "file": "apps/super-admin/web/admin.js",
+      "status": "partial",
+      "forms": [
+        "company-filters",
+        "mfa-form"
+      ],
+      "entryPoints": [
+        "api",
+        "toast",
+        "moduleChecks",
+        "pruneDependencies",
+        "modal",
+        "closeModal",
+        "shell",
+        "navigate",
+        "load",
+        "render",
+        "bind",
+        "catalogEditor",
+        "companyEditor",
+        "moduleEnableEditor",
+        "companyDetail",
+        "copy",
+        "connectionEditor",
+        "start",
+        "renderAuth",
+        "rolloutEditor"
+      ],
+      "roles": "Super Admin / central authorization and TOTP, separate from tenant roles",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "overview",
+      "kind": "module",
+      "file": "apps/super-admin/web/overview.js",
+      "status": "partial",
+      "forms": [],
+      "entryPoints": [
+        "filterCompanies",
+        "overviewHTML",
+        "moduleMatrix"
+      ],
+      "roles": "Super Admin / central authorization and TOTP, separate from tenant roles",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "jobs:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "locked",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "jobs:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "locked",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "jobs:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "customers:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "locked",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "locked"
+    },
+    {
+      "platform": "ios",
+      "id": "customers:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "customers:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "gardens:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "gardens:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "gardens:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "defects:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "defects:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "defects:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "materials:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "materials:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "materials:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "categories:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "categories:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "categories:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "vehicles:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "vehicles:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "vehicles:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "entries:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "entries:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "entries:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "drivers:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "drivers:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "tariffs:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "tariffs:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "tariffs:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "subscriptions:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "subscriptions:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "subscriptions:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "services:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "services:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "services:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "history:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "history:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "shafts:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "shafts:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "shafts:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "notifications:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "notifications:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "team:list",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "team:detail",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "team:create/edit",
+      "kind": "resource route",
+      "file": "apps/iphone/NativeAPI/APISchema.swift",
+      "status": "partial",
+      "roles": "APIResource.editable(store), entity.feature, managerOnly; API remains authoritative",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "home",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "gardenOverview",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "gardenFolders",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "gardenHome",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "editGarden",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "editService",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "selectPositionOnMap",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "manualPosition",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "zonesPage",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "backupSettings",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "editor",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "editValveLabel",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "editZone",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "teamPage",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "presentInvite",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "showLogin",
+      "kind": "page or dialog",
+      "file": "apps/work-diary/web/app.js",
+      "status": "partial",
+      "roles": "existing feature and role gates",
+      "initialStatus": "partial"
+    },
+    {
+      "platform": "ios",
+      "id": "Informovat zákazníka",
+      "kind": "modal / confirmation",
+      "file": "apps/iphone/NativeAPI/APIActions.swift",
+      "line": 100,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$report){APIProtocolEditor(store:store,jobID:job.id,completing:true)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIActions.swift",
+      "line": 69,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Zrušit odesílání? Uložený koncept zůstane zachovaný.",
+      "kind": "modal / confirmation",
+      "file": "apps/iphone/NativeAPI/APIAdministration.swift",
+      "line": 14,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Odpojit aktuální Google Disk? Soubory na Disku zůstanou zachované.",
+      "kind": "modal / confirmation",
+      "file": "apps/iphone/NativeAPI/APIAdministration.swift",
+      "line": 78,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Odeslat protokol na ",
+      "kind": "modal / confirmation",
+      "file": "apps/iphone/NativeAPI/APIAdministration.swift",
+      "line": 96,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$file){FileShare(url:$0.url)}}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIAdministration.swift",
+      "line": 14,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$share){APIQuickLook(url:$0.url)}}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIAdministration.swift",
+      "line": 96,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Porovnat a vyřešit konflikt",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIAdministration.swift",
+      "line": 11,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Otevřít koncept",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIAdministration.swift",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Zkontrolovat a navrhnout opravu",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIAttendanceComponents.swift",
+      "line": 25,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$localAction){APIAttendanceAction(store:store,action:$0)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIAttendanceDayView.swift",
+      "line": 59,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$calendar){APIAttendanceMonthPicker(month:$selectedMonth)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIAttendanceScreen.swift",
+      "line": 67,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$action){APIAttendanceAction(store:store,action:$0)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIAttendanceScreen.swift",
+      "line": 68,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "\\(store.outbox.count) změn čeká na synchronizaci",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIAttendanceScreen.swift",
+      "line": 80,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Obnovit do prázdné instalace",
+      "kind": "modal / confirmation",
+      "file": "apps/iphone/NativeAPI/APIBackups.swift",
+      "line": 30,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$share){FileShare(url:$0.url)}.alert(\"Obnovit do prázdné instalace\",isPresented:$restorePrompt){TextField(\"Napište OBNOVIT\",text:$confi",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIBackups.swift",
+      "line": 30,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$contract){r in APISubscriptionActivation(store:store,initial:r.value)}.sheet(item:$visit){request in APISubscriptionPlanEditor(store:s",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIBusinessModules.swift",
+      "line": 29,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$file){item in APIQuickLook(url:item.url).onDisappear{try? FileManager.default.removeItem(at:item.url.deletingLastPathComponent())}}}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIBusinessModules.swift",
+      "line": 88,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Správa vozidel",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIBusinessModules.swift",
+      "line": 66,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Řidiči",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIBusinessModules.swift",
+      "line": 66,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Původní zakázka a protokol",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIBusinessModules.swift",
+      "line": 86,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Otevřít související zakázku",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIBusinessModules.swift",
+      "line": 94,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Nahradit odmítnutý zápis zkontrolovanou změnou?",
+      "kind": "modal / confirmation",
+      "file": "apps/iphone/NativeAPI/APIConflictReview.swift",
+      "line": 14,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Všichni pracovníci",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIDashboard.swift",
+      "line": 68,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Všechny probíhající zakázky",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIDashboard.swift",
+      "line": 78,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Všechny dnešní návštěvy",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIDashboard.swift",
+      "line": 118,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$timeAction){item in APIWorkTimeActionEditor(store:store,job:job,snapshot:snapshot,kind:item.kind,selected:[store.userID])}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIDashboardWork.swift",
+      "line": 96,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Rozepsané údaje",
+      "kind": "modal / confirmation",
+      "file": "apps/iphone/NativeAPI/APIForms.swift",
+      "line": 122,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Nechat rozepsanou šachtu?",
+      "kind": "modal / confirmation",
+      "file": "apps/iphone/NativeAPI/APIGeometry.swift",
+      "line": 92,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Zahodit pouze místní rozpracované umístění značek?",
+      "kind": "modal / confirmation",
+      "file": "apps/iphone/NativeAPI/APIGeometry.swift",
+      "line": 133,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$selected){group in NavigationStack{List(group.points){point in VStack(alignment:.leading,spacing:4){APIJobListRow(store:store,job:poin",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIGeometry.swift",
+      "line": 51,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$file){APIQuickLook(url:$0.url)}.task{await load(restore:true)}.task(id:store.scope+value[\"plan\"][\"version\"].string){let expected=store",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIGeometry.swift",
+      "line": 133,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$departure){APIDepartureEditor(store:store,job:job)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobActionBar.swift",
+      "line": 31,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$statusRequest){request in APIJobStatusEditor(store:store,job:job,initialStatus:request.targetStatus)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobActionBar.swift",
+      "line": 32,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$timeAction){request in APIWorkTimeActionEditor(store:store,job:job,snapshot:snapshot,kind:request.kind,selected:[store.userID])}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobActionBar.swift",
+      "line": 33,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$report){APIProtocolEditor(store:store,jobID:job.id)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobActionBar.swift",
+      "line": 34,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$editing){APIJobCompletionEditor(store:store,job:current,isTarget:false)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobCompletion.swift",
+      "line": 41,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$target){APIJobCompletionEditor(store:store,job:current,isTarget:true)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobCompletion.swift",
+      "line": 42,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$report){APIProtocolEditor(store:store,jobID:job.id)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobDetailContent.swift",
+      "line": 32,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Karta zákazníka",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIJobDetailContent.swift",
+      "line": 126,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Všechny závady zahrady",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIJobDetailContent.swift",
+      "line": 140,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Smazat denní zápis? Fotografie a servisní protokol zůstanou zachované.",
+      "kind": "modal / confirmation",
+      "file": "apps/iphone/NativeAPI/APIJobDiary.swift",
+      "line": 57,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$editorOpen){APIJobDiaryEditor(store:store,job:job,initial:editing ?? .null)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobDiary.swift",
+      "line": 56,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$statusRequest){request in APIJobStatusEditor(store:store,job:current,initialStatus:request.targetStatus)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobListRow.swift",
+      "line": 44,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$departure){APIDepartureEditor(store:store,job:current)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobListRow.swift",
+      "line": 45,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$work){request in APIJobRowWorkSheet(store:store,job:current,kind:request.kind)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobListRow.swift",
+      "line": 46,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$report){APIProtocolEditor(store:store,jobID:job.id)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobListRow.swift",
+      "line": 47,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$conflict){op in APIWorkTimeConflictView(store:store,job:job,operation:op)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobTime.swift",
+      "line": 183,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$action){request in APIWorkTimeActionEditor(store:store,job:job,snapshot:snapshot,kind:request.kind,selected:selection)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobTime.swift",
+      "line": 184,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$proposal){request in APIWorkTimeProposalEditor(store:store,job:job,snapshot:snapshot,interval:request.interval)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobTime.swift",
+      "line": 185,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$costs){APIWorkTimeAdministration(store:store,job:job,snapshot:snapshot,mode:\"rates\")}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobTime.swift",
+      "line": 186,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$lead){APIWorkTimeAdministration(store:store,job:job,snapshot:snapshot,mode:\"lead\")}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobTime.swift",
+      "line": 187,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$add){APIWorkTimeAdministration(store:store,job:job,snapshot:snapshot,mode:\"assign\")}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobTime.swift",
+      "line": 188,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$filters){APIJobsFilterSheet(store:store,original:applied,rows:model.rows){value in applied=value;if !value.worker.isEmpty{mine=",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobsScreen.swift",
+      "line": 54,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$calendar){APIJobsCalendarSheet(filters:applied){from,to in applied.from=from;applied.to=to;applied.dateRange=true;period = .all",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobsScreen.swift",
+      "line": 55,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$map){NavigationStack{APIJobsMap(store:store,jobs:visibleJobs)}}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIJobsScreen.swift",
+      "line": 56,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Potvrzujete skutečnou duplicitu?",
+      "kind": "modal / confirmation",
+      "file": "apps/iphone/NativeAPI/APIMaterialReview.swift",
+      "line": 51,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$selection){group in APIMaterialPreferredEditor(store:store,rows:group.rows,categories:categories)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIMaterialReview.swift",
+      "line": 34,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Otevřít a doplnit variantu",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIMaterialReview.swift",
+      "line": 48,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$camera){APICamera{bytes in Task{await upload(bytes,type:\"image/jpeg\",name:\"Fotografie.jpg\")}}}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIMedia.swift",
+      "line": 136,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$photoAction){APIActionEditor(store:store,action:$0)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIMedia.swift",
+      "line": 138,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$preview) { file in",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIPhotoGrid.swift",
+      "line": 25,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$catalog){APIProtocolCatalog(store:store,items:model.materials,categories:model.categories,lines:field(\"materialItems\"))}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIProtocol.swift",
+      "line": 50,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$signature){APIProtocolSignatureScreen(customer:protocolJob[\"customerName\"].string,initial:model.report[\"protocolDetails\"][\"sign",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIProtocol.swift",
+      "line": 51,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$templates,onDismiss:{Task{await model.refreshAuxiliary(store:store)}}){APIProtocolTemplateManager(store:store)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIProtocol.swift",
+      "line": 52,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$review){APIProtocolReview(store:store,model:model,completing:completing,edit:{id in review=false;let target=id==\"content\" ? \"wo",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIProtocol.swift",
+      "line": 53,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$preview){APIQuickLook(url:$0.url)}.sheet(item:$share){APIProtocolShare(url:$0.url)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIProtocol.swift",
+      "line": 54,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$email,onDismiss:{Task{await model.refreshAuxiliary(store:store)}}){NavigationStack{APIProtocolEmailView(store:store,jobID:jobID",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIProtocol.swift",
+      "line": 55,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$defectRoute){APIEntityEditor(store:store,resource:$0.resource,original:$0.value,isNew:$0.isNew)}.editLease(store)",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIProtocol.swift",
+      "line": 56,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Otevřít čekající změny",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIProtocol.swift",
+      "line": 36,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$selection){selected in APIProtocolTemplateEditor(initial:selected.value){template in var rows=data[\"templates\"].array;rows.removeAll{$",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIProtocolTemplates.swift",
+      "line": 10,
+      "initialStatus": "locked",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Opravná zakázka již existuje. Přesto založit další?",
+      "kind": "modal / confirmation",
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "line": 133,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Opravdu smazat tento záznam?",
+      "kind": "modal / confirmation",
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "line": 134,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$statusRequest){request in APIJobStatusEditor(store:store,job:record,initialStatus:request.targetStatus)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "line": 131,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$action) { APIActionEditor(store:store,action:$0) }",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "line": 132,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Správa kategorií",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "line": 26,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Kontrola podobných položek",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "line": 26,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Správa tarifů",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "line": 27,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Otevřít zákazníka",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "line": 258,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Původní zakázka",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APIResourceViews.swift",
+      "line": 285,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Obnovení hesla",
+      "kind": "modal / confirmation",
+      "file": "apps/iphone/NativeAPI/APIRoot.swift",
+      "line": 86,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$store.route){route in",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIRoot.swift",
+      "line": 28,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$inbox){NavigationStack{APIResourceList(store:store,resource:APIResource(entity:.notifications))}}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIRoot.swift",
+      "line": 36,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$followUp,onDismiss:{watch.clearFollowUp()}){request in Group{if request.action==\"protocol\"{APIProtocolEditor(store:store,jobID:request",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIRoot.swift",
+      "line": 37,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$outbox){NavigationStack{APIOutboxView(store:store)}}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIRoot.swift",
+      "line": 38,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$push.showSettings){NativePushSettings(push:push)}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIRoot.swift",
+      "line": 39,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$watch.showSettings){WatchPhoneSettings()}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIRoot.swift",
+      "line": 40,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$selecting) {",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APISecondaryDesign.swift",
+      "line": 67,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "APISecondaryFormSections",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APISecondaryDesign.swift",
+      "line": 31,
+      "initialStatus": "new",
+      "roles": "Přebírá oprávnění z existujícího formuláře."
+    },
+    {
+      "platform": "ios",
+      "id": "APISecondaryField",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APISecondaryDesign.swift",
+      "line": 46,
+      "initialStatus": "new",
+      "roles": "Přebírá oprávnění z existujícího formuláře."
+    },
+    {
+      "platform": "ios",
+      "id": "APISecondaryChoiceSheet",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APISecondaryDesign.swift",
+      "line": 72,
+      "initialStatus": "new",
+      "roles": "Přebírá oprávnění z existujícího formuláře."
+    },
+    {
+      "platform": "ios",
+      "id": "APISecondarySection",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APISecondaryDesign.swift",
+      "line": 95,
+      "initialStatus": "new",
+      "roles": "Přebírá oprávnění z existujícího formuláře."
+    },
+    {
+      "platform": "ios",
+      "id": "APISecondaryReadFields",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APISecondaryDesign.swift",
+      "line": 107,
+      "initialStatus": "new",
+      "roles": "Přebírá oprávnění z existujícího formuláře."
+    },
+    {
+      "platform": "ios",
+      "id": "APIAppAppearance",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APISecondaryDesign.swift",
+      "line": 136,
+      "initialStatus": "new",
+      "roles": "Přebírá oprávnění z existujícího formuláře."
+    },
+    {
+      "platform": "ios",
+      "id": "APISecondaryFormPreview",
+      "kind": "component",
+      "file": "apps/iphone/NativeAPI/APISecondaryPreviews.swift",
+      "line": 3,
+      "initialStatus": "new",
+      "roles": "Přebírá oprávnění z existujícího formuláře."
+    },
+    {
+      "platform": "ios",
+      "id": "Odhlásit vybrané zařízení?",
+      "kind": "modal / confirmation",
+      "file": "apps/iphone/NativeAPI/APISecurity.swift",
+      "line": 10,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Potvrdit dobu uchování GPS?",
+      "kind": "modal / confirmation",
+      "file": "apps/iphone/NativeAPI/APISecurity.swift",
+      "line": 19,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "isPresented:$reset){APILocalAccountEditor(store:store,member:member)}}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 84,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Výběr oznámení",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 15,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Moje přihlášení",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 17,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Přihlášená zařízení",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 17,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Firma a fakturace",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 20,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Uchování GPS",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 21,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Název firmy",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 21,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Sazby práce a cesty",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 21,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Připomínky materiálu",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 22,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Rezerva mezi návštěvami",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 23,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Zóny závlahy",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 24,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Google Disk",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 27,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Resend – odesílání e-mailů",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 28,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Úplné serverové zálohy",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 30,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Kontrola vazeb",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 30,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "Technický stav",
+      "kind": "navigation",
+      "file": "apps/iphone/NativeAPI/APISettings.swift",
+      "line": 30,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "ios",
+      "id": "item:$file){FileShare(url:$0.url)}}",
+      "kind": "sheet destination",
+      "file": "apps/iphone/NativeAPI/APIShaftCanvas.swift",
+      "line": 31,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "garden-delete-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/app.js",
+      "line": 140,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "garden-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/app.js",
+      "line": 157,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "service-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/app.js",
+      "line": 188,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "position-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/app.js",
+      "line": 203,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "valve-label-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/app.js",
+      "line": 244,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "zone-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/app.js",
+      "line": 266,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "invite-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/app.js",
+      "line": 414,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Přidat šachtu",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/app.js",
+      "line": 135,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Smazat zahradu",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/app.js",
+      "line": 140,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Čekající změny",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/app.js",
+      "line": 146,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Souřadnice šachty",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/app.js",
+      "line": 203,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Pozvánka je připravená",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/app.js",
+      "line": 419,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Pozvánka pro kolegu",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/app.js",
+      "line": 424,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "settings",
+      "kind": "navigation",
+      "file": "apps/work-diary/web/app.js",
+      "line": 122,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "home",
+      "kind": "navigation",
+      "file": "apps/work-diary/web/app.js",
+      "line": 444,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "attendance-correction-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/attendance-ui.js",
+      "line": 57,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "attendance-delete-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/attendance-ui.js",
+      "line": 60,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "attendance-review-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/attendance-ui.js",
+      "line": 61,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Požádat o smazání docházky",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/attendance-ui.js",
+      "line": 60,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "blowout-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/blowout-ui.js",
+      "line": 38,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Pokyny k vyfukování",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/blowout-ui.js",
+      "line": 38,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "customers-search",
+      "kind": "form",
+      "file": "apps/work-diary/web/customers-ui.js",
+      "line": 19,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "customer-attach-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/customers-ui.js",
+      "line": 28,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "garden-customer-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/customers-ui.js",
+      "line": 29,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "customer-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/customers-ui.js",
+      "line": 34,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Zákazník",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/customers-ui.js",
+      "line": 26,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Připojit zahradu",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/customers-ui.js",
+      "line": 28,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Zákazník zahrady",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/customers-ui.js",
+      "line": 29,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "drive-config-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/drive-ui.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "email-settings-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/email-settings-ui.js",
+      "line": 7,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "d",
+      "kind": "dialog factory",
+      "file": "apps/work-diary/web/garden-history-ui.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · garden-history-ui.js:47",
+      "kind": "form",
+      "file": "apps/work-diary/web/garden-history-ui.js",
+      "line": 47,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "invoice-company-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/invoice-settings-ui.js",
+      "line": 6,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "planning-reserve-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/job-backlog-ui.js",
+      "line": 5,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · job-completion-ui.js:9",
+      "kind": "form",
+      "file": "apps/work-diary/web/job-completion-ui.js",
+      "line": 9,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · job-completion-ui.js:9",
+      "kind": "form",
+      "file": "apps/work-diary/web/job-completion-ui.js",
+      "line": 9,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · job-diary-ui.js:43",
+      "kind": "form",
+      "file": "apps/work-diary/web/job-diary-ui.js",
+      "line": 43,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "handoff-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/job-handoffs-ui.js",
+      "line": 4,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Předání zakázky",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/job-handoffs-ui.js",
+      "line": 4,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "viewer",
+      "kind": "dialog factory",
+      "file": "apps/work-diary/web/job-photos-ui.js",
+      "line": 54,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "planner-confirm-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/job-planner-actions.js",
+      "line": 11,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "planner-single-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/job-planner-actions.js",
+      "line": 17,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "planner-bulk-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/job-planner-actions.js",
+      "line": 21,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Potvrdit změnu plánu",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/job-planner-actions.js",
+      "line": 11,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Naplánovat zakázku",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/job-planner-actions.js",
+      "line": 17,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Hromadně upravit plán",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/job-planner-actions.js",
+      "line": 21,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-side-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/job-side-editor.js",
+      "line": 7,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · job-time-ui.js:12",
+      "kind": "form",
+      "file": "apps/work-diary/web/job-time-ui.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · job-time-ui.js:13",
+      "kind": "form",
+      "file": "apps/work-diary/web/job-time-ui.js",
+      "line": 13,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · job-time-ui.js:19",
+      "kind": "form",
+      "file": "apps/work-diary/web/job-time-ui.js",
+      "line": 19,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · job-time-ui.js:23",
+      "kind": "form",
+      "file": "apps/work-diary/web/job-time-ui.js",
+      "line": 23,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · job-time-ui.js:23",
+      "kind": "form",
+      "file": "apps/work-diary/web/job-time-ui.js",
+      "line": 23,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "jobs-filters",
+      "kind": "form",
+      "file": "apps/work-diary/web/jobs-ui.js",
+      "line": 79,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-status-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/jobs-ui.js",
+      "line": 146,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-departure-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/jobs-ui.js",
+      "line": 161,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "job-edit-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/jobs-ui.js",
+      "line": 264,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Jsem na cestě",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/jobs-ui.js",
+      "line": 161,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Odjezd byl zaznamenán",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/jobs-ui.js",
+      "line": 171,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Detail zakázky",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/jobs-ui.js",
+      "line": 201,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Moje přihlášení",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/local-auth-ui.js",
+      "line": 38,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Způsob přihlašování firmy",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/local-auth-ui.js",
+      "line": 43,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · local-auth-ui.js:9",
+      "kind": "form",
+      "file": "apps/work-diary/web/local-auth-ui.js",
+      "line": 9,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · local-auth-ui.js:15",
+      "kind": "form",
+      "file": "apps/work-diary/web/local-auth-ui.js",
+      "line": 15,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · local-auth-ui.js:33",
+      "kind": "form",
+      "file": "apps/work-diary/web/local-auth-ui.js",
+      "line": 33,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · local-auth-ui.js:38",
+      "kind": "form",
+      "file": "apps/work-diary/web/local-auth-ui.js",
+      "line": 38,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · local-auth-ui.js:43",
+      "kind": "form",
+      "file": "apps/work-diary/web/local-auth-ui.js",
+      "line": 43,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "chooser",
+      "kind": "dialog factory",
+      "file": "apps/work-diary/web/material-picker.js",
+      "line": 27,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "material-delete-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/materials-ui.js",
+      "line": 26,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "material-edit-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/materials-ui.js",
+      "line": 36,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Smazat materiál",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/materials-ui.js",
+      "line": 26,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Poloha adresy",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/nearby-ui.js",
+      "line": 23,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "panel",
+      "kind": "dialog factory",
+      "file": "apps/work-diary/web/notifications-ui.js",
+      "line": 3,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · notifications-ui.js:29",
+      "kind": "form",
+      "file": "apps/work-diary/web/notifications-ui.js",
+      "line": 29,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · operations-ui.js:10",
+      "kind": "form",
+      "file": "apps/work-diary/web/operations-ui.js",
+      "line": 10,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · operations-ui.js:10",
+      "kind": "form",
+      "file": "apps/work-diary/web/operations-ui.js",
+      "line": 10,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Šachta v plánu",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/plan-ui.js",
+      "line": 24,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Vyberte šachtu",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/plan-ui.js",
+      "line": 31,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Umístit šachtu na mapu",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/position-map-ui.js",
+      "line": 4,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "dialog",
+      "kind": "dialog factory",
+      "file": "apps/work-diary/web/protocol-form-ui.js",
+      "line": 56,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "protocol-template-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/protocol-templates-ui.js",
+      "line": 23,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Šablony protokolů",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/protocol-templates-ui.js",
+      "line": 15,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Upravit šablonu",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/protocol-templates-ui.js",
+      "line": 23,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Kontrola propojení",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/record-links-ui.js",
+      "line": 5,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "material-reminder-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/reminder-settings-ui.js",
+      "line": 11,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "service-work-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/service-work-ui.js",
+      "line": 34,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Čekající servisní zápis",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/service-work-ui.js",
+      "line": 30,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Historie stornované návštěvy",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/service-work-ui.js",
+      "line": 31,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Servisní protokol",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/service-work-ui.js",
+      "line": 34,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Servisní protokol · PDF",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/service-work-ui.js",
+      "line": 67,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "chooser",
+      "kind": "dialog factory",
+      "file": "apps/work-diary/web/service-work-ui.js",
+      "line": 50,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "root",
+      "kind": "dialog factory",
+      "file": "apps/work-diary/web/service-work-ui.js",
+      "line": 66,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "features-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/settings-ui.js",
+      "line": 6,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "subscription-filters",
+      "kind": "form",
+      "file": "apps/work-diary/web/subscriptions-ui.js",
+      "line": 20,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "tariff-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/subscriptions-ui.js",
+      "line": 36,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "subscription-contract",
+      "kind": "form",
+      "file": "apps/work-diary/web/subscriptions-ui.js",
+      "line": 46,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Servisní předplatné",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/subscriptions-ui.js",
+      "line": 55,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Platba předplatného",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/subscriptions-ui.js",
+      "line": 67,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Naplánované návštěvy",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/subscriptions-ui.js",
+      "line": 70,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Nová servisní návštěva",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/subscriptions-ui.js",
+      "line": 76,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · subscriptions-ui.js:67",
+      "kind": "form",
+      "file": "apps/work-diary/web/subscriptions-ui.js",
+      "line": 67,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · subscriptions-ui.js:70",
+      "kind": "form",
+      "file": "apps/work-diary/web/subscriptions-ui.js",
+      "line": 70,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · subscriptions-ui.js:76",
+      "kind": "form",
+      "file": "apps/work-diary/web/subscriptions-ui.js",
+      "line": 76,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Fotografie · ",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/vehicles-ui.js",
+      "line": 57,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Řidiči z firemního týmu",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/vehicles-ui.js",
+      "line": 72,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Účtenka",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/vehicles-ui.js",
+      "line": 76,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · vehicles-ui.js:15",
+      "kind": "form",
+      "file": "apps/work-diary/web/vehicles-ui.js",
+      "line": 15,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · vehicles-ui.js:35",
+      "kind": "form",
+      "file": "apps/work-diary/web/vehicles-ui.js",
+      "line": 35,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "formulář bez pevného ID · vehicles-ui.js:58",
+      "kind": "form",
+      "file": "apps/work-diary/web/vehicles-ui.js",
+      "line": 58,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Obnova neodeslané práce",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/workspace-recovery-ui.js",
+      "line": 21,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Obsah neodeslaného zápisu",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/workspace-recovery-ui.js",
+      "line": 27,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "workspace-membership-form",
+      "kind": "form",
+      "file": "apps/work-diary/web/workspace-ui.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "mobile-web / desktop-web",
+      "id": "Příslušnost k oborům",
+      "kind": "dialog",
+      "file": "apps/work-diary/web/workspace-ui.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "company-filters",
+      "kind": "form",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 32,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "mfa-form",
+      "kind": "form",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 68,
+      "initialStatus": "partial",
+      "roles": "Oprávnění a licence rodičovské obrazovky; zápisy dále kontroluje společné API."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "formulář bez pevného ID · admin.js:53",
+      "kind": "form",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 53,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "formulář bez pevného ID · admin.js:54",
+      "kind": "form",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 54,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "formulář bez pevného ID · admin.js:59",
+      "kind": "form",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 59,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "formulář bez pevného ID · admin.js:66",
+      "kind": "form",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 66,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "formulář bez pevného ID · admin.js:72",
+      "kind": "form",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 72,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "dashboard · Přehled",
+      "kind": "navigation / page",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Pouze centrální provozovatel po samostatném přihlášení a TOTP."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "companies · Firmy",
+      "kind": "navigation / page",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Pouze centrální provozovatel po samostatném přihlášení a TOTP."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "professions · Profese",
+      "kind": "navigation / page",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Pouze centrální provozovatel po samostatném přihlášení a TOTP."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "modules · Moduly",
+      "kind": "navigation / page",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Pouze centrální provozovatel po samostatném přihlášení a TOTP."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "plans · Tarify",
+      "kind": "navigation / page",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Pouze centrální provozovatel po samostatném přihlášení a TOTP."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "operations · Technický stav",
+      "kind": "navigation / page",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Pouze centrální provozovatel po samostatném přihlášení a TOTP."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "licenses · Licence",
+      "kind": "navigation / page",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Pouze centrální provozovatel po samostatném přihlášení a TOTP."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "rollouts · Zpřístupnění funkcí",
+      "kind": "navigation / page",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Pouze centrální provozovatel po samostatném přihlášení a TOTP."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "audit · Audit",
+      "kind": "navigation / page",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Pouze centrální provozovatel po samostatném přihlášení a TOTP."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "account · Můj účet",
+      "kind": "navigation / page",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Pouze centrální provozovatel po samostatném přihlášení a TOTP."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "active · Aktivní",
+      "kind": "navigation / page",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Pouze centrální provozovatel po samostatném přihlášení a TOTP."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "trial · Testovací",
+      "kind": "navigation / page",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Pouze centrální provozovatel po samostatném přihlášení a TOTP."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "suspended · Pozastavená",
+      "kind": "navigation / page",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Pouze centrální provozovatel po samostatném přihlášení a TOTP."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "awaiting_host · Čeká na hosting",
+      "kind": "navigation / page",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Pouze centrální provozovatel po samostatném přihlášení a TOTP."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "connecting · Čeká na ověření",
+      "kind": "navigation / page",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Pouze centrální provozovatel po samostatném přihlášení a TOTP."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "ready · Připravená",
+      "kind": "navigation / page",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Pouze centrální provozovatel po samostatném přihlášení a TOTP."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "queued · Ve frontě",
+      "kind": "navigation / page",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Pouze centrální provozovatel po samostatném přihlášení a TOTP."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "running · Zřizuje se",
+      "kind": "navigation / page",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Pouze centrální provozovatel po samostatném přihlášení a TOTP."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "failed · Chyba",
+      "kind": "navigation / page",
+      "file": "apps/super-admin/web/admin.js",
+      "line": 12,
+      "initialStatus": "partial",
+      "roles": "Pouze centrální provozovatel po samostatném přihlášení a TOTP."
+    },
+    {
+      "platform": "super-admin-web",
+      "id": "formulář bez pevného ID · overview.js:11",
+      "kind": "form",
+      "file": "apps/super-admin/web/overview.js",
+      "line": 11,
+      "initialStatus": "partial",
+      "roles": "Přebírá původní oprávnění a obsluhu formuláře."
+    }
+  ]
+}

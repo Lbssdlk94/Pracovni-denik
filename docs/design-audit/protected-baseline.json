@@ -23,6 +23,7 @@
     "apps/iphone/NativeAPI/APIJobDetailContent.swift": "e7d7f86568b050f2b2ff336f5e3e35b3815f6c63f521e20fead86f1beccd7368",
     "apps/iphone/NativeAPI/APIJobDetailPresentation.swift": "f9e1fdff490542205d16a8da4fe2d9d9d85714cfc4e775f3032d0eb6b60d7d95",
     "apps/iphone/NativeAPI/APIJobDetailPreviews.swift": "139665206d8e084f23258fa242736ec548cf08d923a4c6a1a01220329e55642d",
+    "apps/iphone/NativeAPI/APIJobListRow.swift": "11ea76cea2c0776e7e095945bf0b6853a4b71a8b28c7a8ad3d50e320ba96b273",
     "apps/iphone/NativeAPI/APIJobTime.swift": "b46180b407bb15adc35adb171bba60db8603b7367473df0b447103a66da9aee7",
     "apps/iphone/NativeAPI/APIJobsFilters.swift": "f5764f237aa25c23ae49c5357d4549da02c51b3fc6e900e891a86207cbfbd1e6",
     "apps/iphone/NativeAPI/APIJobsFixture.swift": "74f41307890c677072a070d5ce0f037b547717132d40875dcb7951d5e6278eb8",
@@ -39,10 +40,7 @@
     "apps/iphone/NativeAPI/APIProtocolPDF.swift": "445bea8458138025f7b9195d25dee99b6e9e477ee25866449d03a74506b04d6b",
     "apps/iphone/NativeAPI/APIProtocolPreviews.swift": "135ab8d8359b6cf8c43258ead791f3619541fb7ae8948cc2544a981b61c6e40e",
     "apps/iphone/NativeAPI/APIProtocolSignature.swift": "79cfc1d9e9ddeee9c0a235027e353fb727ede933bb6a118c4882d2364e25b1f8",
-    "apps/iphone/NativeAPI/APIProtocolTemplates.swift": "e1a4ccda43d83c70c6cc30af55cdfd2f707d46651606891ccbfe227d64a6ff51",
-    "apps/iphone/WatchApp/PracovniDenikWatchApp.swift": "04533de439acb79aee9027c0b15f3d4f4e8bedafa4cf5723224c31d46562968c",
-    "apps/iphone/WatchApp/WatchStore.swift": "c117df358185c34f61db6e11f3ef3e29a9ca44b6d1da3a5252fa86b71f26a2d7",
-    "apps/iphone/WatchApp/WatchViews.swift": "55ad4177040d84afe4eb6279296de13780bc6ca24b437927bd5a68d53e099215"
+    "apps/iphone/NativeAPI/APIProtocolTemplates.swift": "e1a4ccda43d83c70c6cc30af55cdfd2f707d46651606891ccbfe227d64a6ff51"
   },
   "fragments": [
     {

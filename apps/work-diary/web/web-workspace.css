@@ -53,10 +53,56 @@
 #jobs .jobs-list{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
 #jobs .job-card-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
 #jobs .job-card-heading h2{font-size:18px;line-height:1.25;margin:0;color:var(--pd-text)}
+#jobs .job-card-compact>*{order:0!important}
+#jobs .job-card-heading>*{order:0!important}
+#jobs .job-card-heading h2{flex:1;min-width:0}
+#jobs .job-card-heading .job-state{white-space:nowrap;flex-shrink:0;font-size:10px;padding:5px 8px;line-height:1.2}
+#jobs .job-card-compact .compact-job-actions{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;padding-top:8px;margin-top:10px}
+#jobs .job-card-compact .compact-job-actions>.btn{flex:0 0 auto}
+#jobs .job-card-compact .compact-job-actions>.primary{flex:1;min-width:0;margin-left:auto}
+#jobs .job-card-compact .compact-job-actions>[data-job-navigate]{font-size:0;width:44px;flex:0 0 44px;padding:10px}
+#jobs .job-card-compact .compact-job-actions>a[href^="tel:"]{width:44px;flex:0 0 44px;padding:10px;box-sizing:border-box}
+#jobs .job-card-compact .compact-job-actions .job-card-menu{flex:0 0 44px;min-width:0;width:44px;margin:0;padding:0;border:0}
+#jobs .job-card-menu>summary{white-space:nowrap;line-height:1;font-size:16px;letter-spacing:2px}
+#jobs .job-card-menu>summary::before,#jobs .job-card-menu>summary::after{content:none!important}
+#jobs .job-card-menu[open]>summary{margin-bottom:0}
 #jobs .job-card .job-work-title{font-size:12px;color:var(--pd-muted);margin:6px 0;line-height:1.4}
 #jobs .job-card .job-place{margin:6px 0;font-size:12px;line-height:1.4;display:flex;gap:6px;color:var(--pd-muted)}
 #jobs .job-card .job-place svg{width:15px;height:15px}
 #jobs .job-assigned-compact{font-size:11px;margin:8px 0;color:var(--pd-muted)}
+#jobs .job-card .job-detail-person{padding:0;background:transparent;margin:8px 0;gap:8px;font-size:12px}
+#jobs .job-card .avatar-stack span{width:25px;height:25px;font-size:10px}
+#jobs .job-card .job-detail-person small{display:none}
+.pd-secondary.pd-rail-collapsed>.sidebar .brand>div{display:none}
+.garden-history-dialog,#notifications-center{max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);border:1px solid var(--pd-gray);border-radius:24px;padding:16px;background:var(--pd-surface);color:var(--pd-text);box-sizing:border-box}
+.garden-history-dialog :is(input,select,textarea){min-height:44px;max-width:100%;border-radius:12px;background:var(--pd-surface);color:var(--pd-text);box-sizing:border-box}
+.garden-history-dialog textarea{min-height:84px}
+.garden-history-dialog input[type=checkbox]{min-height:0}
+.garden-history-dialog .modal-head h2,#notifications-center h2{font-size:21px;line-height:1.25}
+#notifications-center .notification-item{padding:12px;border-radius:16px;margin:8px 0}
+.pd-secondary-dialog:has([data-customer-view]){width:min(980px,calc(100vw - 24px))}
+.pd-secondary-dialog .customer-garden{border-radius:18px;padding:14px;margin:10px 0;background:var(--pd-surface);border-color:var(--pd-gray)}
+.pd-secondary-dialog .customer-detail :is(h2,h3){font-size:19px;line-height:1.3}
+.pd-secondary-dialog :is(.storage-card,.service-entry){border-radius:20px;padding:14px}
+@media(max-width:760px){
+ #jobs .desktop-job-tools{position:relative;display:flex;flex-direction:column;gap:10px;padding-bottom:0}
+ #jobs .desktop-job-tools>.page-title{order:0;margin-bottom:0}
+ #jobs .desktop-job-tools>.jobs-filters{order:1;margin:0}
+ #jobs .desktop-job-tools>.jobs-quick{order:2;margin:0;display:flex;flex-direction:column;gap:10px;align-items:stretch}
+ #jobs .jobs-quick .jobs-date-shortcuts{order:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;gap:4px}
+ #jobs .jobs-quick .jobs-scope-segment{order:1;width:calc(100% - 100px);padding:3px;gap:0}
+ #jobs .jobs-quick .jobs-scope-segment>button{min-width:0;padding:8px 6px;font-size:11px;min-height:44px}
+ #jobs .desktop-job-tools>.jobs-view-switch{position:absolute;bottom:0;right:0;display:flex;width:92px;gap:4px;background:transparent;padding:0;margin:0}
+ #jobs .desktop-job-tools>.jobs-view-switch>button:not([data-jobs-view=calendar]):not([data-jobs-view=map]){display:none}
+ #jobs .desktop-job-tools>.jobs-view-switch>button{min-width:44px;width:44px;min-height:44px;padding:10px;border-radius:14px;flex:none;background:var(--pd-sage-soft);color:var(--pd-forest)}
+ #jobs .jobs-view-label{display:none}
+ #jobs .jobs-title-actions #jobs-search-toggle{display:none}
+ #jobs .jobs-searchbar{display:flex!important;width:100%;gap:6px}
+ #jobs .jobs-searchbar>.field{flex:1;min-width:0;margin:0}
+ #jobs .jobs-searchbar>.btn[type=submit]{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ #jobs .jobs-search input{min-height:44px;width:100%;padding:10px 12px 10px 38px}
+ #jobs #jobs-filter-panel:not([open])>summary{min-height:44px;margin-top:6px;font-size:12px}
+}
 #jobs .compact-job-actions{display:flex;align-items:center;gap:6px;margin-top:10px!important;padding-top:8px;border-top:1px solid var(--pd-gray);flex-wrap:wrap}
 #jobs .compact-job-actions>.btn{min-height:44px;font-size:12px;padding:8px 10px}
 #jobs .compact-job-actions>.primary{margin-left:auto}

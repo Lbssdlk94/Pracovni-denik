@@ -40,9 +40,8 @@ export function enhanceSecondaryPage(page){
 // also handles dialogs opened by existing modules after their asynchronous read.
 export function installSecondaryDialogs(modal){
  const mark=()=>{
-  const form=modal.querySelector('form');
-  const approved=!!modal.querySelector('#service-work-form,.job-detail-summary,#job-side-panel,[data-protocol-editor]');
-  modal.classList.toggle('pd-secondary-dialog',!approved&&((!!form&&secondaryForms.has(form.id))||!!modal.querySelector('.protocol-template-list')));
+  const special=!!modal.querySelector('#service-work-form,[data-jobs-dialog]');
+  modal.classList.toggle('pd-secondary-dialog',!special);
  };
  const observer=new MutationObserver(mark);observer.observe(modal,{childList:true,subtree:true});mark();return ()=>observer.disconnect();
 }

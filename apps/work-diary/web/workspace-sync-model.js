@@ -1,3 +1,4 @@
+import {attendanceBinding} from './attendance-client.js?v=attendance-offline-v1';
 const STORES=['records','gardens','services','serviceWork','defects'];
 const wsId=value=>typeof value==='string'&&/^[-\w]{1,100}$/.test(value);
 
@@ -25,6 +26,7 @@ export function workspaceCanKeepPending(store,record,next,manifest,legacyDiscipl
   const discipline=record.discipline||record.payload?.discipline||record.snapshot?.discipline||record.snapshot?.job?.discipline||legacyDiscipline;
   const gardenAllowed=!gardenId||allowed.gardens.includes(gardenId);
   const disciplineAllowed=next.workspace.disciplines.includes(discipline);
+  if(store==='serviceWork'&&record.kind==='jobTimeAttendanceAction')return features.attendance!==false&&record.ownerId===next.user.id&&record.accessRole===next.user.role&&record.binding===attendanceBinding(next);
   if(store==='records')return features.shafts!==false&&next.workspace.disciplines.includes('irrigation')&&(allowed.records.includes(record.id)||!record.version&&gardenAllowed);
   if(store==='services')return features.service!==false&&disciplineAllowed&&(allowed.services.includes(record.id)||!record.version&&gardenAllowed&&!!gardenId);
   if(store==='defects')return features.defects!==false&&disciplineAllowed&&(allowed.defects.includes(record.id)||!record.payload?.version&&gardenAllowed&&!!gardenId&&(record.payload?.version>0||!record.payload?.sourceJobId||allowed.serviceWork.includes(record.payload.sourceJobId)));
@@ -50,7 +52,7 @@ export function planWorkspaceReconciliation(previous,next,caches,inventory,manif
     }
     for(const record of caches[store]||[]){
       if(record._pending||record.pending){
-        if(workspaceCanKeepPending(store,record,next,manifest,legacyDiscipline))keep[store].push({...record,...record.ownerId?{ownerId:next.user.id}:{},...store==='serviceWork'?{id:next.user.id+'|'+record.jobId+(record.kind==='jobDiary'?'|diary|'+record.entryId:record.kind==='jobDiaryIndex'?'|diary':'')}:{},...store!=='records'&&store!=='serviceWork'?{discipline:record.discipline||record.payload?.discipline||legacyDiscipline}:{}});
+        if(workspaceCanKeepPending(store,record,next,manifest,legacyDiscipline))keep[store].push({...record,...record.ownerId?{ownerId:next.user.id}:{},...store==='serviceWork'&&record.kind!=='jobTimeAttendanceAction'?{id:record.kind==='jobTimeAction'?next.user.id+'|'+record.jobId+'|jobTime|'+record.payload.operationId:next.user.id+'|'+record.jobId+(record.kind==='jobDiary'?'|diary|'+record.entryId:record.kind==='jobDiaryIndex'?'|diary':'')}:{},...store!=='records'&&store!=='serviceWork'?{discipline:record.discipline||record.payload?.discipline||legacyDiscipline}:{}});
         else revoked.push({kind:store,record});
       }else if(manifest.allowed[store].includes(store==='serviceWork'?record.jobId:record.id))keep[store].push(record);
     }

@@ -1,4 +1,4 @@
-/* Additional dark appearance only; the approved light cascade is untouched. */
+/* Explicit dark appearance for tenant and central web interfaces. */
 :root[data-theme=dark]{color-scheme:dark;--pd-background:#171c1a;--pd-surface:#212825;--pd-text:#f0f4f1;--pd-muted:#b0beb7;--pd-forest:#a4e1cd;--pd-forest-hover:#c2efdf;--pd-sage:#a4d7c3;--pd-sage-soft:#293f36;--pd-sage-line:#476457;--pd-gray:#39453f;--pd-border-strong:#48564f;--pd-danger:#ffb4a5;--pd-danger-soft:#4b2b27;--pd-warning:#f1cb82;--pd-warning-soft:#433a25;--pd-information:#9dcae9;--pd-information-soft:#283d4c;--pd-planned:#efc486;--pd-planned-soft:#443824;--pd-on-way:#a0cdee;--pd-on-way-soft:#293e4e;--pd-done:#a5dfb9;--pd-done-soft:#294434;--soft:#29352e;--pd-shadow-card:none;--pd-shadow-raised:0 8px 28px #0003;background:var(--pd-background);color:var(--pd-text)}
 :root[data-theme=dark] body{background:var(--pd-background);color:var(--pd-text)}
 :root[data-theme=dark] :is(.sidebar,.topbar,.main,.mobile-account,.nav-overflow,.bottom-nav){background:var(--pd-background);border-color:var(--pd-gray);color:var(--pd-text)}

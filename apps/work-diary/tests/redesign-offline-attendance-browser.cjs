@@ -1,0 +1,28 @@
+const {chromium}=require('playwright'),assert=require('node:assert/strict'),fs=require('node:fs/promises');
+const {nav}=require('./browser-nav.cjs');
+(async()=>{const browser=await chromium.launch({executablePath:'/usr/bin/chromium',args:['--no-sandbox','--disable-dev-shm-usage']});try{
+ const context=await browser.newContext({viewport:{width:390,height:844},locale:'cs-CZ'});
+ await context.addInitScript(({base,wall})=>{const Original=Date;globalThis.Date=class extends Original{constructor(...args){super(...(args.length?args:[base+Original.now()-wall]));}static now(){return base+Original.now()-wall;}};},{base:1795255200000,wall:Date.now()});
+ const page=await context.newPage(),errors=[];page.setDefaultTimeout(15000);page.on('pageerror',e=>errors.push(e.message));
+ await page.request.get('http://127.0.0.1:5198/__qa/reset');await page.goto('http://127.0.0.1:5198/__qa/login?user=worker');await page.locator('.nav').waitFor();
+ if(await page.locator('[data-device-later]').count())await page.locator('[data-device-later]').click();
+ await nav(page,'overview');await page.locator('[data-overview-punch=arrival]:enabled').waitFor();
+ await page.waitForFunction(async()=>!!(await (await import('/cloud.js?v=completion-v1')).cachedAttendance()));
+ await page.evaluate(async()=>{await Promise.race([navigator.serviceWorker.ready,new Promise((_,reject)=>setTimeout(()=>reject(Error('Service worker not installed')),20000))]);if(!navigator.serviceWorker.controller)await new Promise(r=>navigator.serviceWorker.addEventListener('controllerchange',r,{once:true}));});
+ await context.setOffline(true);
+ await page.locator('[data-overview-punch=arrival]:enabled').click();await page.locator('[data-overview-activity=break]:enabled').waitFor();
+ await page.locator('[data-overview-activity=break]').click();await page.locator('[data-overview-activity=resume]:enabled').waitFor();
+ await page.reload();await page.locator('.nav').waitFor();await nav(page,'overview');await page.locator('[data-overview-activity=resume]:enabled').waitFor();
+ assert.match(await page.locator('#overview').innerText(),/2 změn docházky čeká/);
+ await page.locator('[data-overview-activity=resume]').click();await page.locator('[data-overview-activity=break]:enabled').waitFor();
+ await page.locator('[data-overview-punch=departure]:enabled').click();await page.locator('[data-overview-punch=arrival]:enabled').waitFor();
+ await nav(page,'attendance');await page.waitForFunction(()=>document.querySelector('.attendance-sync')?.textContent.includes('4 změn'));
+ const projected=await page.evaluate(async()=>{const db=await import('/cloud.js?v=completion-v1');return db.cachedAttendance();});
+ const originals=projected._attendancePending.map(r=>r.payload);assert.equal(originals.length,4);assert.equal(projected.activeShift,null);assert.equal(projected.detail.ownToday.intervals[0].kind,'break');
+ await fs.mkdir('/workspace/reports/complete-redesign/attendance',{recursive:true});await page.screenshot({path:'/workspace/reports/complete-redesign/attendance/offline-mobile.png',fullPage:true});
+ await context.setOffline(false);await page.waitForFunction(async()=>(await (await import('/cloud.js?v=completion-v1')).pendingSummary()).serviceWork===0);
+ const saved=await page.evaluate(async()=>{const db=await import('/cloud.js?v=completion-v1'),me=db.session().user.id,month=new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit'}).format(new Date());return db.attendanceRead('/api/attendance?month='+month+'&userId='+me+'&detail=1&discipline=all');});
+ assert.equal(saved.shifts.length,1);assert.equal(saved.shifts[0].startAt,originals[0].at);assert.equal(saved.shifts[0].endAt,originals[3].at);assert.equal(saved.detail.ownToday.intervals.length,1);assert.equal(saved.detail.ownToday.intervals[0].startAt,originals[1].at);assert.equal(saved.detail.ownToday.intervals[0].endAt,originals[2].at);
+ await page.reload();await page.locator('.nav').waitFor();const jobs=await page.evaluate(async()=>{const r=await fetch('/api/jobs?state=all');return r.json();});assert.equal(jobs.jobs.length,0,'Attendance never creates a dummy job');assert.deepEqual(errors,[]);
+ console.log('PASS real browser: dashboard arrival/break/resume/departure offline, cold reload, original timestamps, automatic shared-outbox sync, no duplicates or dummy jobs');
+}finally{await browser.close();}})().catch(e=>{console.error(e);process.exit(1)});

@@ -1309,7 +1309,7 @@
       "id": "attendance-ui",
       "kind": "module",
       "file": "apps/work-diary/web/attendance-ui.js",
-      "status": "locked",
+      "status": "partial",
       "forms": [
         "attendance-correction-form",
         "attendance-delete-form",
@@ -1319,7 +1319,7 @@
         "createAttendanceUI"
       ],
       "roles": "existing server permission checks, module gates and tenant context",
-      "reason": "approved identity B / protected page"
+      "reason": "Web is permitted to change after user clarification; match native iOS reference."
     },
     {
       "platform": "mobile-web / desktop-web",
@@ -1341,7 +1341,7 @@
       "id": "customers-ui",
       "kind": "module",
       "file": "apps/work-diary/web/customers-ui.js",
-      "status": "locked",
+      "status": "partial",
       "forms": [
         "customer-attach-form",
         "customer-form",
@@ -1353,7 +1353,7 @@
         "createCustomersUI"
       ],
       "roles": "existing server permission checks, module gates and tenant context",
-      "reason": "approved identity B / protected page"
+      "reason": "Web is permitted to change after user clarification; match native iOS reference."
     },
     {
       "platform": "mobile-web / desktop-web",
@@ -1583,7 +1583,7 @@
       "id": "jobs-ui",
       "kind": "module",
       "file": "apps/work-diary/web/jobs-ui.js",
-      "status": "locked",
+      "status": "partial",
       "forms": [
         "job-departure-form",
         "job-edit-form",
@@ -1594,7 +1594,7 @@
         "createJobsUI"
       ],
       "roles": "existing server permission checks, module gates and tenant context",
-      "reason": "approved identity B / protected page"
+      "reason": "Web is permitted to change after user clarification; match native iOS reference."
     },
     {
       "platform": "mobile-web / desktop-web",
@@ -1670,14 +1670,14 @@
       "id": "overview-ui",
       "kind": "module",
       "file": "apps/work-diary/web/overview-ui.js",
-      "status": "locked",
+      "status": "partial",
       "forms": [],
       "entryPoints": [
         "overviewVisits",
         "createOverviewUI"
       ],
       "roles": "existing server permission checks, module gates and tenant context",
-      "reason": "approved identity B / protected page"
+      "reason": "Web is permitted to change after user clarification; match native iOS reference."
     },
     {
       "platform": "mobile-web / desktop-web",
@@ -2425,5 +2425,6 @@
       "ios": "tenant client; central console is not exposed as native tenant permission",
       "plan": "preserve security boundary; verify an equivalent authorized web access path instead of granting tenant roles central access"
     }
-  ]
+  ],
+  "protectionScope": "Native iOS only, clarified by user during implementation. Web screens are reference-audited but may change."
 }

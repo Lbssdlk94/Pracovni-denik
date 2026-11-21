@@ -1,4 +1,4 @@
-/* New surfaces only. No light-mode selector reaches an approved screen. */
+/* Shared tenant web surfaces; approved native iOS screens have separate SwiftUI components. */
 .pd-secondary{--secondary-gap:16px}
 .pd-secondary .main{min-width:0}
 .pd-secondary :is(.storage-card,.garden-card,.folder-card,.defect-card,.subscription-card,.material-group,.vehicle-card){border-radius:20px;padding:16px;box-shadow:var(--pd-shadow-card)}

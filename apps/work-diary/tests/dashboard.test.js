@@ -68,3 +68,12 @@ test('A large day retains exact totals while returning a bounded mobile timeline
  assert.equal(r.http,200,JSON.stringify(r));assert.equal(r.stats.todayVisits,302);assert.equal(r.todayJobs.length,30);assert.equal(r.todayTruncated,true);
  assert.ok(JSON.stringify(r).length<200000);t.diagnostic('In-memory SQLite dashboard with 302 jobs: '+elapsed.toFixed(1)+' ms, '+JSON.stringify(r).length+' JSON characters; not a production latency measurement.');
 });
+
+test('Company dashboard shows a real standalone break and net attendance without inventing a job',async()=>{
+ const f=await setup(),at=Date.now()-600000;
+ const shift=await f.call('/api/attendance/punch',people.worker,'POST',{mutationId:'standalone-shift',kind:'arrival',at,gpsStatus:'unavailable'});assert.equal(shift.http,200,JSON.stringify(shift));
+ const pause=await f.call('/api/attendance/activities',people.worker,'POST',{operationId:'standalone-pause',action:'break',at:at+300000,shiftId:shift.shift.id,shiftVersion:shift.shift.version,version:0});assert.equal(pause.http,200,JSON.stringify(pause));
+ const company=await f.call('/api/overview?mode=company'),person=company.people.find(p=>p.id===people.worker.id);
+ assert.equal(person.state,'break');assert.equal(person.job,null);assert.equal(person.workMs,0);assert.ok(person.netMs>=300000&&person.netMs<305000);assert.equal(company.stats.todayAttendanceMs,person.netMs);
+ assert.equal(f.env.sqlite.prepare('SELECT count(*) n FROM jobs').get().n,2);
+});
