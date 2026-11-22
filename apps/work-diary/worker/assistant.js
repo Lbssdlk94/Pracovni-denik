@@ -563,7 +563,8 @@ async function planJob(env, m, h, params, today, options){
   if(!customers.length) return {reply:`Zákazníka „${plan.customer}“ jsem nenašel. Zakázku jsem nezaložil.`};
   if(customers.length>1) return {reply:'Vyhovuje víc zákazníků: '+customers.slice(0,4).map(customer=>customer.name).join(', ')+'. Zakázku jsem nezaložil.'};
   const customer = {customerId:customers[0].id, customerName:customers[0].name};
-  const members = await env.DB.prepare('SELECT user_id AS id, name FROM members').all();
+  const place = (customers[0].addresses||[])[0]||{};
+  const members = await env.DB.prepare("SELECT user_id AS id, name FROM members WHERE EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND actor.role IN ('owner','administrator','admin'))").bind(m.user_id).all();
   const wanted = [...new Set(plan.terms.flatMap(term=>term.people))];
   if(!wanted.length) return {reply:'Napište, kdo bude na zakázce pracovat. Nic jsem neuložil.', context:{plan, customerName:customer.customerName}};
   const matched = matchPeople(wanted, members.results||[]);
@@ -572,32 +573,48 @@ async function planJob(env, m, h, params, today, options){
     return {reply:`Jméno není jednoznačné. ${line}. Zakázku jsem nezaložil.`, context:{plan, customerName:customer.customerName}};
   }
   const byStem = new Map(matched.resolved.map(person=>[nameStem(person.query), person]));
-  const terms = plan.terms.map(term=>({date:term.date, start:term.start, end:term.end, note:term.note||'', names:term.people, people:term.people.map(person=>byStem.get(nameStem(person)).id)}));
-  const existing = await env.DB.prepare("SELECT title, due_date, assigned_name FROM jobs WHERE deleted=0 AND status<>'done'").all();
-  const collisions = planCollisions(plan, (existing.results||[]).map(row=>({title:row.title, dueDate:row.due_date, assignedNames:String(row.assigned_name||'').split(',').map(name=>name.trim()).filter(Boolean)})));
+  const terms = plan.terms.map(term=>({date:term.date, start:term.start, end:term.end, note:term.note||'', names:term.people, people:term.people.map(person=>byStem.get(nameStem(person)).id), status:'planned'}));
+  const firstDate = terms[0].date, lastDate = terms[terms.length-1].date;
+  const listed = await jobsGet(env, m, h, `/api/jobs?state=active&order=schedule&from=${firstDate}&to=${lastDate}`);
+  const collisions = listed.ok?planCollisions(plan, (listed.data.jobs||[]).map(job=>({title:job.title, dueDate:job.dueDate, assignedNames:String(job.assignedName||'').split(',').map(name=>name.trim()).filter(Boolean), termDates:(job.terms||[]).map(term=>term.date)}))):[];
   const warning = collisions.length?` Kolize: ${collisions.slice(0,4).map(item=>`${item.person} ${item.date} už má „${item.title}“`).join('; ')}.`:' Kolizi s jinou zakázkou nevidím.';
   const material = plan.askMaterial?' Potřebujeme objednat materiál?':'';
   const summary = `${planSummary({...plan, customer:customer.customerName})}${warning}${material} Uloží se jedna zakázka až po potvrzení.`;
-  const stored = {title:plan.title, customerId:customer.customerId, customerName:customer.customerName, terms, materials:plan.materials};
+  const stored = {operationId:crypto.randomUUID(), title:plan.title, customerId:customer.customerId, customerName:customer.customerName, customerAddressId:place.id||null, address:place.address||'', city:place.city||'', terms, materials:plan.materials};
   const confirm = await propose(env, m, {intent:'jobs.plan', params:stored}, summary);
   return {reply:summary, confirm, concept:{title:plan.title, customerName:customer.customerName, terms:plan.terms, materials:plan.materials, askMaterial:plan.askMaterial}, context:{plan, customerName:customer.customerName}};
 }
 async function commitPlan(env, m, h, params){
-  const id = crypto.randomUUID();
+  const id = 'plan-'+String(params.operationId||crypto.randomUUID()).replace(/[^a-zA-Z0-9_-]/g,'').slice(0, 80);
   const first = params.terms[0];
   const ids = [...new Set(params.terms.flatMap(term=>term.people))];
+  const before = await env.DB.prepare('SELECT id FROM jobs WHERE id=? AND deleted=0').bind(id).first();
+  if(before) return {reply:`Zakázka „${params.title}“ už je uložená. Podruhé jsem ji nezaložil.`, mutated:'jobs', context:{jobId:id, customerName:params.customerName||''}};
   const result = await callJson(()=>handleJobs(write('/api/jobs/'+id,'PUT',{
     version:0, title:params.title, jobType:'installation', status:'planned', incompleteReason:'',
     description:params.terms.map(term=>`${term.date} ${term.start}–${term.end} ${(term.names||[]).join(', ')}`).join('\n'),
-    dueDate:first.date, customerId:params.customerId, customerName:params.customerName,
-    assignedTo:ids[0]||'', assignedTos:ids
+    dueDate:first.date, address:params.address||'', city:params.city||'', customerAddressId:params.customerAddressId||null,
+    customerId:params.customerId, customerName:params.customerName,
+    assignedTo:ids[0]||'', assignedTos:ids, terms:params.terms
   }, h._headers), env, m, h));
   if(!result.ok) return {reply:result.data.error||'Zakázku se nepodařilo vytvořit. Nic dalšího jsem neuložil.'};
-  for(const [index, term] of params.terms.entries()){
-    await env.DB.prepare('INSERT OR IGNORE INTO job_terms(id,job_id,term_date,start_time,end_time,assigned_users,status,note,sort_order) VALUES(?,?,?,?,?,?,?,?,?)')
-      .bind(`${id}:${term.date}`, id, term.date, term.start, term.end, JSON.stringify(term.people||[]), 'planned', term.note||'', index).run();
+  const savedTerms = await env.DB.prepare('SELECT count(*) AS n FROM job_terms WHERE job_id=?').bind(id).first();
+  if((savedTerms?.n||0)!==params.terms.length){
+    await env.DB.batch([env.DB.prepare('DELETE FROM job_terms WHERE job_id=?').bind(id), env.DB.prepare('UPDATE jobs SET deleted=1, version=version+1 WHERE id=? AND deleted=0').bind(id)]);
+    return {reply:'Termíny se neuložily společně se zakázkou. Nic jsem nenechal rozdělené.'};
   }
-  return {reply:`Zakázka „${params.title}“ je jedna, s ${params.terms.length} termíny od ${first.date}. Materiál jsem neobjednal.`, mutated:'jobs', context:{jobId:id, customerName:params.customerName||''}};
+  if(params.materials?.length){
+    const note = params.materials.map(item=>`${item.name} ${item.quantity} ${item.unit} (${item.readiness==='on_hand'?'máme':'k nákupu'})`).join('; ').slice(0, 2000);
+    const material = await callJson(()=>handleServiceWork(write('/api/jobs/'+id+'/service','PUT',{
+      operationId:(id+'material').replace(/[^a-zA-Z0-9]/g,'').slice(0, 80), version:result.data.job.version,
+      materialStatus:params.materials.some(item=>item.readiness!=='on_hand')?'missing':'checked', materialNote:note
+    }, h._headers), env, {waitUntil(){}}, m, h));
+    if(!material.ok){
+      await env.DB.batch([env.DB.prepare('DELETE FROM job_terms WHERE job_id=?').bind(id), env.DB.prepare('UPDATE jobs SET deleted=1, version=version+1 WHERE id=? AND deleted=0').bind(id)]);
+      return {reply:material.data.error||'Materiál se nepodařilo uložit. Zakázku jsem neponechal.'};
+    }
+  }
+  return {reply:`Zakázka „${params.title}“ je jedna, s ${params.terms.length} termíny od ${first.date}${params.address?' na adrese '+params.address:''}. Materiál ${params.materials?.length?'je u zakázky uložený a neobjednaný':'se neobjednává'}.`, mutated:'jobs', context:{jobId:id, customerName:params.customerName||''}};
 }
 
 async function createJob(env, m, h, params, today, tomorrow, options){

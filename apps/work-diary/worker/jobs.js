@@ -55,12 +55,17 @@ export async function handleJobs(request,env,m,h){
   if(assignee){clauses.push('(j.assigned_to=? OR EXISTS(SELECT 1 FROM json_each(j.assigned_users) selected WHERE selected.value=?))');args.push(assignee,assignee);}
   if(q){clauses.push("(j.title LIKE ? ESCAPE '\\' OR j.description LIKE ? ESCAPE '\\' OR j.address LIKE ? ESCAPE '\\' OR j.customer_name LIKE ? ESCAPE '\\')");const pattern='%'+q.replace(/[\\%_]/g,'\\$&')+'%';args.push(pattern,pattern,pattern,pattern);}
   if(after){clauses.push('j.due_date>=?');args.push(after);}
-  let calendar;if(from){clauses.push('j.due_date BETWEEN ? AND ?');args.push(from,to);}
+  const termsReady=!!(await one(env.DB,"SELECT 1 AS ok FROM sqlite_master WHERE type='table' AND name='job_terms'"));
+  const termBetween=termsReady?' OR EXISTS(SELECT 1 FROM job_terms term WHERE term.job_id=j.id AND term.term_date BETWEEN ? AND ?)':'';
+  let calendar;if(from){clauses.push('(j.due_date BETWEEN ? AND ?'+termBetween+')');args.push(from,to);if(termsReady)args.push(from,to);}
   if(month){
-   clauses.push("(j.due_date BETWEEN ? AND ? OR j.due_date='')");args.push(month+'-01',month+'-31');
+   const start=month+'-01',end=month+'-31';
+   clauses.push("(j.due_date BETWEEN ? AND ? OR j.due_date=''"+termBetween+')');args.push(start,end);if(termsReady)args.push(start,end);
    const counts=await all(env.DB,'SELECT j.due_date AS date,COUNT(*) AS count FROM jobs j LEFT JOIN service_reports pr ON pr.job_id=j.id WHERE '+clauses.join(' AND ')+' GROUP BY j.due_date',...args);
-   calendar={days:counts.filter(c=>c.date),undatedCount:counts.find(c=>!c.date)?.count||0};
-   if(day){clauses.push('j.due_date=?');args.push(day==='undated'?'':day);}
+   const days=new Map(counts.filter(c=>c.date).map(c=>[c.date,c.count]));
+   if(termsReady){const extra=await all(env.DB,'SELECT term.term_date AS date,COUNT(DISTINCT term.job_id) AS count FROM job_terms term JOIN jobs j ON j.id=term.job_id LEFT JOIN service_reports pr ON pr.job_id=j.id WHERE '+clauses.join(' AND ')+' AND term.term_date<>j.due_date AND term.term_date BETWEEN ? AND ? GROUP BY term.term_date',...args,start,end);for(const row of extra)days.set(row.date,(days.get(row.date)||0)+row.count);}
+   calendar={days:[...days].map(([date,count])=>({date,count})),undatedCount:counts.find(c=>!c.date)?.count||0};
+   if(day){if(day==='undated'||!termsReady){clauses.push('j.due_date=?');args.push(day==='undated'?'':day);}else{clauses.push('(j.due_date=? OR EXISTS(SELECT 1 FROM job_terms term WHERE term.job_id=j.id AND term.term_date=?))');args.push(day,day);}}
   }
   const statusKey=jobRankSql,dateKey="CASE WHEN j.due_date='' THEN '9999-99-99' ELSE j.due_date END",timeKey="CASE WHEN j.planned_start<>'' THEN j.planned_start WHEN j.start_time='' THEN '24:00' ELSE j.start_time END",filter=encodeURIComponent(JSON.stringify([state,assignee,q,month,day,...(attention?[attention]:[]),...(jobType?[jobType]:[]),...(from?[from,to]:[]),...(after?[after]:[]),protocol,url.searchParams.get('discipline')||'',m._workspace?.authorizationVersion||0,'work-order-v3']));
   const cursor=url.searchParams.get('cursor');if(cursor){let c;try{if(cursor.length>3000)throw Error();c=JSON.parse(atob(cursor));}catch{fail(400,'Neplatná stránka zakázek.');}if(!c)fail(400,'Neplatná stránka zakázek.');validId(c.id);
@@ -107,7 +112,7 @@ export async function handleJobs(request,env,m,h){
   if(!result.meta.changes)fail(409,'Zakázku mezitím změnil správce nebo kolega. Obnovte seznam.');const row=await find();if(!row)fail(404,'Zakázka už vám není přiřazená.');return json({job:record(row)});
  }
  if(!statusOnly&&!departure&&['PUT','DELETE'].includes(method)){
-  checkManager();const b=await body(request,16000);checkKeys(b,method==='DELETE'?['version']:['version','discipline','title','jobType','customerId','customerAddressId','customerName','city','description','address','gardenId','assignedTo','assignedTos','dueDate','startTime','endTime','status','incompleteReason','defectIds','plannedStart','estimatedMinutes','arrivalWindowStart','arrivalWindowEnd','legacyTimeMeaning','allowOverlaps','previewRevision']);
+  checkManager();const b=await body(request,16000);checkKeys(b,method==='DELETE'?['version']:['version','discipline','title','jobType','customerId','customerAddressId','customerName','city','description','address','gardenId','assignedTo','assignedTos','dueDate','startTime','endTime','status','incompleteReason','defectIds','plannedStart','estimatedMinutes','arrivalWindowStart','arrivalWindowEnd','legacyTimeMeaning','allowOverlaps','previewRevision','terms']);
   const version=expectedVersion(b.version),old=await one(env.DB,'SELECT * FROM jobs WHERE id=?',id);
   if(old?.deleted)fail(409,'Tato zakázka už byla smazána.',{code:'job_deleted'});if((old?.version||0)!==version)fail(409,'Zakázku mezitím změnil správce nebo kolega. Obnovte seznam.');
   if(method==='DELETE'){
@@ -152,6 +157,23 @@ export async function handleJobs(request,env,m,h){
   for(const did of defectIds){const eid=crypto.randomUUID(),gate="EXISTS(SELECT 1 FROM jobs WHERE id=? AND version=? AND garden_id=? AND service_operation=? AND updated_by=? AND deleted=0) AND EXISTS(SELECT 1 FROM members WHERE user_id=? AND role IN ('owner','administrator','admin'))",args=[id,version+1,gardenId,linkOperation,m.user_id,m.user_id];
    jobStatements.push(env.DB.prepare(`INSERT OR IGNORE INTO garden_defect_events(id,defect_id,actor_id,actor_name,at,hash,record) SELECT ?,?,?,?,?,?,? WHERE ${gate} AND NOT EXISTS(SELECT 1 FROM garden_defect_jobs WHERE defect_id=? AND job_id=?)`).bind(eid,did,m.user_id,m.name,now,'link',JSON.stringify({kind:'repair_link',jobId:id}),...args,did,id));
    jobStatements.push(env.DB.prepare(`INSERT OR IGNORE INTO garden_defect_jobs(defect_id,job_id,created_at,created_by) SELECT ?,?,?,? WHERE ${gate} AND EXISTS(SELECT 1 FROM garden_defects WHERE id=? AND garden_id=?)`).bind(did,id,now,m.user_id,...args,did,gardenId));
+  }
+  if(b.terms!==undefined){
+    if(!Array.isArray(b.terms)||b.terms.length>14)fail(400,'Zakázka může mít nejvýše 14 termínů.');
+    const seen=new Set();
+    jobStatements.push(env.DB.prepare('DELETE FROM job_terms WHERE job_id=? AND EXISTS(SELECT 1 FROM jobs WHERE id=? AND version=? AND updated_by=? AND deleted=0)').bind(id,id,version+1,m.user_id));
+    for(const [index,term] of b.terms.entries()){
+      if(!term||typeof term!=='object'||Array.isArray(term))fail(400,'Neplatný termín.');
+      const date=typeof term.date==='string'?term.date:'';
+      if(!calendarDate(date)||seen.has(date))fail(400,'Každý termín musí mít vlastní platné datum.');
+      seen.add(date);
+      const start=clock(term.start)?term.start:'07:00',end=clock(term.end)?term.end:'15:00';
+      if(end<=start)fail(400,'Konec termínu musí být po začátku.');
+      const people=Array.isArray(term.people)?term.people:[];
+      if(people.length>20||people.some(person=>typeof person!=='string'||!/^[-a-zA-Z0-9_]{1,100}$/.test(person))||new Set(people).size!==people.length)fail(400,'Neplatný pracovník termínu.');
+      const termStatus=['planned','done'].includes(term.status)?term.status:'planned';
+      jobStatements.push(env.DB.prepare('INSERT INTO job_terms(id,job_id,term_date,start_time,end_time,assigned_users,status,note,sort_order) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM jobs WHERE id=? AND version=? AND updated_by=? AND deleted=0)').bind(id+':'+date,id,date,start,end,JSON.stringify(people),termStatus,cleanText(term.note||'',300),index,id,version+1,m.user_id));
+    }
   }
   const kind=old&&old.status!==status?(status==='in_progress'?'work':['done','incomplete'].includes(status)?'stop':null):null,time=kind&&(kind==='stop'||h.timeTracking&&h.features?.attendance!==false)?await timeLegacyStatements(env,m,old,kind,fail):[];
   result=(await timeBatch(env,[...time,...jobStatements,...(time.length?[timeAssertApplied(env,id,m.user_id,linkOperation)]:[])],fail))[time.length];if(time.length)myTime=await timeState(env,m.user_id,m);

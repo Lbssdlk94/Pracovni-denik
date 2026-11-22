@@ -20,7 +20,10 @@ test('Four work days stay one plan and Wednesday can move to Friday', ()=>{
   assert.equal(material.materials[1].quantity, 100);
   const owned = revisePlan(material, 'Jednotku už máme.');
   assert.equal(owned.materials[0].readiness, 'on_hand');
-  assert.equal(owned.materials[0].name.includes('Rain Bird'), true);
+  const withMarek = revisePlan(owned, 'Přidej ještě Marka.');
+  assert.equal(withMarek.terms.every(term=>term.people.includes('Marka')), true);
+  const matched = matchPeople(['Marka'], [{id:'marek', name:'Marek'}]);
+  assert.equal(matched.resolved[0].id, 'marek');
 });
 
 test('Duplicate names and collisions are reported before any write', ()=>{

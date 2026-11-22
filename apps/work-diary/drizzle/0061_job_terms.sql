@@ -1,4 +1,4 @@
-CREATE TABLE `job_terms` (
+CREATE TABLE IF NOT EXISTS `job_terms` (
 	`id` text PRIMARY KEY NOT NULL,
 	`job_id` text NOT NULL,
 	`term_date` text NOT NULL,
@@ -11,4 +11,4 @@ CREATE TABLE `job_terms` (
 	FOREIGN KEY (`job_id`) REFERENCES `jobs`(`id`)
 );
 --> statement-breakpoint
-CREATE INDEX `job_terms_job_idx` ON `job_terms` (`job_id`,`term_date`);
+CREATE INDEX IF NOT EXISTS `job_terms_job_idx` ON `job_terms` (`job_id`,`term_date`);
