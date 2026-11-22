@@ -8,6 +8,12 @@ import {jobRankSql,protocolStateSql,jobAttempts} from './job-workflow.js';
 import {validateWorkSchedule,inspectWorkSchedule,handlePlanningSettings} from './planning.js';
 import {handleJobGeocode,jobGeocode} from './job-map.js';
 import {jobAssignedIds,jobAssignment} from './assignments.js';
+async function jobTermRows(env, jobId){
+ try{
+  const rows=await env.DB.prepare('SELECT term_date,start_time,end_time,assigned_users,status,note FROM job_terms WHERE job_id=? ORDER BY sort_order,term_date').bind(jobId).all();
+  return (rows.results||[]).map(row=>({date:row.term_date,start:row.start_time,end:row.end_time,people:JSON.parse(row.assigned_users||'[]'),status:row.status,note:row.note}));
+ }catch{return [];}
+}
 // Every read and write is scoped on the server; client filters are only presentation.
 export async function handleJobs(request,env,m,h){
  const {all,one,execute,body,fail,json,validId,cleanText,expectedVersion}=h,url=new URL(request.url),path=url.pathname,method=request.method;
@@ -72,7 +78,7 @@ export async function handleJobs(request,env,m,h){
  const id=match[1],statusOnly=match[2]==='/status',departure=match[2]==='/departure';
  const find=()=>one(env.DB,select+' WHERE j.id=? AND j.deleted=0 AND '+scope,id,m.user_id);
  if(match[2]==='/geocode')return await handleJobGeocode(request,env,m,h,()=>one(env.DB,select+' WHERE j.id=? AND j.deleted=0 AND '+managerGate,id,m.user_id));
- if(method==='GET'&&!statusOnly&&!departure&&!['/completion','/completion-target'].includes(match[2])){const row=await find();if(!row)fail(404,'Zakázka nebyla nalezena.');return json({job:{...record(row),attempts:await jobAttempts(env,id)}});}
+ if(method==='GET'&&!statusOnly&&!departure&&!['/completion','/completion-target'].includes(match[2])){const row=await find();if(!row)fail(404,'Zakázka nebyla nalezena.');return json({job:{...record(row),attempts:await jobAttempts(env,id),terms:await jobTermRows(env,id)}});}
  if(['/completion','/completion-target'].includes(match[2])){const result=await handleJobCompletion(request,env,m,id,h);const row=await find();if(!row)fail(404,'Zakázka již není dostupná.');return json({job:record(row),...result});}
  if(departure&&method==='POST'){
   const old=await find();if(!old)fail(404,'Zakázka nebyla nalezena.');if(!['owner','administrator','admin','worker'].includes(m.role))fail(403,'Odjezd může zaznamenat přiřazený pracovník nebo správce.');

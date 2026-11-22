@@ -1,4 +1,5 @@
 // Rule-based Czech commands. No model, no network. The same function is used
+import {planWork, revisePlan} from './job-plan.js';
 // by the worker and by tests. Later local or cloud models may only replace
 // this parser; they must still call the existing authorized actions.
 
@@ -234,6 +235,7 @@ export function parseAssistantCommand(input, today){
     const intent = /histori/.test(text)?'customers.history':/kontakt/.test(text)?'customers.contact':'customers.search';
     return {intent, params:{query}, text:original};
   }
+  if(planWork(original, today)) return {intent:'jobs.plan', params:{text:original}, text:original};
   if(/\b(vytvor|zaloz|nova) zakazk/.test(text)){
     const body = capture(original, [/zakázku\s+(.+)/iu]);
     const customer = softenName(clipField(capture(original, [/\bu\s+zákazníka\s+(\p{L}+)/iu, /\bpro\s+zákazníka\s+(\p{L}+)/iu, /\bu\s+(\p{L}+)/iu, /\bpro\s+(\p{L}+)/iu]), 80));
@@ -257,6 +259,10 @@ export function parseAssistantCommand(input, today){
 }
 
 export function contextualCommand(command, context){
+  if(context?.plan){
+    const revised = revisePlan(context.plan, command?.text||'');
+    if(revised) return {...command, intent:'jobs.plan', params:{text:command?.text||'', base:context.plan}};
+  }
   const name = String(context?.customerName||'').trim().slice(0,160);
   if(!command||!name) return command;
   const text = foldCzech(command.text||'');

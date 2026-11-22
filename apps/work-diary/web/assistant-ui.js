@@ -1,4 +1,4 @@
-import {parseAssistantCommand, contextualCommand} from './assistant-commands.js?v=assistant-v3';
+import {parseAssistantCommand, contextualCommand} from './assistant-commands.js?v=assistant-v7';
 import {answerOffline} from './assistant-offline.js?v=assistant-v2';
 import {peekCachedJobs} from './cloud.js?v=completion-v1';
 import {extractLocalCommand, localMinistral} from './assistant-local.js?v=assistant-v6';
@@ -224,12 +224,18 @@ function bubble(item){
   if(item.role==='user') return `<div class="assistant-row mine"><div class="assistant-user">${esc(item.text)}<time>${esc(clock(item.at))}</time></div></div>`;
   const cards = (item.cards||[]).map(card=>cardView(card)).join('');
   const suggestions = (item.suggestions||[]).map(text=>`<button type="button" data-quick="${esc(text)}">${esc(suggestionLabel(text))}</button>`).join('');
-  const confirm = item.confirm?`<div class="assistant-confirm"><p>${esc(item.confirm.detail||item.text)}</p><div><button type="button" class="yes" data-confirm="${esc(item.confirm.id)}">Potvrdit</button><button type="button" data-cancel="${esc(item.confirm.id)}">Zrušit</button></div></div>`:'';
-  return `<div class="assistant-row"><span class="assistant-spark">${spark}</span><div class="assistant-answer"><p>${esc(item.text)}</p><time>${esc(clock(item.at))}</time>${cards}${confirm}${suggestions?`<p class="assistant-next-label">Co chcete udělat dál?</p><div class="assistant-next">${suggestions}</div>`:''}</div></div>`;
+  const concept = item.concept?conceptCard(item.concept):'';
+  const confirm = item.confirm?`<div class="assistant-confirm"><p>${esc(item.confirm.detail||item.text)}</p><div><button type="button" class="yes" data-confirm="${esc(item.confirm.id)}">Potvrdit a vytvořit</button><button type="button" data-cancel="${esc(item.confirm.id)}">Zrušit</button></div></div>`:'';
+  return `<div class="assistant-row"><span class="assistant-spark">${spark}</span><div class="assistant-answer"><p>${esc(item.text)}</p><time>${esc(clock(item.at))}</time>${cards}${concept}${confirm}${suggestions?`<p class="assistant-next-label">Co chcete udělat dál?</p><div class="assistant-next">${suggestions}</div>`:''}</div></div>`;
 }
 function suggestionLabel(text){
   if(text==='Zobraz jeho zakázky') return 'Zobrazit zakázky';
   return text;
+}
+function conceptCard(concept){
+  const days = (concept.terms||[]).map(term=>`<span>${esc(term.date.slice(8))}. ${esc((term.people||[]).join(', ')||'—')}</span>`).join('');
+  const material = (concept.materials||[]).map(item=>`<li>${esc(item.name)} ${esc(item.quantity)} ${esc(item.unit)} · ${item.readiness==='on_hand'?'máme':'k nákupu'}</li>`).join('');
+  return `<article class="assistant-concept"><strong>${esc(concept.title)}</strong><p>${esc(concept.customerName||'Zákazník z evidence')}</p><div class="assistant-days">${days}</div>${material?`<ul>${material}</ul>`:concept.askMaterial?'<p>Materiál: potřebujeme objednat?</p>':''}<p>Úpravu napište větou, třeba „Zdeněk přijede až v úterý.“</p></article>`;
 }
 function localCard(){
   const model = localMinistral().snapshot();
@@ -373,7 +379,7 @@ async function ask(text, api, paint, confirmId, cancelId, file){
     }
     if(!navigator.onLine){push(session,'assistant','Potvrzení bez připojení neodešlu. Nic se neuložilo.');return;}
     const data = await api.db.request('/api/assistant',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:commandText, mode:'basic', ...(thread.context?{context:thread.context}:{}), ...(file?{file}:{}), ...(confirmId?{confirmId}:{}), ...(cancelId?{cancelId}:{})})});
-    push(session,'assistant', data.reply||'Hotovo.', {confirm:data.confirm||null, suggestions:data.suggestions||[], cards:data.cards||[], context:data.context||thread.context});
+    push(session,'assistant', data.reply||'Hotovo.', {confirm:data.confirm||null, suggestions:data.suggestions||[], cards:data.cards||[], concept:data.concept||null, context:data.context||thread.context});
     if(data.mutated) api.onChanged?.(data.mutated);
   }catch(error){
     const offline = !navigator.onLine||error?.status===0||/fetch|network|Failed/i.test(error?.message||'');

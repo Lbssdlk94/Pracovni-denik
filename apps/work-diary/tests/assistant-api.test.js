@@ -100,8 +100,8 @@ test('Confirmation is scoped to the person and can be cancelled once', async()=>
     assert.match(after.body.reply, /zrušené/);
     assert.equal(env.sqlite.prepare("SELECT count(*) n FROM jobs WHERE title='Výměna filtru'").get().n, 0);
     const local = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Kolik hodin jsem dnes odpracoval?', mode:'local'}));
-    assert.equal(local.body.unavailable, true);
-    assert.match(local.body.reply, /Nedostupné/);
+    assert.equal(local.body.unavailable, false);
+    assert.match(local.body.reply, /0 h 00 min/);
     const catalog = await json(await call(env, '/api/assistant', people.owner, 'POST', {catalog:true}));
     assert.equal(catalog.body.providers.find(item=>item.id==='qwen').available, false);
     assert.ok(catalog.body.knowledge.every(item=>item.available===false));
@@ -281,6 +281,50 @@ test('Assistant adds a customer and a job only after confirmation', async()=>{
     assert.equal(row.customer_name, 'Petřík');
   }finally{env.sqlite.close();}
 });
+
+test('One sentence plans one multi-day job and writes nothing before confirmation', async()=>{
+  const env = environment();
+  try{
+    await ready(env);
+    await call(env, '/api/invitations', people.owner, 'POST', {email:people.worker.email, role:'worker'});
+    await call(env, '/api/me', people.worker);
+    env.sqlite.prepare('UPDATE members SET name=? WHERE user_id=?').run('Luboš', people.owner.id);
+    env.sqlite.prepare('UPDATE members SET name=? WHERE user_id=?').run('Zdeněk', people.worker.id);
+    const customer = await call(env, '/api/customers/bambosova', people.owner, 'PUT', {version:0, name:'Bambošová', phones:[], addresses:[{id:'addr-bambos', address:'Zahradní 1', city:'Plzeň'}]});
+    assert.equal(customer.status, 200, await customer.clone().text());
+    const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    const monday = (await import('../web/job-plan.js')).nearestWeekday(today, 'pondeli');
+    const occupied = await call(env, '/api/jobs/other-monday', people.owner, 'PUT', {version:0, title:'Jiná práce', status:'planned', dueDate:monday, incompleteReason:'', assignedTo:people.owner.id});
+    assert.equal(occupied.status, 200, await occupied.clone().text());
+    const before = env.sqlite.prepare('SELECT count(*) n FROM jobs').get().n;
+    const text = 'V pondělí budeme dělat realizaci závlahy u Bambošové asi na 4 dny. Bude tam Luboš a Zdeněk.';
+    const proposed = await json(await call(env, '/api/assistant', people.owner, 'POST', {text}));
+    assert.equal(proposed.status, 200, JSON.stringify(proposed.body));
+    assert.ok(proposed.body.confirm?.id, proposed.body.reply);
+    assert.match(proposed.body.reply, /Kolize/);
+    assert.equal(proposed.body.concept.terms.length, 4);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM jobs').get().n, before);
+    const revised = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Ve středu pojedeme jinam, čtvrtý den bude v pátek.', context:proposed.body.context}));
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM jobs').get().n, before);
+    assert.deepEqual(revised.body.concept.terms.map(term=>new Date(term.date+'T12:00:00Z').getUTCDay()), [1,2,4,5]);
+    const saved = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:revised.body.confirm.id}));
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    assert.equal(env.sqlite.prepare("SELECT count(*) n FROM jobs WHERE title='Realizace závlahy' AND deleted=0").get().n, 1, saved.body.reply);
+    const job = env.sqlite.prepare("SELECT id, status FROM jobs WHERE title='Realizace závlahy'").get();
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM job_terms WHERE job_id=?').get(job.id).n, 4);
+    env.sqlite.prepare("UPDATE job_terms SET status='done' WHERE job_id=? AND sort_order=0").run(job.id);
+    const loaded = await json(await call(env, '/api/jobs/'+job.id, people.owner));
+    assert.equal(loaded.body.job.status, 'planned');
+    assert.equal(loaded.body.job.terms.filter(term=>term.status==='done').length, 1);
+    const worker = await json(await call(env, '/api/assistant', people.worker, 'POST', {text}));
+    assert.equal(worker.body.confirm, null);
+    env.sqlite.prepare("INSERT INTO members(user_id,email,name,role,created_at) VALUES('zdenek-2','z2@example.com','Zdeněk','worker',1)").run();
+    const ambiguous = await json(await call(env, '/api/assistant', people.owner, 'POST', {text}));
+    assert.equal(ambiguous.body.confirm, null);
+    assert.match(ambiguous.body.reply, /není jednoznačné/);
+  }finally{env.sqlite.close();}
+});
+
 
 
 
