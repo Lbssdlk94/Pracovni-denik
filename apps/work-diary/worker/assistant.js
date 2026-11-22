@@ -138,10 +138,10 @@ async function propose(env, m, action, summary){
 async function ownEvent(env, id, m){
   return env.DB.prepare('SELECT * FROM assistant_events WHERE id=? AND actor_id=? AND company_id=?').bind(id, m.user_id, await companyOf(env, m)).first();
 }
-async function auditCommit(env, row, summary){
+async function auditCommit(env, row, summary, h){
   const result = await env.DB.prepare("UPDATE assistant_events SET kind='committed', summary=?, committed_at=? WHERE id=? AND actor_id=? AND kind='committing'")
     .bind(summary.slice(0,500), Date.now(), row.id, row.actor_id).run();
-  if(!result.meta.changes) throw Error('Potvrzení už není rozpracované.');
+  if(!result.meta.changes) h.fail(409,'Tohle potvrzení už není rozpracované. Zadejte příkaz znovu.');
 }
 
 export async function handleAssistant(request, env, ctx, m, h){
@@ -179,7 +179,7 @@ async function cancel(env, m, h, id, mode){
   h.fail(404,'Potvrzení už není platné. Zadejte příkaz znovu.');
 }
 
-async function applyConceptEdit(env, m, action, concept){
+async function applyConceptEdit(env, m, h, action, concept){
   if(!concept||typeof concept!=='object'||Array.isArray(concept)||action.intent!=='jobs.plan'||!action.params) return;
   if(typeof concept.title==='string'&&concept.title.trim()) action.params.title = concept.title.trim().slice(0,120);
   if(typeof concept.notes==='string') action.params.description = concept.notes.trim().slice(0,2000);
@@ -190,17 +190,17 @@ async function applyConceptEdit(env, m, action, concept){
   const seen = new Set();
   for(const term of concept.terms.slice(0,14)){
     const date = String(term?.date||'');
-    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||seen.has(date)) throw Error('Každý den konceptu musí mít vlastní platné datum. Nic jsem neuložil.');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||seen.has(date)) h.fail(400,'Každý den konceptu musí mít vlastní platné datum. Nic jsem neuložil.');
     seen.add(date);
     const start = /^\d{2}:\d{2}$/.test(term?.start)?term.start:'07:00';
     const end = /^\d{2}:\d{2}$/.test(term?.end)?term.end:'15:00';
-    if(end<=start) throw Error('Konec dne musí být po začátku. Nic jsem neuložil.');
+    if(end<=start) h.fail(400,'Konec dne musí být po začátku. Nic jsem neuložil.');
     const names = (Array.isArray(term.people)?term.people:[String(term.people||'')]).flatMap(name=>String(name).split(',')).map(name=>name.trim()).filter(Boolean);
     const matched = matchPeople(names, members.results||[]);
-    if(!names.length||matched.ambiguous.length||matched.resolved.length!==names.length) throw Error('Pracovníka z konceptu nevidím v týmu. Nic jsem neuložil.');
+    if(!names.length||matched.ambiguous.length||matched.resolved.length!==names.length) h.fail(400,'Pracovníka z konceptu nevidím v týmu. Nic jsem neuložil.');
     terms.push({date, start, end, note:String(term.note||'').slice(0,300), names, people:matched.resolved.map(person=>person.id), status:term.status==='done'?'done':'planned'});
   }
-  if(!terms.length) throw Error('Koncept nemá žádný den. Nic jsem neuložil.');
+  if(!terms.length) h.fail(400,'Koncept nemá žádný den. Nic jsem neuložil.');
   action.params.terms = terms.sort((a,b)=>a.date.localeCompare(b.date));
 }
 async function confirm(env, ctx, m, h, id, mode, preview, concept){
@@ -221,17 +221,17 @@ async function confirm(env, ctx, m, h, id, mode, preview, concept){
   const action = JSON.parse(row.payload);
   let done;
   try{
-    if(concept) await applyConceptEdit(env, m, action, concept);
+    if(concept) await applyConceptEdit(env, m, h, action, concept);
     done = await run(env, ctx, m, h, action, pragueDate(new Date()), {propose:false, preview});
   }catch(error){
     await env.DB.prepare("UPDATE assistant_events SET kind='proposal' WHERE id=? AND actor_id=? AND company_id=? AND kind='committing'").bind(id, m.user_id, company).run();
     throw error;
   }
   if(done.confirm){
-    await auditCommit(env, row, 'Vyžaduje další potvrzení. '+done.reply);
+    await auditCommit(env, row, 'Vyžaduje další potvrzení. '+done.reply, h);
     return reply(mode, done.reply, {confirm:done.confirm});
   }
-  await auditCommit(env, row, done.reply);
+  await auditCommit(env, row, done.reply, h);
   return reply(mode, done.reply, {mutated:done.mutated||null});
 }
 
@@ -685,7 +685,7 @@ async function planJob(env, m, h, params, today, options){
   const warning = collisions.length?` Kolize: ${collisions.slice(0,4).map(item=>`${item.person} ${item.date} už má „${item.title}“`).join('; ')}.`:' Kolizi s jinou zakázkou nevidím.';
   const material = plan.askMaterial?' Potřebujeme objednat materiál?':'';
   const summary = `${planSummary({...plan, customer:customer.customerName})}${warning}${material} Uloží se jedna zakázka až po potvrzení.`;
-  const stored = {operationId:crypto.randomUUID(), title:plan.title, customerId:customer.customerId, customerName:customer.customerName, customerAddressId:place.id||null, address:place.address||'', city:place.city||'', terms, materials:plan.materials};
+  const stored = {operationId:crypto.randomUUID(), title:plan.title, discipline:(m._workspace&&m._workspace.selectedDiscipline&&m._workspace.selectedDiscipline!=='all')?m._workspace.selectedDiscipline:((m._workspace&&m._workspace.disciplines&&m._workspace.disciplines[0])||null), customerId:customer.customerId, customerName:customer.customerName, customerAddressId:place.id||null, address:place.address||'', city:place.city||'', terms, materials:plan.materials};
   const confirm = await propose(env, m, {intent:'jobs.plan', params:stored}, summary);
   return {reply:summary, confirm, concept:{title:plan.title, customerName:customer.customerName, terms:plan.terms, materials:plan.materials, askMaterial:plan.askMaterial}, context:{plan, customerName:customer.customerName}};
 }
@@ -695,12 +695,15 @@ async function commitPlan(env, m, h, params){
   const ids = [...new Set(params.terms.flatMap(term=>term.people))];
   const before = await env.DB.prepare('SELECT id FROM jobs WHERE id=? AND deleted=0').bind(id).first();
   if(before) return {reply:`Zakázka „${params.title}“ už je uložená. Podruhé jsem ji nezaložil.`, mutated:'jobs', context:{jobId:id, customerName:params.customerName||''}};
+  const materialNote = (params.materials||[]).map(item=>'Materiál: '+item.name+' '+item.quantity+' '+item.unit).join('\n');
   const result = await callJson(()=>handleJobs(write('/api/jobs/'+id,'PUT',{
     version:0, title:params.title, jobType:'installation', status:'planned', incompleteReason:'',
-    description:params.description||params.terms.map(term=>`${term.date} ${term.start}–${term.end} ${(term.names||[]).join(', ')}`).join('\n'),
+    description:[params.description||params.terms.map(term=>`${term.date} ${term.start}–${term.end} ${(term.names||[]).join(', ')}`).join('\n'), materialNote].filter(Boolean).join('\n'),
     dueDate:first.date, address:params.address||'', city:params.city||'', customerAddressId:params.customerAddressId||null,
     customerId:params.customerId, customerName:params.customerName,
-    assignedTo:ids[0]||'', assignedTos:ids, terms:params.terms
+    assignedTo:ids[0]||'', assignedTos:ids, terms:params.terms,
+    discipline:params.discipline||null, gardenId:null, startTime:'', endTime:'', defectIds:[], plannedStart:'', estimatedMinutes:null,
+    arrivalWindowStart:'', arrivalWindowEnd:'', legacyTimeMeaning:'unknown', allowOverlaps:false, previewRevision:0
   }, h._headers), env, m, h));
   if(!result.ok) return {reply:result.data.error||'Zakázku se nepodařilo vytvořit. Nic dalšího jsem neuložil.'};
   const savedTerms = await env.DB.prepare('SELECT count(*) AS n FROM job_terms WHERE job_id=?').bind(id).first();
@@ -739,7 +742,9 @@ async function createJob(env, m, h, params, today, tomorrow, options){
   const id = crypto.randomUUID();
   const result = await callJson(()=>handleJobs(write('/api/jobs/'+id,'PUT',{
     version:0, title, jobType:'service', status:'planned', incompleteReason:'', description:'Vytvořeno z pracovního asistenta.',
-    dueDate, customerId:customer.customerId, customerName:customer.customerName, assignedTo:'', assignedTos:[], ...(params.discipline?{discipline:params.discipline}:{})
+    dueDate, customerId:customer.customerId, customerName:customer.customerName, assignedTo:'', assignedTos:[],
+    discipline:params.discipline||null, gardenId:null, startTime:'', endTime:'', defectIds:[], plannedStart:'', estimatedMinutes:null,
+    arrivalWindowStart:'', arrivalWindowEnd:'', legacyTimeMeaning:'unknown', allowOverlaps:false, previewRevision:0, terms:[]
   }, h._headers), env, m, h));
   if(!result.ok) return {reply:result.data.error||'Zakázku se nepodařilo vytvořit. Nic dalšího jsem neuložil.'};
   return {reply:`Zakázka „${result.data.job?.title||title}“ je založená na ${dueDate}${customer.customerName?' u zákazníka '+customer.customerName:''}.`, mutated:'jobs'};

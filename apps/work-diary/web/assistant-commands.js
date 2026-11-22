@@ -293,6 +293,8 @@ export function parseAssistantCommand(input, today){
     const title = body
       .replace(/\s+u\s+zákazníka\s+\p{L}+/iu, '')
       .replace(/\s+pro\s+zákazníka\s+\p{L}+/iu, '')
+      .replace(/\s+u\s+(?:pana|paní|pani|panu)\s+\p{L}+/iu, '')
+      .replace(/\s+pro\s+(?:pana|paní|pani|panu)\s+\p{L}+/iu, '')
       .replace(/\s+u\s+\p{L}+/iu, '')
       .replace(/\s+pro\s+\p{L}+/iu, '')
       .replace(/\s+na\s+(zítra|zítřek|zítřejšek|dnes|pondělí|úterý|středu|čtvrtek|pátek|sobotu|neděli)\b/iu, '')
