@@ -40,13 +40,25 @@ function dayLabel(value){
   return new Intl.DateTimeFormat('cs-CZ',{day:'numeric',month:'numeric'}).format(date);
 }
 
-const runtime = {scope:'', threadId:'', threads:[], busy:false, listening:false, recognition:null, detail:null, historyOpen:false, query:'', theme:'system'};
+const runtime = {scope:'', threadId:'', threads:[], busy:false, listening:false, recognition:null, detail:null, historyOpen:false, query:'', theme:'system', open:false};
 
 export function mountWorkAssistant({db, getSession, onChanged, openCustomer, openJob, openMaterial}={}){
-  const host = document.querySelector('#assistant-page');
-  document.body.dataset.assistantTheme = '';
-  if(!host||!getSession?.()?.user) return;
-  const session = getSession();
+  const session = getSession?.();
+  const existingRoot = document.querySelector('#assistant-root');
+  if(!session?.user){existingRoot?.remove(); runtime.scope=''; return;}
+  const embedded = [...document.querySelectorAll('#assistant-page')].find(node=>!node.closest('#assistant-root'));
+  let bubble = existingRoot;
+  let host = embedded;
+  if(!host){
+    if(!bubble){
+      bubble = document.createElement('div');
+      bubble.id = 'assistant-root';
+      bubble.innerHTML = `<button type="button" class="assistant-launch" aria-label="Pracovní asistent" aria-expanded="false">${spark}</button><div id="assistant-page"></div>`;
+      document.body.appendChild(bubble);
+      bubble.querySelector('.assistant-launch').addEventListener('click', ()=>{runtime.open=!runtime.open; applyBubble(bubble); if(runtime.open) bubble.querySelector('textarea')?.focus();});
+    }
+    host = bubble.querySelector('#assistant-page');
+  }
   const scope = scopeOf(session);
   if(runtime.scope!==scope){
     runtime.scope = scope;
@@ -58,9 +70,17 @@ export function mountWorkAssistant({db, getSession, onChanged, openCustomer, ope
   if(!runtime.theme) runtime.theme = localStorage.getItem(themeKey()) || 'system';
   const thread = current();
   const paint = ()=>render(host, session, paint, {db, getSession, onChanged, openCustomer, openJob, openMaterial});
-  paint();
-  const field = host.querySelector('textarea');
-  if(field && document.activeElement!==field) field.value = thread?.draft||'';
+  if(host.dataset.mounted!==scope){
+    paint();
+    host.dataset.mounted = scope;
+    const field = host.querySelector('textarea');
+    if(field && document.activeElement!==field) field.value = thread?.draft||'';
+  }
+  if(bubble) applyBubble(bubble);
+}
+function applyBubble(root){
+  root.classList.toggle('is-open', !!runtime.open);
+  root.querySelector('.assistant-launch')?.setAttribute('aria-expanded', runtime.open?'true':'false');
 }
 
 function current(){
@@ -120,6 +140,7 @@ function render(host, session, paint, api){
     const known = findCard(type, id);
     activate({type, id, title:known.title||button.querySelector('strong')?.textContent||'', openLabel:known.openLabel}, false, api, paint);
   });
+  host.querySelector('[data-close-assistant]')?.addEventListener('click', ()=>{runtime.open=false; const bubble=host.closest('#assistant-root'); if(bubble) applyBubble(bubble);});
   host.querySelector('[data-close-detail]')?.addEventListener('click', ()=>{runtime.detail=null;paint();});
   host.querySelector('[data-full-profile]')?.addEventListener('click', ()=>{const card=runtime.detail?.card;if(card) activate(card, true, api, paint);});
   host.querySelectorAll('[data-confirm]').forEach(button=>button.onclick=()=>ask('', api, paint, button.dataset.confirm));
@@ -155,6 +176,7 @@ function page(session, thread, items){
         <button type="button" class="assistant-icon-button" data-history aria-label="Historie konverzací">☰</button>
         <div><strong>Pracovní asistent</strong><p>Váš chytrý pomocník pro zákazníky, zakázky, docházku a práci v terénu.</p></div>
         <div class="assistant-themes" role="group" aria-label="Vzhled">${['light','Světlý','dark','Tmavý','system','Systém'].reduce((html,item,index,list)=>index%2?html+`<button type="button" data-theme-choice="${list[index-1]}" aria-pressed="${runtime.theme===list[index-1]}">${item}</button>`:html,'')}</div>
+        <button type="button" class="assistant-icon-button" data-close-assistant aria-label="Zavřít asistenta">×</button>
       </header>
       <div class="assistant-log">${welcome?welcomeBlock(name, tiles):messages}</div>
       <form class="assistant-composer">

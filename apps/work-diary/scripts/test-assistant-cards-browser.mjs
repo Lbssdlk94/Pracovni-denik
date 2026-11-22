@@ -13,7 +13,7 @@ const cards = [
   {type:'material', id:'mat-quote', title:`Žluťoučký <filtr> "20mm"`, subtitle:'Filtry · ks', openLabel:'Otevřít materiál'}
 ];
 const harness = `<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="./design-tokens.css"><link rel="stylesheet" href="./assistant.css?v=assistant-v3"><div id="assistant-page"></div><script type="module">
-import {mountWorkAssistant} from './assistant-ui.js?v=assistant-v4';
+import {mountWorkAssistant} from './assistant-ui.js?v=assistant-v5';
 const cards = ${JSON.stringify(cards)};
 const opened = [];
 window.__opened = opened;
@@ -34,6 +34,7 @@ const types = {'.js':'text/javascript', '.css':'text/css', '.html':'text/html; c
 const server = http.createServer(async (request, response)=>{
   const url = new URL(request.url, 'http://127.0.0.1');
   if(url.pathname==='/harness.html'){response.writeHead(200, {'content-type':'text/html; charset=utf-8'}); response.end(harness); return;}
+  if(url.pathname==='/bubble.html'){response.writeHead(200, {'content-type':'text/html; charset=utf-8'}); response.end(harness.replace('<div id="assistant-page"></div>', '<nav><button data-page="jobs">Zakázky</button></nav>')); return;}
   const file = path.normalize(path.join(root, decodeURIComponent(url.pathname)));
   if(!file.startsWith(root)){response.writeHead(403); response.end(); return;}
   try{const body = await readFile(file); response.writeHead(200, {'content-type':types[path.extname(file)]||'application/octet-stream'}); response.end(body);}
@@ -95,7 +96,18 @@ try{
   assert.equal(await mobile.locator('.assistant-detail').isVisible(), false);
   assert.match(await mobile.locator('.assistant-log').innerText(), /Našel jsem 1 zákazníka/);
   assert.deepEqual(errors, []);
-  console.log('PASS desktop panel and mobile existing detail for customer, job and material, including quotes, apostrophe, diacritics and HTML characters. Production untouched.');
+  const bubble = await browser.newPage({viewport:{width:390, height:844}});
+  bubble.on('pageerror', error=>errors.push(error.message));
+  await bubble.goto(base.replace('harness.html','bubble.html'));
+  await bubble.waitForFunction(()=>window.__ready);
+  assert.equal(await bubble.locator('[data-page="assistant"]').count(), 0);
+  assert.equal(await bubble.locator('#assistant-page').isVisible(), false);
+  await bubble.locator('.assistant-launch').click();
+  await bubble.locator('.assistant-log').getByText('Našel jsem 1 zákazníka.').waitFor();
+  await bubble.locator('[data-close-assistant]').click();
+  assert.equal(await bubble.locator('#assistant-page').isVisible(), false);
+  assert.deepEqual(errors, []);
+  console.log('PASS desktop panel and mobile existing detail for customer, job and material, including quotes, apostrophe, diacritics and HTML characters. The assistant opens from a bubble and is not in the bottom row. Production untouched.');
 }finally{
   await browser.close();
   server.close();
