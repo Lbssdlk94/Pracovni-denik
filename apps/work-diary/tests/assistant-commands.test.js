@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseAssistantCommand, assistantModeInfo, ASSISTANT_MODES, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, foldCzech, nextWeekday, parseMaterialAddition, planMaterialLines} from '../web/assistant-commands.js';
+import {parseAssistantCommand, contextualCommand, assistantModeInfo, ASSISTANT_MODES, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, foldCzech, nextWeekday, parseMaterialAddition, planMaterialLines} from '../web/assistant-commands.js';
 import {answerOffline} from '../web/assistant-offline.js';
 
 const today = '2026-11-21';
@@ -83,6 +83,12 @@ test('Synonyms, destructive refusals and mode registry stay local', ()=>{
   assert.equal(job.params.when, 'tomorrow');
   assert.equal(parseAssistantCommand('Vytvoř zakázku Kontrola filtru', today).params.title, 'Kontrola filtru');
   assert.equal(parseAssistantCommand('Vytvoř zakázku Kontrola filtru', today).params.customer, '');
+  const follow = contextualCommand(parseAssistantCommand('Zobraz jeho zakázky', today), {customerName:'Novák'});
+  assert.equal(follow.intent, 'jobs.search');
+  assert.equal(follow.params.query, 'Novák');
+  const visits = contextualCommand(parseAssistantCommand('Historie návštěv', today), {customerName:'Novák'});
+  assert.equal(visits.intent, 'customers.history');
+  assert.equal(visits.params.query, 'Novák');
   assert.equal(intent('smaž zakázku Novák'), 'refused.destructive');
   assert.equal(intent(''), 'unknown');
   assert.equal(foldCzech('Příště'), 'priste');

@@ -1,4 +1,4 @@
-import {parseAssistantCommand, assistantModeInfo, assistantSuggestions, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, planMaterialLines} from '../web/assistant-commands.js';
+import {parseAssistantCommand, contextualCommand, assistantModeInfo, assistantSuggestions, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, planMaterialLines} from '../web/assistant-commands.js';
 import {featureEnabled} from '../web/features.js';
 import {attendanceHours, attendanceInstant} from '../web/attendance-model.js';
 import {readImportSheet} from '../web/assistant-import.js';
@@ -42,9 +42,29 @@ function jobLine(job){
   const who = [job.customerName, job.assignedName].filter(Boolean).join(' · ');
   return `• ${when?when+' · ':''}${job.title}${who?' · '+who:''} (${STATUS[job.status]||job.status})`;
 }
+function jobCountLabel(count){
+  if(count==null) return '';
+  if(count===1) return '1 aktivní zakázka';
+  if(count>1 && count<5) return `${count} aktivní zakázky`;
+  return `${count} aktivních zakázek`;
+}
+function jobCards(jobs){
+  return (jobs||[]).filter(job=>job?.id).slice(0,8).map(job=>({
+    type:'job', id:job.id, title:job.title||'Zakázka',
+    subtitle:[job.customerName, job.city||job.address].filter(Boolean).join(' · '),
+    meta:job.dueDate||'', status:job.status||'', statusLabel:STATUS[job.status]||job.status||'',
+    openLabel:'Otevřít zakázku'
+  }));
+}
+function materialCards(items){
+  return (items||[]).filter(item=>item?.id).slice(0,8).map(item=>({
+    type:'material', id:item.id, title:item.name, subtitle:[item.categoryName, item.unit].filter(Boolean).join(' · '),
+    meta:item.sku||'', openLabel:'Otevřít materiál'
+  }));
+}
 function reply(mode, text, extra={}){
   const info = assistantModeInfo(mode);
-  return {mode:info.id, modeLabel:info.label, modeNote:info.detail, available:info.available===true, reply:text, suggestions:extra.suggestions||[], confirm:extra.confirm||null, mutated:extra.mutated||null, unavailable:extra.unavailable===true||info.available!==true};
+  return {mode:info.id, modeLabel:info.label, modeNote:info.detail, available:info.available===true, reply:text, suggestions:extra.suggestions||[], cards:extra.cards||[], context:extra.context||null, confirm:extra.confirm||null, mutated:extra.mutated||null, unavailable:extra.unavailable===true||info.available!==true};
 }
 
 async function companyOf(env, m){
@@ -139,7 +159,8 @@ export async function handleAssistant(request, env, ctx, m, h){
     return h.json(reply(mode, answer.reply, answer));
   }
   const today = pragueDate(new Date());
-  const command = parseAssistantCommand(typeof body.text==='string'?body.text:'', today);
+  const context = body.context&&typeof body.context==='object'&&!Array.isArray(body.context)?body.context:null;
+  const command = contextualCommand(parseAssistantCommand(typeof body.text==='string'?body.text:'', today), context);
   const answer = await run(env, ctx, m, h, command, today, {propose:true, preview, context:body.context&&typeof body.context==='object'?body.context:null});
   return h.json(reply(mode, answer.reply, answer));
 }
@@ -221,7 +242,8 @@ async function run(env, ctx, m, h, command, today, options){
     const error = blocked(result,'Zakázky se nepodařilo načíst.');
     if(error) return {reply:error};
     const label = intent==='jobs.today'?'Dnes':'Zítra';
-    return {reply:`${label} (${day}):\n`+lines(result.data.jobs||[], jobLine, 'Žádná návštěva v tento den není.')};
+    const jobs = result.data.jobs||[];
+    return {reply:`${label} (${day}):\n`+lines(jobs, jobLine, 'Žádná návštěva v tento den není.'), cards:jobCards(jobs)};
   }
   if(intent==='jobs.upcoming'||intent==='jobs.plannedServices'||intent==='jobs.week'){
     const type = intent==='jobs.plannedServices'?'&type=service':'';
@@ -231,13 +253,13 @@ async function run(env, ctx, m, h, command, today, options){
     const error = blocked(result);
     if(error) return {reply:error};
     const title = intent==='jobs.plannedServices'?'Plánované servisy':intent==='jobs.week'?`Tento týden (${range.start} až ${range.end})`:'Nadcházející zakázky';
-    return {reply:`${title}:\n`+lines(result.data.jobs||[], jobLine, 'Nic dalšího v plánu není.')};
+    return {reply:`${title}:\n`+lines(result.data.jobs||[], jobLine, 'Nic dalšího v plánu není.'), cards:jobCards(result.data.jobs)};
   }
   if(intent==='jobs.incomplete'){
     const result = await jobsGet(env,m,h,'/api/jobs?state=incomplete&order=schedule');
     const error = blocked(result);
     if(error) return {reply:error};
-    return {reply:'Nedokončené zakázky:\n'+lines(result.data.jobs||[], jobLine, 'Nedokončená zakázka tu není.')};
+    return {reply:'Nedokončené zakázky:\n'+lines(result.data.jobs||[], jobLine, 'Nedokončená zakázka tu není.'), cards:jobCards(result.data.jobs)};
   }
   if(intent==='customers.waitingService'){
     if(!on(h.features,'jobs')) return {reply:'Zakázky jsou v nastavení firmy vypnuté.'};
@@ -414,7 +436,7 @@ async function jobIntent(env, ctx, m, h, intent, params, today, tomorrow, option
   }
   const found = await findJobs(env, m, h, params.query||'');
   if(found.error) return {reply:found.error};
-  if(intent==='jobs.search') return {reply:params.query?`Zakázky pro „${params.query}“:\n`+lines(found.jobs, jobLine, 'Nic jsem nenašel.'):'Napište, jakou zakázku mám hledat.'};
+  if(intent==='jobs.search') return {reply:params.query?`Zakázky pro „${params.query}“:\n`+lines(found.jobs, jobLine, 'Nic jsem nenašel.'):'Napište, jakou zakázku mám hledat.', cards:jobCards(found.jobs), suggestions:[]};
   const picked = oneJob(found.jobs, params.query);
   if(picked.error) return {reply:picked.error};
   if(picked.choices) return {reply:`Našel jsem víc zakázek. Upřesněte název:\n`+lines(picked.choices, jobLine, '')};
@@ -643,6 +665,20 @@ function customerCard(customer, contact){
   const base = `${customer.name}${customer.email?' · '+customer.email:''}`;
   return contact?`${base}\n${phones}${addresses?'\n'+addresses:''}`:base;
 }
+async function customerResultCards(env, m, h, list){
+  const cards = [];
+  for(const customer of list.slice(0,4)){
+    const address = (customer.addresses||[])[0]||{};
+    const place = [address.city, address.address].filter(Boolean).join(' · ');
+    let active = null;
+    if(on(h.features,'jobs')){
+      const visits = await jobsGet(env, m, h, '/api/jobs?state=active&q='+encodeURIComponent(String(customer.name||'').slice(0,80)));
+      if(visits.ok) active = (visits.data.jobs||[]).filter(job=>job.customerId===customer.id||(!job.customerId && job.customerName===customer.name)).length;
+    }
+    cards.push({type:'customer', id:customer.id, title:customer.name, subtitle:place, meta:(customer.disciplines||[]).filter(Boolean).join(', '), count:active, countLabel:jobCountLabel(active), openLabel:'Otevřít zákazníka'});
+  }
+  return cards;
+}
 async function customerIntent(env, m, h, intent, params){
   if(intent==='customers.tariffs'&&!on(h.features,'subscriptions')) return {reply:'Předplatné a tarify jsou v nastavení firmy vypnuté.'};
   const query = params.query||'';
@@ -651,8 +687,12 @@ async function customerIntent(env, m, h, intent, params){
   const error = blocked(result);
   if(error) return {reply:error};
   const list = result.data.customers||[];
-  if(!list.length) return {reply:`Zákazníka „${query}“ nevidím, nebo k němu nemáte přístup.`};
-  if(intent==='customers.search') return {reply:'Zákazníci:\n'+lines(list, customer=>`• ${customerCard(customer,false)}`, '')};
+  if(!list.length) return {reply:`Zákazníka „${query}“ nevidím, nebo k němu nemáte přístup.`, cards:[]};
+  if(intent==='customers.search'){
+    const cards = await customerResultCards(env, m, h, list);
+    const one = list.length===1?list[0]:null;
+    return {reply:one?`Našel jsem 1 zákazníka.`:`Našel jsem ${list.length} zákazníků.`, cards, context:one?{customerId:one.id, customerName:one.name}:null, suggestions:one?['Zobraz jeho zakázky','Historie návštěv']:[]};
+  }
   if(list.length>1&&intent!=='customers.tariffs') return {reply:'Vyhovuje víc zákazníků:\n'+lines(list, customer=>`• ${customer.name}`, '')};
   const customer = list[0];
   if(intent==='customers.contact') return {reply:customerCard(customer, true)};
@@ -681,7 +721,7 @@ async function materialSearch(env, m, h, query){
   if(error) return {reply:error};
   const needle = query.toLocaleLowerCase('cs');
   const items = (result.data.items||[]).filter(item=>`${item.name} ${item.sku}`.toLocaleLowerCase('cs').includes(needle));
-  return {reply:'Materiál:\n'+lines(items, item=>`• ${item.name}${item.sku?' · '+item.sku:''} · ${item.unit}${item.active?'':' (skrytý)'}`, 'V načteném katalogu nic takového není.')+(result.data.nextCursor?'\nKatalog pokračuje další stránkou, zkuste přesnější název.':'')};
+  return {reply:'Materiál:\n'+lines(items, item=>`• ${item.name}${item.sku?' · '+item.sku:''} · ${item.unit}${item.active?'':' (skrytý)'}`, 'V načteném katalogu nic takového není.')+(result.data.nextCursor?'\nKatalog pokračuje další stránkou, zkuste přesnější název.':''), cards:materialCards(items)};
 }
 
 const MATERIAL_STATE = {unchecked:'nezkontrolovaný', checked:'zkontrolovaný', ready:'připravený', missing:'chybí'};

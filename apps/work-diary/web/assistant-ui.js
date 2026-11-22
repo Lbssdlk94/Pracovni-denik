@@ -1,130 +1,300 @@
-import {ASSISTANT_MODES, assistantSuggestions, parseAssistantCommand} from './assistant-commands.js?v=assistant-v2';
+import {parseAssistantCommand, contextualCommand} from './assistant-commands.js?v=assistant-v3';
 import {answerOffline} from './assistant-offline.js?v=assistant-v2';
 import {peekCachedJobs} from './cloud.js?v=completion-v1';
 
-function historyKey(session){
+const esc = value => String(value??'').replace(/[&<>"']/g, char=>({'&':'&','<':'<','>':'>','"':'"',"'":'&#39;'}[char]));
+const spark = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.4 4.2L17.5 8.6 13.4 10 12 14.2 10.6 10 6.5 8.6l4.1-1.4L12 3z"/></svg>';
+const STATUS = {planned:'Naplánováno', on_way:'Na cestě', in_progress:'Probíhá', done:'Hotovo', incomplete:'Nedokončeno'};
+
+function scopeOf(session){
   const user = session?.user?.id || 'anonymous';
   const company = session?.installation?.id || session?.workspace?.workspaceId || 'company';
-  return `pd-assistant-history-v2:${company}:${user}`;
+  return `${company}:${user}`;
 }
-const esc = value => String(value??'').replace(/[&<>"']/g, char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-
-function loadHistory(session){
-  try{const value = JSON.parse(localStorage.getItem(historyKey(session))||'[]');return Array.isArray(value)?value.slice(-40):[];}
+function threadsKey(session){return `pd-assistant-threads-v1:${scopeOf(session)}`;}
+function themeKey(){return 'pd-assistant-theme';}
+function loadThreads(session){
+  try{const value = JSON.parse(localStorage.getItem(threadsKey(session))||'[]');return Array.isArray(value)?value:[];}
   catch{return [];}
 }
-function saveHistory(session, items){
-  try{localStorage.setItem(historyKey(session), JSON.stringify(items.slice(-40)));}catch{/* soukromý režim */ }
+function saveThreads(session, threads){
+  try{localStorage.setItem(threadsKey(session), JSON.stringify(threads.slice(0,30)));}catch{/* soukromý režim */ }
+}
+function greeting(name){
+  const hour = Number(new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Prague',hour:'numeric',hourCycle:'h23'}).format(new Date()));
+  const hello = hour<11?'Dobré ráno':hour<18?'Dobrý den':'Dobrý večer';
+  const first = String(name||'').trim().split(/\s+/)[0]||'';
+  return first?`${hello}, ${first}`:hello;
+}
+function clock(value){
+  try{return new Intl.DateTimeFormat('cs-CZ',{hour:'2-digit',minute:'2-digit'}).format(value?new Date(value):new Date());}
+  catch{return '';}
+}
+function dayLabel(value){
+  const date = new Date(value), now = new Date();
+  if(date.toDateString()===now.toDateString()) return clock(value);
+  const yesterday = new Date(now);yesterday.setDate(now.getDate()-1);
+  if(date.toDateString()===yesterday.toDateString()) return 'Včera';
+  return new Intl.DateTimeFormat('cs-CZ',{day:'numeric',month:'numeric'}).format(date);
 }
 
-export function mountWorkAssistant({db, getSession, onChanged}={}){
-  const existing = document.querySelector('#assistant-root');
-  if(!getSession?.()?.user){existing?.remove();return;}
-  if(existing) return;
-  const root = document.createElement('div');
-  root.id = 'assistant-root';
-  document.body.appendChild(root);
-  const state = {open:false, mode:'basic', busy:false, listening:false, items:[], recognition:null, scope:''};
-  const remember = ()=>{
-    const session = getSession();
-    const scope = historyKey(session);
-    if(scope!==state.scope){state.scope=scope;state.items=loadHistory(session);state.mode='basic';}
-  };
-  const Speech = window.SpeechRecognition||window.webkitSpeechRecognition;
-  const paint = ()=>{
-    remember();
-    const session = getSession();
-    if(!session?.user){root.replaceChildren();return;}
-    const mode = ASSISTANT_MODES.find(item=>item.id===state.mode)||ASSISTANT_MODES[0];
-    if(!state.open){
-      root.innerHTML = `<button type="button" class="assistant-launch" aria-label="Otevřít pracovního asistenta"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.6 4.8L18 9.5l-4.4 1.6L12 16l-1.6-4.9L6 9.5l4.4-1.7L12 3zM18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14z"/></svg></button>`;
-      root.querySelector('button').onclick = ()=>{state.open=true;paint();};
-      return;
-    }
-    const quick = assistantSuggestions().map(text=>`<button type="button" data-quick="${esc(text)}">${esc(text)}</button>`).join('');
-    const messages = state.items.map(item=>`<div class="assistant-bubble ${item.role}">${esc(item.text)}${item.confirm&&item.role==='assistant'?`<div class="assistant-confirm"><button type="button" class="yes" data-confirm="${esc(item.confirm.id)}">Potvrdit</button><button type="button" data-cancel="${esc(item.confirm.id)}">Zrušit</button></div>`:''}${item.suggestions?.length?item.suggestions.map(text=>`<button type="button" data-quick="${esc(text)}">${esc(text)}</button>`).join(''):''}</div>`).join('');
-    root.innerHTML = `<section class="assistant-panel" role="dialog" aria-label="Pracovní asistent">
-      <header class="assistant-head"><span class="assistant-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l1.6 4.8L18 9.5l-4.4 1.6L12 16l-1.6-4.9L6 9.5l4.4-1.7L12 3zM18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14z"/></svg></span><div><strong>Pracovní asistent</strong><p class="assistant-mode">${esc(mode.label)}. ${esc(mode.detail)}</p></div><button type="button" class="assistant-close" data-close aria-label="Zavřít">×</button></header>
-      <div class="assistant-log">${messages||'<div class="assistant-bubble assistant">Napište běžný příkaz, nebo klepněte na rychlou akci. Změny se neuloží, dokud je nepotvrdíte.</div>'}</div>
-      <div class="assistant-modes" aria-label="Režim">${ASSISTANT_MODES.map(item=>`<button type="button" data-mode="${item.id}" aria-pressed="${item.id===mode.id}" ${item.available?'':'disabled'}>${esc(item.label)}${item.available?'':' · nedostupné'}</button>`).join('')}</div>
-      <div class="assistant-quick">${quick}</div>
-      <form class="assistant-form"><textarea rows="1" maxlength="500" aria-label="Příkaz" placeholder="Příkaz, nebo přiložte CSV se zákazníky či materiálem."></textarea><label class="file">Soubor<input data-file type="file" accept=".csv,.txt,.tsv,text/csv,text/plain" aria-label="Vložit tabulku CSV"></label>${Speech?`<button type="button" class="voice" data-voice aria-pressed="${state.listening}" aria-label="Hlasové zadání">Mluvit</button>`:''}<button type="submit" ${state.busy?'disabled':''}>Odeslat</button></form>
-    </section>`;
-    const log = root.querySelector('.assistant-log');
-    log.scrollTop = log.scrollHeight;
-    root.querySelector('[data-close]').onclick = ()=>{stop();state.open=false;paint();};
-    root.querySelectorAll('[data-mode]').forEach(button=>button.onclick=()=>{const next=ASSISTANT_MODES.find(item=>item.id===button.dataset.mode);if(!next?.available){push('assistant', next?.detail||'Tento režim je nedostupný.');return;}state.mode=next.id;paint();});
-    root.querySelectorAll('[data-quick]').forEach(button=>button.onclick=()=>ask(button.dataset.quick));
-    root.querySelector('[data-cancel]')?.addEventListener('click', event=>ask('', '', event.currentTarget.dataset.cancel));
-    root.querySelector('[data-confirm]')?.addEventListener('click', event=>ask('', event.currentTarget.dataset.confirm));
-    const form = root.querySelector('form'), field = form.querySelector('textarea');
-    form.onsubmit = event=>{event.preventDefault();ask(field.value);};
-    root.querySelector('[data-file]').onchange = event=>{
-      const file = event.target.files?.[0];
-      event.target.value = '';
-      if(file) readImportFile(file, field.value);
-    };
-    root.querySelector('[data-voice]')?.addEventListener('click', ()=>toggleVoice(field));
-    field.focus();
-  };
-  function push(role, text, extra={}){
-    state.items.push({role, text, ...extra});
-    state.items = state.items.slice(-40);
-    saveHistory(getSession(), state.items.map(({role,text})=>({role,text})));
-    paint();
+const runtime = {scope:'', threadId:'', threads:[], busy:false, listening:false, recognition:null, detail:null, historyOpen:false, query:'', theme:'system'};
+
+export function mountWorkAssistant({db, getSession, onChanged, openCustomer, openJob}={}){
+  const host = document.querySelector('#assistant-page');
+  document.body.dataset.assistantTheme = '';
+  if(!host||!getSession?.()?.user) return;
+  const session = getSession();
+  const scope = scopeOf(session);
+  if(runtime.scope!==scope){
+    runtime.scope = scope;
+    runtime.threads = loadThreads(session);
+    runtime.threadId = runtime.threads[0]?.id || '';
+    runtime.detail = null;
+    runtime.historyOpen = false;
   }
-  function stop(){state.recognition?.stop();state.listening=false;}
-  function toggleVoice(field){
-    if(!Speech) return;
-    if(state.listening){stop();paint();return;}
-    const recognition = new Speech();
-    recognition.lang = 'cs-CZ';
-    recognition.interimResults = false;
-    recognition.onresult = event=>{field.value = event.results[0][0].transcript;ask(field.value);};
-    recognition.onerror = ()=>push('assistant','Hlasové zadání teď není dostupné. Příkaz napište.');
-    recognition.onend = ()=>{state.listening=false;if(state.open)paint();};
-    state.recognition = recognition;
-    state.listening = true;
-    paint();
-    try{recognition.start();}catch{state.listening=false;push('assistant','Mikrofon se nepodařilo zapnout.');}
+  if(!runtime.theme) runtime.theme = localStorage.getItem(themeKey()) || 'system';
+  const thread = current();
+  const paint = ()=>render(host, session, paint, {db, getSession, onChanged, openCustomer, openJob});
+  paint();
+  const field = host.querySelector('textarea');
+  if(field && document.activeElement!==field) field.value = thread?.draft||'';
+}
+
+function current(){
+  return runtime.threads.find(item=>item.id===runtime.threadId) || null;
+}
+function persist(session){saveThreads(session, runtime.threads);}
+function ensureThread(session){
+  let thread = current();
+  if(thread) return thread;
+  thread = {id:crypto.randomUUID(), title:'Nový chat', updatedAt:Date.now(), items:[], context:null, draft:''};
+  runtime.threads.unshift(thread);
+  runtime.threadId = thread.id;
+  persist(session);
+  return thread;
+}
+function resolvedTheme(){
+  if(runtime.theme==='light'||runtime.theme==='dark') return runtime.theme;
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function render(host, session, paint, api){
+  const thread = current();
+  const items = thread?.items||[];
+  const dark = resolvedTheme();
+  host.dataset.theme = dark;
+  host.innerHTML = page(session, thread, items);
+  const log = host.querySelector('.assistant-log');
+  if(log) log.scrollTop = log.scrollHeight;
+  host.querySelector('[data-new]')?.addEventListener('click', ()=>{runtime.threadId='';runtime.detail=null;runtime.historyOpen=false;ensureThread(session);paint();});
+  host.querySelector('[data-history]')?.addEventListener('click', ()=>{runtime.historyOpen=!runtime.historyOpen;paint();});
+  host.querySelector('[data-query]')?.addEventListener('input', event=>{runtime.query=event.target.value;paint();host.querySelector('[data-query]')?.focus();});
+  host.querySelectorAll('[data-thread]').forEach(button=>button.onclick=()=>{runtime.threadId=button.dataset.thread;runtime.detail=null;runtime.historyOpen=false;paint();});
+  host.querySelectorAll('[data-rename]').forEach(button=>button.onclick=event=>{
+    event.stopPropagation();
+    const row = runtime.threads.find(item=>item.id===button.dataset.rename);
+    const title = prompt('Název konverzace', row?.title||'');
+    if(!row||title==null) return;
+    const clean = title.trim().slice(0,80);
+    if(!clean) return;
+    row.title = clean;row.updatedAt=Date.now();persist(session);paint();
+  });
+  host.querySelectorAll('[data-delete]').forEach(button=>button.onclick=event=>{
+    event.stopPropagation();
+    const row = runtime.threads.find(item=>item.id===button.dataset.delete);
+    if(!row||!confirm(`Smazat konverzaci „${row.title}“? Zprávy v tomto zařízení zmizí.`)) return;
+    runtime.threads = runtime.threads.filter(item=>item.id!==row.id);
+    if(runtime.threadId===row.id){runtime.threadId=runtime.threads[0]?.id||'';runtime.detail=null;}
+    persist(session);paint();
+  });
+  host.querySelectorAll('[data-theme-choice]').forEach(button=>button.onclick=()=>{runtime.theme=button.dataset.themeChoice;localStorage.setItem(themeKey(), runtime.theme);paint();});
+  host.querySelectorAll('[data-quick]').forEach(button=>button.onclick=()=>ask(button.dataset.quick, api, paint));
+  host.querySelectorAll('[data-fill]').forEach(button=>button.onclick=()=>{const field=host.querySelector('textarea');if(!field)return;field.value=button.dataset.fill;field.focus();const live=current();if(live)live.draft=field.value;});
+  host.querySelectorAll('[data-open-card]').forEach(button=>button.onclick=()=>activate(JSON.parse(button.dataset.openCard), false, api, paint));
+  host.querySelector('[data-close-detail]')?.addEventListener('click', ()=>{runtime.detail=null;paint();});
+  host.querySelector('[data-full-profile]')?.addEventListener('click', ()=>{const card=runtime.detail?.card;if(card) activate(card, true, api, paint);});
+  host.querySelectorAll('[data-confirm]').forEach(button=>button.onclick=()=>ask('', api, paint, button.dataset.confirm));
+  host.querySelectorAll('[data-cancel]').forEach(button=>button.onclick=()=>ask('', api, paint, null, button.dataset.cancel));
+  const form = host.querySelector('form'), field = form?.querySelector('textarea');
+  if(form&&field){
+    field.oninput = ()=>{const live=current();if(live){live.draft=field.value;persist(session);}};
+    form.onsubmit = event=>{event.preventDefault();ask(field.value, api, paint);};
+    host.querySelector('[data-file]')?.addEventListener('change', event=>{
+      const file = event.target.files?.[0];event.target.value='';
+      if(file) readImportFile(file, field.value, api, paint);
+    });
+    host.querySelector('[data-voice]')?.addEventListener('click', ()=>toggleVoice(field, api, paint));
   }
-  async function readImportFile(file, hint){
-    const name = file.name||'soubor';
-    if(/\.(pdf|xlsx|xls|doc|docx|png|jpe?g)$/i.test(name)){push('assistant','PDF, Excel a fotky zatím nečtu. Uložte tabulku jako CSV. Nic jsem neuložil.');return;}
-    if(file.size>100000){push('assistant','Soubor je větší než 100 kB. Rozdělte tabulku. Nic jsem neuložil.');return;}
-    let text = '';
-    try{text = await file.text();}catch{push('assistant','Soubor se nepodařilo přečíst.');return;}
-    ask(hint||'Načti tento soubor.', null, null, {name, text});
-  }
-  async function ask(text, confirmId, cancelId, file){
-    const clean = String(text||'').trim();
-    if(!confirmId&&!cancelId&&!clean&&!file||state.busy) return;
-    if(!confirmId&&!cancelId) push('user', file?`Soubor ${file.name}${clean?': '+clean:''}`:clean);
-    const selected = ASSISTANT_MODES.find(item=>item.id===state.mode)||ASSISTANT_MODES[0];
-    if(!selected.available){push('assistant', selected.detail);return;}
-    state.busy = true; paint();
-    const session = getSession();
-    try{
-      if(session?.rolePreview?.active&&(confirmId||cancelId)){push('assistant','V náhledu role změny neukládám.');return;}
-      if(!navigator.onLine && !confirmId && !cancelId){
-        if(file){push('assistant','Soubor bez připojení neukládám. Až budete online, vložte ho znovu. Nic se teď nezměnilo.');return;}
-        const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-        const command = parseAssistantCommand(clean, today);
-        let jobs = null;
-        try{const cached = await peekCachedJobs(`/api/jobs?state=all&order=schedule&month=${today.slice(0,7)}`);jobs = cached?.jobs ?? null;}catch{jobs = null;}
-        const tomorrowDate = new Date(today+'T12:00:00Z');tomorrowDate.setUTCDate(tomorrowDate.getUTCDate()+1);
-        const local = answerOffline(command, {jobs, today, tomorrow:tomorrowDate.toISOString().slice(0,10)});
-        push('assistant', local.reply);
-        return;
-      }
-      if(!navigator.onLine){push('assistant','Potvrzení bez připojení neodešlu. Nic se neuložilo.');return;}
-      const data = await db.request('/api/assistant',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:clean, mode:state.mode, ...(file?{file}:{}), ...(confirmId?{confirmId}:{}), ...(cancelId?{cancelId}:{})})});
-      push('assistant', data.reply||'Hotovo.', {confirm:data.confirm, suggestions:data.suggestions});
-      if(data.mutated) onChanged?.(data.mutated);
-    }catch(error){
-      const offline = !navigator.onLine||error?.status===0||/fetch|network|Failed/i.test(error?.message||'');
-      push('assistant', offline?'Potřebná data nejsou v zařízení. Připojte se a příkaz zopakujte. Rozpracované změny deníku zůstávají beze změny.':(error?.message||'Asistent teď neodpověděl.'));
-    }finally{state.busy=false;paint();}
+}
+
+function page(session, thread, items){
+  const name = session?.user?.name||'';
+  const history = runtime.threads.filter(item=>!runtime.query||item.title.toLocaleLowerCase('cs').includes(runtime.query.toLocaleLowerCase('cs')));
+  const shown = history.slice(0,8);
+  const messages = items.map(item=>bubble(item)).join('');
+  const welcome = !items.length;
+  const tiles = welcomeTiles(session);
+  return `<div class="assistant-workspace ${runtime.historyOpen?'history-open':''} ${runtime.detail?'detail-open':''}">
+    <aside class="assistant-history" aria-label="Historie konverzací">
+      <button type="button" class="assistant-new" data-new>${plus()} Nový chat</button>
+      <label class="assistant-search">Hledat v historii<input data-query value="${esc(runtime.query)}" placeholder="Hledat"></label>
+      <p>Historie konverzací</p>
+      <div class="assistant-thread-list">${shown.map(item=>`<div class="assistant-thread ${item.id===thread?.id?'is-current':''}"><button type="button" data-thread="${esc(item.id)}"><span>${esc(item.title)}</span><small>${esc(dayLabel(item.updatedAt))}</small></button><button type="button" data-rename="${esc(item.id)}" aria-label="Přejmenovat">✎</button><button type="button" data-delete="${esc(item.id)}" aria-label="Smazat konverzaci">×</button></div>`).join('')||'<p class="assistant-empty">Zatím tu žádný chat není.</p>'}${history.length>shown.length?'<p class="assistant-more">Dalších ${history.length-shown.length} je v zařízení.</p>':''}</div>
+    </aside>
+    <section class="assistant-chat" aria-label="Pracovní asistent">
+      <header class="assistant-top">
+        <button type="button" class="assistant-icon-button" data-history aria-label="Historie konverzací">☰</button>
+        <div><strong>Pracovní asistent</strong><p>Váš chytrý pomocník pro zákazníky, zakázky, docházku a práci v terénu.</p></div>
+        <div class="assistant-themes" role="group" aria-label="Vzhled">${['light','Světlý','dark','Tmavý','system','Systém'].reduce((html,item,index,list)=>index%2?html+`<button type="button" data-theme-choice="${list[index-1]}" aria-pressed="${runtime.theme===list[index-1]}">${item}</button>`:html,'')}</div>
+      </header>
+      <div class="assistant-log">${welcome?welcomeBlock(name, tiles):messages}</div>
+      <form class="assistant-composer">
+        <label class="assistant-clip" aria-label="Přidat přílohu">${clip()}<input data-file type="file" accept=".csv,.txt,.tsv,text/csv,text/plain"></label>
+        <textarea rows="1" maxlength="500" aria-label="Příkaz" placeholder="Napište příkaz..."></textarea>
+        <button type="button" data-voice aria-label="Hlasové zadání" aria-pressed="${runtime.listening}">${mic()}</button>
+        <button type="submit" aria-label="Odeslat" ${runtime.busy?'disabled':''}>${send()}</button>
+      </form>
+    </section>
+    ${detailPanel()}
+  </div>`;
+}
+function welcomeTiles(session){
+  const role = session?.user?.role;
+  const manager = ['owner','administrator','admin'].includes(role);
+  const tiles = [
+    ['Co mě dnes čeká?','Co máme dnes za práci?'],
+    ['Najít zákazníka',''],
+    ['Moje zakázky','Ukaž nedokončené zakázky.'],
+    ['Docházka','Kolik hodin jsem dnes odpracoval?']
+  ];
+  if(manager) tiles.push(['Vytvořit zakázku','Vytvoř zakázku ']);
+  tiles.push(['Zkontrolovat materiál','Jaký materiál potřebujeme na zítřek?']);
+  return tiles;
+}
+function welcomeBlock(name, tiles){
+  return `<div class="assistant-welcome"><span class="assistant-spark">${spark}</span><div><strong>${esc(greeting(name))}</strong><p>S čím vám dnes mohu pomoct?</p></div></div>
+    <div class="assistant-tiles">${tiles.map(([label, command])=>command&&!command.endsWith(' ')?`<button type="button" data-quick="${esc(command)}"><span>${esc(label)}</span><small>›</small></button>`:`<button type="button" data-fill="${esc(command||'Najdi zákazníka ')}"><span>${esc(label)}</span><small>›</small></button>`).join('')}</div>`;
+}
+function bubble(item){
+  if(item.role==='user') return `<div class="assistant-row mine"><div class="assistant-user">${esc(item.text)}<time>${esc(clock(item.at))}</time></div></div>`;
+  const cards = (item.cards||[]).map(card=>cardView(card)).join('');
+  const suggestions = (item.suggestions||[]).map(text=>`<button type="button" data-quick="${esc(text)}">${esc(suggestionLabel(text))}</button>`).join('');
+  const confirm = item.confirm?`<div class="assistant-confirm"><p>${esc(item.confirm.detail||item.text)}</p><div><button type="button" class="yes" data-confirm="${esc(item.confirm.id)}">Potvrdit</button><button type="button" data-cancel="${esc(item.confirm.id)}">Zrušit</button></div></div>`:'';
+  return `<div class="assistant-row"><span class="assistant-spark">${spark}</span><div class="assistant-answer"><p>${esc(item.text)}</p><time>${esc(clock(item.at))}</time>${cards}${confirm}${suggestions?`<p class="assistant-next-label">Co chcete udělat dál?</p><div class="assistant-next">${suggestions}</div>`:''}</div></div>`;
+}
+function suggestionLabel(text){
+  if(text==='Zobraz jeho zakázky') return 'Zobrazit zakázky';
+  return text;
+}
+function cardView(card){
+  const payload = esc(JSON.stringify({type:card.type,id:card.id,title:card.title}));
+  const count = card.countLabel?`<small>${esc(card.countLabel)}</small>`:'';
+  const status = card.statusLabel?`<em class="is-${esc(card.status)}">${esc(card.statusLabel)}</em>`:'';
+  const action = card.type==='material' ? '' : `<button type="button" data-open-card="${payload}">${esc(card.openLabel||'Otevřít')}</button>`;
+  return `<article class="assistant-card"><span class="assistant-card-mark">${spark}</span><div><strong>${esc(card.title)}</strong>${card.subtitle?`<p>${esc(card.subtitle)}</p>`:''}${count}</div>${status}${action}</article>`;
+}
+function detailPanel(){
+  const detail = runtime.detail;
+  if(!detail) return '<aside class="assistant-detail" hidden></aside>';
+  const record = detail.record;
+  const phones = (record?.phones||[]).map(item=>item.number).filter(Boolean);
+  const address = (record?.addresses||[]).map(item=>[item.address, item.city].filter(Boolean).join(', ')).filter(Boolean);
+  const jobs = (detail.jobs||[]).slice(0,6);
+  return `<aside class="assistant-detail" aria-label="Detail záznamu">
+    <header><span class="assistant-card-mark">${spark}</span><div><strong>${esc(detail.card.title)}</strong><p>Zákazník</p></div><button type="button" data-close-detail aria-label="Zavřít panel">×</button></header>
+    ${detail.loading?'<p>Načítám údaje z evidence…</p>':detail.error?`<p>${esc(detail.error)}</p>`:`<h3>Kontaktní údaje</h3><ul>${phones.map(phone=>`<li>${esc(phone)}</li>`).join('')||'<li>Telefon v evidenci není.</li>'}${record?.email?`<li>${esc(record.email)}</li>`:''}${address.map(line=>`<li>${esc(line)}</li>`).join('')||'<li>Adresa v evidenci není.</li>'}</ul>
+      <h3>Aktivní zakázky <span>${jobs.length}</span></h3>${jobs.map(job=>`<button type="button" class="assistant-side-job" data-open-card="${esc(JSON.stringify({type:'job',id:job.id,title:job.title}))}"><strong>${esc(job.title)}</strong><small>${esc([job.dueDate, job.city].filter(Boolean).join(' · '))}</small><em class="is-${esc(job.status)}">${esc(STATUS[job.status]||job.status||'')}</em></button>`).join('')||'<p>Aktivní zakázku k tomuto zákazníkovi nevidím.</p>'}`}
+    <button type="button" class="assistant-profile" data-full-profile>Otevřít celý profil</button>
+  </aside>`;
+}
+function activate(card, full, api, paint){
+  const narrow = window.matchMedia?.('(max-width: 1099px)').matches;
+  if(card.type==='job') {api.openJob?.(card.id);return;}
+  if(card.type!=='customer') return;
+  if(full||narrow) {api.openCustomer?.(card.id);if(narrow&&!full)return;}
+  runtime.detail = {card, loading:true, record:null, jobs:[], error:''};
+  paint();
+  loadDetail(card, api, paint);
+}
+async function loadDetail(card, api, paint){
+  try{
+    const customer = await api.db.request('/api/customers/'+encodeURIComponent(card.id));
+    const jobs = await api.db.request('/api/jobs?state=active&q='+encodeURIComponent(String(card.title||'').slice(0,80)));
+    if(runtime.detail?.card?.id!==card.id) return;
+    const list = (jobs.jobs||[]).filter(job=>job.customerId===card.id||(!job.customerId&&job.customerName===card.title));
+    runtime.detail = {card, loading:false, record:customer.customer, jobs:list, error:''};
+  }catch(error){
+    if(runtime.detail?.card?.id!==card.id) return;
+    runtime.detail = {card, loading:false, record:null, jobs:[], error:error?.message||'Detail se nepodařilo načíst. Nic jsem nedoplnil.'};
   }
   paint();
 }
+function push(session, role, text, extra={}){
+  const thread = ensureThread(session);
+  thread.items.push({role, text, at:Date.now(), ...extra});
+  thread.items = thread.items.slice(-40);
+  if(role==='user'&&thread.title==='Nový chat') thread.title = text.replace(/^Soubor\s+/,'').slice(0,42);
+  if(extra.context) thread.context = extra.context;
+  thread.updatedAt = Date.now();
+  thread.draft = '';
+  runtime.threads = [thread, ...runtime.threads.filter(item=>item.id!==thread.id)];
+  persist(session);
+}
+async function ask(text, api, paint, confirmId, cancelId, file){
+  const session = api.getSession();
+  const clean = String(text||'').trim();
+  if((!confirmId&&!cancelId&&!clean&&!file)||runtime.busy) return;
+  const thread = ensureThread(session);
+  if(!confirmId&&!cancelId) push(session, 'user', file?`Soubor ${file.name}${clean?': '+clean:''}`:clean);
+  runtime.busy = true; paint();
+  try{
+    if(session?.rolePreview?.active&&(confirmId||cancelId)){push(session,'assistant','V náhledu role změny neukládám.');return;}
+    if(!navigator.onLine && !confirmId && !cancelId){
+      if(file){push(session,'assistant','Soubor bez připojení neukládám. Až budete online, vložte ho znovu. Nic se teď nezměnilo.');return;}
+      const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+      const command = contextualCommand(parseAssistantCommand(clean, today), thread.context);
+      let jobs = null;
+      try{const cached = await peekCachedJobs(`/api/jobs?state=all&order=schedule&month=${today.slice(0,7)}`);jobs = cached?.jobs ?? null;}catch{jobs = null;}
+      const tomorrowDate = new Date(today+'T12:00:00Z');tomorrowDate.setUTCDate(tomorrowDate.getUTCDate()+1);
+      const local = answerOffline(command, {jobs, today, tomorrow:tomorrowDate.toISOString().slice(0,10)});
+      push(session,'assistant', local.missing?local.reply+' Údaje jsou z poslední uložené kopie.':local.reply);
+      return;
+    }
+    if(!navigator.onLine){push(session,'assistant','Potvrzení bez připojení neodešlu. Nic se neuložilo.');return;}
+    const data = await api.db.request('/api/assistant',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:clean, mode:'basic', ...(thread.context?{context:thread.context}:{}), ...(file?{file}:{}), ...(confirmId?{confirmId}:{}), ...(cancelId?{cancelId}:{})})});
+    push(session,'assistant', data.reply||'Hotovo.', {confirm:data.confirm||null, suggestions:data.suggestions||[], cards:data.cards||[], context:data.context||thread.context});
+    if(data.mutated) api.onChanged?.(data.mutated);
+  }catch(error){
+    const offline = !navigator.onLine||error?.status===0||/fetch|network|Failed/i.test(error?.message||'');
+    push(session,'assistant', offline?'Potřebná data nejsou v zařízení. Připojte se a příkaz zopakujte. Rozpracované změny deníku zůstávají beze změny.':(error?.message||'Asistent teď neodpověděl.'));
+  }finally{runtime.busy=false;paint();}
+}
+function stop(){runtime.recognition?.stop();runtime.listening=false;}
+function toggleVoice(field, api, paint){
+  const Speech = window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!Speech) {push(api.getSession(),'assistant','Hlasové zadání v tomto prohlížeči není. Příkaz napište.');paint();return;}
+  if(runtime.listening){stop();paint();return;}
+  const recognition = new Speech();
+  recognition.lang = 'cs-CZ';
+  recognition.interimResults = false;
+  recognition.onresult = event=>{field.value = event.results[0][0].transcript;ask(field.value, api, paint);};
+  recognition.onerror = ()=>{push(api.getSession(),'assistant','Hlasové zadání teď není dostupné. Příkaz napište.');paint();};
+  recognition.onend = ()=>{runtime.listening=false;paint();};
+  runtime.recognition = recognition;
+  runtime.listening = true;
+  paint();
+  try{recognition.start();}catch{runtime.listening=false;push(api.getSession(),'assistant','Mikrofon se nepodařilo zapnout.');paint();}
+}
+async function readImportFile(file, hint, api, paint){
+  const name = file.name||'soubor';
+  if(/\.(pdf|xlsx|xls|doc|docx|png|jpe?g)$/i.test(name)){push(api.getSession(),'assistant','PDF, Excel a fotky zatím nečtu. Uložte tabulku jako CSV. Nic jsem neuložil.');paint();return;}
+  if(file.size>100000){push(api.getSession(),'assistant','Soubor je větší než 100 kB. Rozdělte tabulku. Nic jsem neuložil.');paint();return;}
+  let text = '';
+  try{text = await file.text();}catch{push(api.getSession(),'assistant','Soubor se nepodařilo přečíst.');paint();return;}
+  ask(hint||'Načti tento soubor.', api, paint, null, null, {name, text});
+}
+function plus(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';}
+function clip(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 8-6.5 6.5a2 2 0 0 1-3-3L13 5a3.5 3.5 0 0 1 5 5l-7 7a5 5 0 0 1-7-7L12 2"/></svg>';}
+function mic(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4"/></svg>';}
+function send(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-5-7-2z"/></svg>';}

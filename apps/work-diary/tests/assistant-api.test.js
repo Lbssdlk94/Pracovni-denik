@@ -17,7 +17,8 @@ test('Assistant reads existing jobs and customers and refuses deletion', async()
   const env = environment();
   try{
     await ready(env);
-    await call(env, '/api/customers/novak', people.owner, 'PUT', {version:0, name:'Novák', phones:[{number:'777111222'}], addresses:[{address:'Zahradní 1', city:'Brno'}], email:'novak@example.com'});
+    const createdCustomer = await call(env, '/api/customers/novak', people.owner, 'PUT', {version:0, name:'Novák', phones:[{id:'phone-novak', number:'777111222'}], addresses:[{id:'addr-novak', address:'Zahradní 1', city:'Brno'}], email:'novak@example.com'});
+    assert.equal(createdCustomer.status, 200, await createdCustomer.clone().text());
     const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
     const created = await call(env, '/api/jobs/job-today', people.owner, 'PUT', {version:0, title:'Kontrola čerpadla', status:'planned', dueDate:today, customerName:'Novák', incompleteReason:'', assignedTo:people.owner.id});
     assert.equal(created.status, 200, await created.clone().text());
@@ -26,8 +27,16 @@ test('Assistant reads existing jobs and customers and refuses deletion', async()
     assert.match(jobs.body.reply, /Kontrola čerpadla/);
     assert.equal(jobs.body.confirm, null);
     const customer = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Najdi zákazníka Nováka.'}));
-    assert.equal(customer.status, 200);
-    assert.match(customer.body.reply, /Novák/);
+    assert.equal(customer.status, 200, JSON.stringify(customer.body));
+    assert.match(customer.body.reply, /Našel jsem 1 zákazníka/);
+    assert.equal(customer.body.cards[0].type, 'customer');
+    assert.equal(customer.body.cards[0].title, 'Novák');
+    assert.equal(customer.body.cards[0].id, 'novak');
+    assert.deepEqual(customer.body.context, {customerId:'novak', customerName:'Novák'});
+    const follow = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Zobraz jeho zakázky', context:customer.body.context}));
+    assert.equal(follow.status, 200, JSON.stringify(follow.body));
+    assert.match(follow.body.reply, /Kontrola čerpadla/);
+    assert.equal(follow.body.cards[0].type, 'job');
     const before = env.sqlite.prepare('SELECT count(*) n FROM jobs WHERE deleted=0').get().n;
     const refused = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Smaž zakázku Novák'}));
     assert.equal(refused.status, 200);

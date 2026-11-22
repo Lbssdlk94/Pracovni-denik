@@ -255,3 +255,18 @@ export function parseAssistantCommand(input, today){
   if(/zakaz/.test(text)) return {intent:'jobs.search', params:{query:softenName(capture(original, [/zakáz(?:ku|ky|ka|ce)?\s+(.+)/iu]))}, text:original};
   return unknown;
 }
+
+export function contextualCommand(command, context){
+  const name = String(context?.customerName||'').trim().slice(0,160);
+  if(!command||!name) return command;
+  const text = foldCzech(command.text||'');
+  const about = /\b(jeho|jeji|jejich|tam|mu|ji|teho|tohoto)\b/.test(text);
+  if(/historie navstev|naposledy|naposled/.test(text)) return {...command, intent:'customers.history', params:{query:name}};
+  if(command.intent==='jobs.search' && (about || !command.params?.query)) return {...command, params:{...command.params, query:name}};
+  if(about && /hodin|odprac|strav/.test(text)) return {...command, intent:'jobs.hours', params:{query:name, person:'', current:false}};
+  if(about && /\b(vytvor|zaloz)\b/.test(text) && /zakazk/.test(text)){
+    const title = command.params?.title && foldCzech(command.params.title)!=='nova zakazka' ? command.params.title : 'Servis';
+    return {...command, intent:'jobs.create', params:{title, customer:name, when:command.params?.when||'today', dueDate:command.params?.dueDate||''}};
+  }
+  return command;
+}
