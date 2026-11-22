@@ -214,11 +214,11 @@ function page(session, thread, items){
   return `<div class="assistant-workspace ${runtime.chatHidden?'chat-hidden':''} ${runtime.mobileTab==='result'?'show-result':''} ${runtime.detail?'detail-open':''}" style="--split:${runtime.split}%">
     <header class="assistant-bar">
       <button type="button" class="assistant-icon-button" data-close-assistant aria-label="Zavřít asistenta">×</button>
-      <span class="assistant-spark">${spark}</span>
-      <div class="assistant-brand"><strong>Pracovní asistent</strong><small>${esc(statusLabel())}</small></div>
+      <span class="assistant-brand-mark" aria-hidden="true">${spark}</span>
+      <div class="assistant-brand"><strong>Pracovní asistent</strong><small><i class="assistant-live"></i>${esc(statusLabel())}</small></div>
       <button type="button" class="assistant-icon-button" data-history aria-pressed="${runtime.historyOpen}" aria-label="Historie konverzací">${clockIcon()}</button>
-      <button type="button" class="assistant-icon-button" data-new aria-label="Nový chat">${plus()}</button>
-      <button type="button" class="assistant-icon-button" data-hide-chat aria-pressed="${runtime.chatHidden}" aria-label="${runtime.chatHidden?'Zobrazit konverzaci':'Skrýt konverzaci'}">${panelIcon()}</button>
+      <button type="button" class="assistant-icon-button" data-new aria-label="Nový chat">${chatIcon()}</button>
+      <button type="button" class="assistant-icon-button" data-hide-chat aria-pressed="${runtime.chatHidden}" aria-label="${runtime.chatHidden?'Zobrazit konverzaci':'Skrýt konverzaci'}">${eyeIcon()}</button>
       <button type="button" class="assistant-icon-button" data-minimize aria-label="Minimalizovat">${minus()}</button>
       <button type="button" class="assistant-icon-button" data-menu aria-pressed="${runtime.menuOpen}" aria-label="Další možnosti">${moreIcon()}</button>
     </header>
@@ -262,17 +262,57 @@ function stage(thread){
 function conceptStage(thread){
   const concept = thread.draftConcept;
   const confirm = [...(thread.items||[])].reverse().find(item=>item.confirm)?.confirm;
-  const terms = (concept.terms||[]).map((term,index)=>`<article class="assistant-term"><label>Den<input data-concept-field="term:${index}:date" type="date" value="${esc(term.date||'')}"></label><label>Od<input data-concept-field="term:${index}:start" type="time" value="${esc(term.start||'07:00')}"></label><label>Do<input data-concept-field="term:${index}:end" type="time" value="${esc(term.end||'15:00')}"></label><label>Pracovníci<input data-concept-field="term:${index}:people" value="${esc((term.people||[]).join(', '))}"></label><label>Poznámka<input data-concept-field="term:${index}:note" value="${esc(term.note||'')}"></label><button type="button" data-drop-term="${index}">Odebrat den</button></article>`).join('');
-  const materials = (concept.materials||[]).map((item,index)=>`<div class="assistant-material"><input data-concept-field="material:${index}:name" value="${esc(item.name||'')}" aria-label="Materiál"><input data-concept-field="material:${index}:quantity" value="${esc(item.quantity||'')}" aria-label="Množství"><input data-concept-field="material:${index}:unit" value="${esc(item.unit||'')}" aria-label="Jednotka"></div>`).join('');
+  const terms = (concept.terms||[]).map((term,index)=>`<article class="assistant-term">
+      <label class="assistant-date"><input data-concept-field="term:${index}:date" type="date" value="${esc(term.date||'')}" aria-label="Den"><span>${esc(termDateLabel(term.date))}${chevron()}</span></label>
+      <label class="assistant-time">${clockIcon()}<input data-concept-field="term:${index}:start" inputmode="numeric" maxlength="5" value="${esc(shortTime(term.start||'07:00'))}" aria-label="Od"><span>–</span><input data-concept-field="term:${index}:end" inputmode="numeric" maxlength="5" value="${esc(shortTime(term.end||'15:00'))}" aria-label="Do"></label>
+      <div class="assistant-people">${(term.people||[]).map((person,personIndex)=>`<span class="assistant-chip">${esc(personName(person))}<button type="button" data-drop-person="${index}:${personIndex}" aria-label="Odebrat ${esc(personName(person))}">×</button></span>`).join('')}<input data-add-person="${index}" aria-label="Přidat pracovníka" placeholder="+"></div>
+      <button type="button" class="assistant-trash" data-drop-term="${index}" aria-label="Odebrat den">${trash()}</button>
+      <input class="assistant-day-note" data-concept-field="term:${index}:note" value="${esc(term.note||'')}" placeholder="Poznámka k dni" aria-label="Poznámka k dni">
+    </article>`).join('');
+  const materials = (concept.materials||[]).map((item,index)=>`<div class="assistant-material">
+      <label><span>Položka *</span><span class="assistant-control">${layers()}${materialField(index,'name',item.name,'Materiál')}</span></label>
+      <label><span>Množství *</span><span class="assistant-qty"><input data-concept-field="material:${index}:quantity" inputmode="decimal" value="${esc(item.quantity??'')}" aria-label="Množství">${unitSelect(index,item.unit)}</span></label>
+      <label><span>Stav</span><select data-concept-field="material:${index}:readiness" aria-label="Stav"><option value="to_buy" ${item.readiness==='on_hand'?'':'selected'}>K nákupu</option><option value="on_hand" ${item.readiness==='on_hand'?'selected':''}>Máme</option></select></label>
+      <button type="button" class="assistant-trash" data-drop-material="${index}" aria-label="Odebrat materiál">${trash()}</button>
+    </div>`).join('');
   const warning = thread.resultNotice||'';
-  return `<div class="assistant-concept-sheet"><header><div><strong>Nová zakázka</strong><span class="assistant-pill">Koncept</span></div><p>${esc(concept.customerName||'Zákazník z evidence')}</p><button type="button" data-back-result hidden>Zpět</button></header>
-    <label>Název<input data-concept-field="title" value="${esc(concept.title||'')}"></label>
-    <section><h3>Harmonogram realizace</h3>${terms}<button type="button" data-add-term>Přidat den</button></section>
-    <section><h3>Potřebný materiál</h3>${materials||'<p>Zatím bez položek.</p>'}<button type="button" data-add-material>Přidat materiál</button></section>
-    <label>Poznámky<textarea data-concept-field="notes">${esc(concept.notes||'')}</textarea></label>
+  return `<div class="assistant-concept-sheet">
+    <header class="assistant-sheet-title"><h2>Nová zakázka</h2><span class="assistant-pill is-concept">Koncept</span></header>
+    <div class="assistant-concept-grid">
+      <label>Zákazník *<span class="assistant-control">${personIcon()}<input value="${esc(concept.customerName||'')}" readonly aria-label="Zákazník"></span></label>
+      <label>Typ zakázky *<span class="assistant-control">${sprinkler()}<input data-concept-field="title" value="${esc(concept.title||'')}" aria-label="Typ zakázky"></span></label>
+    </div>
+    <section><h3>${calendar()} Harmonogram realizace</h3>${terms}<button type="button" class="assistant-add" data-add-term>${plus()} Přidat den</button></section>
+    <section><h3>${layers()} Materiál</h3>${materials}<button type="button" class="assistant-add" data-add-material>${plus()} Přidat materiál</button></section>
+    <label class="assistant-notes">Poznámky<textarea data-concept-field="notes" placeholder="Doplňující poznámka">${esc(concept.notes||'')}</textarea></label>
     ${warning?`<p class="assistant-warning">${esc(warning)}</p>`:''}
-    <div class="assistant-concept-actions"><button type="button" class="yes" data-confirm="${esc(confirm?.id||'')}" ${confirm?'':'disabled'}>Uložit zakázku</button><button type="button" data-cancel="${esc(confirm?.id||'')}" ${confirm?'':'disabled'}>Zrušit koncept</button></div>
+    <div class="assistant-concept-actions"><button type="button" data-cancel="${esc(confirm?.id||'')}" ${confirm?'':'disabled'}>Zrušit</button><button type="button" class="yes" data-confirm="${esc(confirm?.id||'')}" ${confirm?'':'disabled'}>Uložit zakázku</button></div>
   </div>`;
+}
+function personName(value){return typeof value==='string'?value:value?.name||'';}
+function clockValue(value){
+  const match = String(value||'').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if(!match) return value;
+  const hour = Number(match[1]);
+  return hour>=0&&hour<24?String(hour).padStart(2,'0')+':'+match[2]:value;
+}
+function shortTime(value){
+  const normal = clockValue(value);
+  return normal.replace(/^0(\d:)/,'$1');
+}
+function termDateLabel(iso){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(iso||'')) return 'Vyberte den';
+  const text = new Intl.DateTimeFormat('cs-CZ',{weekday:'short',day:'numeric',month:'numeric',timeZone:'UTC'}).format(new Date(iso+'T12:00:00Z'));
+  return text.charAt(0).toLocaleUpperCase('cs')+text.slice(1);
+}
+function materialField(index, field, value, label){
+  return `<input data-concept-field="material:${index}:${field}" value="${esc(value||'')}" aria-label="${esc(label)}">`;
+}
+function unitSelect(index, unit){
+  const current = String(unit||'ks');
+  const units = ['m','ks','bm','kg','bal','l'];
+  if(!units.includes(current)) units.push(current);
+  return `<select data-concept-field="material:${index}:unit" aria-label="Jednotka">${units.map(item=>`<option value="${esc(item)}" ${item===current?'selected':''}>${esc(item)}</option>`).join('')}</select>`;
 }
 function bindConcept(host, session, paint){
   const thread = current();
@@ -294,6 +334,31 @@ function bindConcept(host, session, paint){
     thread.draftConcept.terms = thread.draftConcept.terms.filter((_,index)=>index!==Number(button.dataset.dropTerm));
     syncPlan(thread);persist(session);paint();
   });
+  host.querySelectorAll('[data-drop-person]').forEach(button=>button.onclick=()=>{
+    const [index, personIndex] = button.dataset.dropPerson.split(':').map(Number);
+    const term = thread.draftConcept.terms?.[index];
+    if(!term) return;
+    term.people = (term.people||[]).filter((_,at)=>at!==personIndex);
+    thread.conceptTouched['term:'+index+':people'] = true;
+    syncPlan(thread);persist(session);paint();
+  });
+  host.querySelectorAll('[data-add-person]').forEach(input=>{
+    const add = ()=>{
+      const name = input.value.trim();
+      const index = Number(input.dataset.addPerson);
+      const term = thread.draftConcept.terms?.[index];
+      if(!name||!term) return;
+      term.people = [...(term.people||[]), name];
+      thread.conceptTouched['term:'+index+':people'] = true;
+      syncPlan(thread);persist(session);paint();
+    };
+    input.addEventListener('keydown', event=>{if(event.key==='Enter'){event.preventDefault();add();}});
+    input.addEventListener('change', add);
+  });
+  host.querySelectorAll('[data-drop-material]').forEach(button=>button.onclick=()=>{
+    thread.draftConcept.materials = (thread.draftConcept.materials||[]).filter((_,index)=>index!==Number(button.dataset.dropMaterial));
+    syncPlan(thread);persist(session);paint();
+  });
   host.querySelector('[data-add-material]')?.addEventListener('click', ()=>{
     thread.draftConcept.materials = [...(thread.draftConcept.materials||[]), {name:'', quantity:'1', unit:'ks', readiness:'to_buy'}];
     syncPlan(thread);persist(session);paint();
@@ -306,6 +371,7 @@ function applyConceptField(thread, key, value){
   else if(group==='notes') concept.notes = value;
   else if(group==='term'&&concept.terms?.[index]){
     if(field==='people') concept.terms[index].people = value.split(',').map(item=>item.trim()).filter(Boolean);
+    else if(field==='start'||field==='end') concept.terms[index][field] = clockValue(value);
     else concept.terms[index][field] = value;
   }else if(group==='material'&&concept.materials?.[index]) concept.materials[index][field] = value;
   syncPlan(thread);
@@ -345,7 +411,7 @@ function mergeConcept(local, incoming, touched){
   if((local.terms||[]).length>(incoming.terms||[]).length) next.terms.push(...local.terms.slice(incoming.terms.length));
   return next;
 }
-function statusLabel(){return runtime.busy?'Pracuji':runtime.mode==='local'?'V zařízení':'Základní';}
+function statusLabel(){return runtime.busy?'Pracuji':'Připraven k práci';}
 function historyPopover(shown, total, thread){
   return `<div class="assistant-popover assistant-history" aria-label="Historie konverzací"><label class="assistant-search">Hledat<input data-query value="${esc(runtime.query)}" placeholder="Hledat konverzaci"></label><div class="assistant-thread-list">${shown.map(item=>`<div class="assistant-thread ${item.id===thread?.id?'is-current':''}"><button type="button" data-thread="${esc(item.id)}"><span>${esc(item.title)}</span><small>${esc(dayLabel(item.updatedAt))}</small></button><button type="button" data-rename="${esc(item.id)}" aria-label="Přejmenovat">✎</button><button type="button" data-delete="${esc(item.id)}" aria-label="Smazat konverzaci">×</button></div>`).join('')||'<p class="assistant-empty">Zatím tu žádný chat není.</p>'}${total>shown.length?`<p class="assistant-more">Dalších ${total-shown.length} je v zařízení.</p>`:''}</div></div>`;
 }
@@ -370,12 +436,12 @@ function welcomeBlock(name, tiles){
     <div class="assistant-tiles">${tiles.map(([label, command])=>command&&!command.endsWith(' ')?`<button type="button" data-quick="${esc(command)}"><span>${esc(label)}</span><small>›</small></button>`:`<button type="button" data-fill="${esc(command||'Najdi zákazníka ')}"><span>${esc(label)}</span><small>›</small></button>`).join('')}</div>`;
 }
 function bubble(item){
-  if(item.role==='user') return `<div class="assistant-row mine"><div class="assistant-user">${esc(item.text)}<time>${esc(clock(item.at))}</time></div></div>`;
+  if(item.role==='user') return `<div class="assistant-row mine"><div class="assistant-user">${esc(item.text)}<time>${esc(clock(item.at))}</time></div><span class="assistant-avatar" aria-hidden="true">${personIcon()}</span></div>`;
   const cards = (item.cards||[]).map(card=>cardView(card)).join('');
   const suggestions = (item.suggestions||[]).map(text=>`<button type="button" data-quick="${esc(text)}">${esc(suggestionLabel(text))}</button>`).join('');
   const concept = item.concept?conceptCard(item.concept):'';
   const confirm = item.confirm?`<div class="assistant-confirm"><p>${esc(item.confirm.detail||item.text)}</p><div><button type="button" class="yes" data-confirm="${esc(item.confirm.id)}">Potvrdit a vytvořit</button><button type="button" data-cancel="${esc(item.confirm.id)}">Zrušit</button></div></div>`:'';
-  return `<div class="assistant-row"><span class="assistant-spark">${spark}</span><div class="assistant-answer"><p>${esc(item.text)}</p><time>${esc(clock(item.at))}</time>${cards}${concept}${confirm}${suggestions?`<p class="assistant-next-label">Co chcete udělat dál?</p><div class="assistant-next">${suggestions}</div>`:''}</div></div>`;
+  return `<div class="assistant-row"><span class="assistant-spark">${spark}</span><div class="assistant-answer"><div class="assistant-said"><p>${esc(item.text)}</p><time>${esc(clock(item.at))}</time></div>${cards}${concept}${confirm}${suggestions?`<p class="assistant-next-label">Co chcete udělat dál?</p><div class="assistant-next">${suggestions}</div>`:''}</div></div>`;
 }
 function suggestionLabel(text){
   if(text==='Zobraz jeho zakázky') return 'Zobrazit zakázky';
@@ -567,6 +633,14 @@ async function readImportFile(file, hint, api, paint){
   ask(hint||'Načti tento soubor.', api, paint, null, null, {name, text});
 }
 function plus(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';}
+function chatIcon(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H10l-4 3v-3H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/></svg>';}
+function eyeIcon(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="2.4"/></svg>';}
+function personIcon(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3"/><path d="M5.5 19c1.2-2.6 3.4-4 6.5-4s5.3 1.4 6.5 4"/></svg>';}
+function chevron(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>';}
+function trash(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V5h6v2M8 7l1 12h6l1-12"/></svg>';}
+function calendar(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>';}
+function layers(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 4 8 4-8 4-8-4 8-4zM4 12l8 4 8-4M4 16l8 4 8-4"/></svg>';}
+function sprinkler(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11v9M8 20h8M7 8c1.5 1 2.5 1 4 0s2.5-1 4 0M5 5c2 1.2 3.2 1.2 5 0"/></svg>';}
 function minus(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg>';}
 function clockIcon(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg>';}
 function panelIcon(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M10 5v14"/></svg>';}
