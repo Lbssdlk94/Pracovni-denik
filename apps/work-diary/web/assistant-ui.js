@@ -2,6 +2,7 @@ import {parseAssistantCommand, contextualCommand} from './assistant-commands.js?
 import {answerOffline} from './assistant-offline.js?v=assistant-v2';
 import {peekCachedJobs} from './cloud.js?v=completion-v1';
 import {extractLocalCommand, localMinistral} from './assistant-local.js?v=assistant-v6';
+import {durationPickerMarkup, refreshDurationTotals} from './planning-fields.js?v=workspace-roles-v1';
 
 function esc(value){
   return String(value??'').replace(/[&<>"']/g, char=>'&#'+char.codePointAt(0)+';');
@@ -300,9 +301,10 @@ function conceptStage(thread){
   const confirm = [...(thread.items||[])].reverse().find(item=>item.confirm)?.confirm;
   const terms = (concept.terms||[]).map((term,index)=>`<article class="assistant-term">
       <label class="assistant-date"><input data-concept-field="term:${index}:date" type="date" value="${esc(term.date||'')}" aria-label="Den"><span>${esc(termDateLabel(term.date))}${chevron()}</span></label>
-      <label class="assistant-time">${clockIcon()}<input data-concept-field="term:${index}:start" inputmode="numeric" maxlength="5" value="${esc(shortTime(term.start||'07:00'))}" aria-label="Od"><span>–</span><input data-concept-field="term:${index}:end" inputmode="numeric" maxlength="5" value="${esc(shortTime(term.end||'15:00'))}" aria-label="Do"></label>
+      <label class="assistant-time">${clockIcon()}<input data-concept-field="term:${index}:start" data-duration-start-input inputmode="numeric" maxlength="5" value="${esc(shortTime(term.start||'07:00'))}" aria-label="Od"></label>
       <div class="assistant-people">${(term.people||[]).map((person,personIndex)=>`<span class="assistant-chip">${esc(personName(person))}<button type="button" data-drop-person="${index}:${personIndex}" aria-label="Odebrat ${esc(personName(person))}">×</button></span>`).join('')}<input data-add-person="${index}" aria-label="Přidat pracovníka" placeholder="+"></div>
       <button type="button" class="assistant-trash" data-drop-term="${index}" aria-label="Odebrat den">${trash()}</button>
+      ${durationPickerMarkup({prefix:'concept-'+index, start:term.start||'07:00', end:term.end||'15:00', esc, term:true, endField:'term:'+index+':end'})}
       <input class="assistant-day-note" data-concept-field="term:${index}:note" value="${esc(term.note||'')}" placeholder="Poznámka k dni" aria-label="Poznámka k dni">
     </article>`).join('');
   const materials = (concept.materials||[]).map((item,index)=>`<div class="assistant-material">
@@ -318,7 +320,7 @@ function conceptStage(thread){
       <label>Zákazník *<span class="assistant-control">${personIcon()}<input value="${esc(concept.customerName||'')}" readonly aria-label="Zákazník"></span></label>
       <label>Typ zakázky *<span class="assistant-control">${sprinkler()}<input data-concept-field="title" value="${esc(concept.title||'')}" aria-label="Typ zakázky"></span></label>
     </div>
-    <section><h3>${calendar()} Harmonogram realizace</h3>${terms}<button type="button" class="assistant-add" data-add-term>${plus()} Přidat den</button></section>
+    <section><h3>${calendar()} Harmonogram realizace</h3>${terms}<p class="assistant-duration-total" data-duration-total></p><button type="button" class="assistant-add" data-add-term>${plus()} Přidat den</button></section>
     <section><h3>${layers()} Materiál</h3>${materials}<button type="button" class="assistant-add" data-add-material>${plus()} Přidat materiál</button></section>
     <label class="assistant-notes">Poznámky<textarea data-concept-field="notes" placeholder="Doplňující poznámka">${esc(concept.notes||'')}</textarea></label>
     ${warning?`<p class="assistant-warning">${esc(warning)}</p>`:''}
@@ -399,6 +401,7 @@ function bindConcept(host, session, paint){
     thread.draftConcept.materials = [...(thread.draftConcept.materials||[]), {name:'', quantity:'1', unit:'ks', readiness:'to_buy'}];
     syncPlan(thread);persist(session);paint();
   });
+  refreshDurationTotals(host);
 }
 function applyConceptField(thread, key, value){
   const concept = thread.draftConcept;

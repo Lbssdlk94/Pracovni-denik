@@ -194,7 +194,7 @@ struct APIJobSupplementary:View {
         List {
             LabeledContent("ID",value:job.id).textSelection(.enabled)
             LabeledContent("Verze",value:job["version"].string)
-            if !job["estimatedMinutes"].isNull{LabeledContent("Odhad práce",value:"\(job["estimatedMinutes"].int) min")}
+            if !job["estimatedMinutes"].isNull{LabeledContent("Plánovaná doba",value:APIDuration.label(job["estimatedMinutes"].int))}
             if !job["startTime"].string.isEmpty{LabeledContent("Původní čas",value:job["startTime"].string+"–"+job["endTime"].string);if job["legacyTimeMeaning"].string=="unknown"{Text("Význam původního času je k upřesnění.")}}
             if !job["incompleteReason"].string.isEmpty{LabeledContent("Důvod nedokončení",value:job["incompleteReason"].string)}
         }.navigationTitle("Doplňující údaje").toolbar(.hidden,for:.tabBar)

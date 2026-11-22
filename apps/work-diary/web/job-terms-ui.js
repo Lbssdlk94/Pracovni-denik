@@ -1,4 +1,6 @@
 // One job can keep several work days. A missing schedule stays a normal single-day job.
+import {durationLabel, termSpan} from './planning-model.js?v=workspace-roles-v1';
+import {durationPickerMarkup, refreshDurationTotals} from './planning-fields.js?v=workspace-roles-v1';
 const WEEKDAYS = ['neděle','pondělí','úterý','středa','čtvrtek','pátek','sobota'];
 
 export function shiftDate(iso, days){
@@ -34,10 +36,10 @@ function rowMarkup(term, index, people, esc){
   return `<div class="job-term-row" data-term-row>
     <div class="job-term-main">
       <label class="field">Den<input data-term-date type="date" required value="${esc(term.date||'')}"></label>
-      <label class="field">Od<input data-term-start type="time" step="60" value="${esc(term.start||'07:00')}"></label>
-      <label class="field">Do<input data-term-end type="time" step="60" value="${esc(term.end||'15:00')}"></label>
+      <label class="field">Od<input data-term-start data-duration-start-input type="time" step="60" value="${esc(term.start||'07:00')}"></label>
       <label class="field">Stav<select data-term-status><option value="planned" ${(term.status||'planned')==='planned'?'selected':''}>Naplánováno</option><option value="done" ${term.status==='done'?'selected':''}>Dokončeno</option></select></label>
     </div>
+    ${durationPickerMarkup({prefix:'term-'+index, start:term.start||'07:00', end:term.end||'15:00', esc, term:true})}
     <label class="field">Pracovníci<select data-term-people multiple size="${Math.min(4, Math.max(people.length, 1))}">${people.map(person=>`<option value="${esc(person.id)}" ${selected.has(person.id)?'selected':''}>${esc(person.name)}</option>`).join('')}</select></label>
     <label class="field">Poznámka<input data-term-note maxlength="300" value="${esc(term.note||'')}" placeholder="Např. jiná zakázka, kratší den"></label>
     <button class="btn ghost" type="button" data-term-remove>Odebrat den</button>
@@ -59,6 +61,7 @@ export function termEditorMarkup(job, people, esc){
       </div>
       <div class="actions"><button class="btn" type="button" id="job-terms-fill">Vygenerovat dny</button><button class="btn" type="button" id="job-terms-add">Přidat den</button><button class="btn" type="button" id="job-terms-copy">Stejní pracovníci na všechny dny</button></div>
       <div id="job-terms-list">${terms.map((term,index)=>rowMarkup(term,index,people,esc)).join('')}</div>
+      <p class="mini-empty" data-duration-total></p>
       <p class="mini-empty">Vznikne jedna zakázka. Dokončení jednoho dne nezavře celou zakázku. Úprava názvu nebo adresy termíny nemaže.</p>
     </div>
   </fieldset>`;
@@ -80,7 +83,7 @@ export function bindTermEditor(form, people, esc){
   if(!box) return;
   const list = box.querySelector('#job-terms-list');
   const builder = box.querySelector('.job-terms-builder');
-  const paint = terms=>{list.innerHTML=terms.map((term,index)=>rowMarkup(term,index,people,esc)).join('');};
+  const paint = terms=>{list.innerHTML=terms.map((term,index)=>rowMarkup(term,index,people,esc)).join(''); refreshDurationTotals(box);};
   const current = ()=>readTermPayload(form)||[];
   const show = ()=>{builder.hidden=box.querySelector('[name=termMode]:checked')?.value!=='multi';};
   box.querySelectorAll('[name=termMode]').forEach(input=>input.addEventListener('change', show));
@@ -108,6 +111,7 @@ export function bindTermEditor(form, people, esc){
     paint(current().filter((_,index)=>rows[index]!==row));
   });
   show();
+  refreshDurationTotals(box);
 }
 export function scheduleBadge(job){
   const days = job?.schedule?.days||(Array.isArray(job?.terms)&&job.terms.length>1?job.terms.length:0);
@@ -121,5 +125,6 @@ export function scheduleMarkup(job, people, esc){
   if(terms.length<2) return '';
   const names = new Map(people.map(person=>[person.id, person.name]));
   const done = terms.filter(term=>term.status==='done').length;
-  return `<section class="job-schedule-section" aria-label="Harmonogram realizace"><h3>Harmonogram realizace</h3><p class="mini-empty">${done} ze ${terms.length} dní dokončeno. Jeden dokončený den nezavře celou zakázku.</p>${terms.map((term,index)=>`<article class="job-term-card" data-schedule-term="${index}"><header><strong>${esc(dayLabel(term.date))}</strong><span>${esc(term.start)}–${esc(term.end)}</span></header><p>${esc((term.people||[]).map(id=>names.get(id)||'Kolega').join(', ')||'Bez pracovníků')}</p><p>Odpracováno: ${esc(term.worked?.length?term.worked.map(item=>`${item.name} ${hours(item.ms)}`).join(', '):hours(term.workedMs))}</p><p>Stav: ${term.status==='done'?'dokončeno':'naplánováno'}${term.note?` · ${esc(term.note)}`:''}</p><label class="field">Přesunout jen tento den<input data-move-date type="date" value="${esc(term.date)}"></label><button class="btn" type="button" data-move-term="${index}">Přesunout den</button><button class="btn" type="button" data-finish-term="${index}">${term.status==='done'?'Vrátit den do plánu':'Dokončit jen tento den'}</button></article>`).join('')}</section>`;
+  const total = terms.reduce((sum, term)=>sum+(termSpan(term.start, term.end)||0), 0);
+  return `<section class="job-schedule-section" aria-label="Harmonogram realizace"><h3>Harmonogram realizace</h3><p class="mini-empty">${total?`Celková plánovaná délka: ${esc(durationLabel(total))}. `:''}${done} ze ${terms.length} dní dokončeno. Jeden dokončený den nezavře celou zakázku.</p>${terms.map((term,index)=>`<article class="job-term-card" data-schedule-term="${index}"><header><strong>${esc(dayLabel(term.date))}</strong><span>${esc(term.start)}–${esc(term.end)}</span></header><p>${esc((term.people||[]).map(id=>names.get(id)||'Kolega').join(', ')||'Bez pracovníků')}</p><p>Odpracováno: ${esc(term.worked?.length?term.worked.map(item=>`${item.name} ${hours(item.ms)}`).join(', '):hours(term.workedMs))}</p><p>Stav: ${term.status==='done'?'dokončeno':'naplánováno'}${term.note?` · ${esc(term.note)}`:''}</p><label class="field">Přesunout jen tento den<input data-move-date type="date" value="${esc(term.date)}"></label><button class="btn" type="button" data-move-term="${index}">Přesunout den</button><button class="btn" type="button" data-finish-term="${index}">${term.status==='done'?'Vrátit den do plánu':'Dokončit jen tento den'}</button></article>`).join('')}</section>`;
 }

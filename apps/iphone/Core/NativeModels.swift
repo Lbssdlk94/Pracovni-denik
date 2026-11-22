@@ -46,9 +46,20 @@ struct DiaryJob: Codable, Identifiable, Hashable {
     var active: Bool { !["done", "incomplete"].contains(status) }
     var workTime: String {
         if !plannedStart.isEmpty {
-            return "Práce \(plannedStart)" + (estimatedMinutes.map { " · \($0) min" } ?? " · délka neurčena")
+            return "Práce \(plannedStart)" + (estimatedMinutes.map { " · \(DiaryJob.durationLabel($0))" } ?? " · délka neurčena")
         }
         return "Začátek práce neurčen"
+    }
+    private static func durationLabel(_ minutes: Int) -> String {
+        let hours = minutes / 60, mins = minutes % 60
+        func word(_ value: Int, _ one: String, _ few: String, _ many: String) -> String {
+            let mod = abs(value) % 100
+            let name = (11...14).contains(mod) ? many : (value % 10 == 1 ? one : ((2...4).contains(value % 10) ? few : many))
+            return "\(value) \(name)"
+        }
+        if hours > 0 && mins > 0 { return word(hours, "hodina", "hodiny", "hodin") + " " + word(mins, "minuta", "minuty", "minut") }
+        if hours > 0 { return word(hours, "hodina", "hodiny", "hodin") }
+        return word(mins, "minuta", "minuty", "minut")
     }
     var arrivalWindow: String? {
         guard !arrivalWindowStart.isEmpty else { return nil }

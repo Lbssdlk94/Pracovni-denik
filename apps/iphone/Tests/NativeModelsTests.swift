@@ -10,7 +10,7 @@ final class NativeModelsTests: XCTestCase {
     }
     func testArrivalWindowDoesNotBecomeWorkDuration() throws {
         let (_, jobs) = try fixture(); let job = try XCTUnwrap(jobs.first)
-        XCTAssertEqual(job.workTime, "Práce 09:00 · 60 min")
+        XCTAssertEqual(job.workTime, "Práce 09:00 · 1 hodina")
         XCTAssertEqual(job.arrivalWindow, "Příjezd 10:00–11:00")
         XCTAssertNil(job.originalTime)
     }

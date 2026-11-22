@@ -8,7 +8,11 @@ struct APIFieldsView: View {
     var body: some View {
         VStack(alignment:.leading,spacing:16) {
             ForEach(fields) { field in
-                APIFieldEditor(field:field,value:Binding(get:{value[field.id]},set:{value[field.id]=$0;edited(field.id)}),options:options)
+                if field.id == "estimatedMinutes" {
+                    APIDurationPicker(minutes:Binding(get:{value["estimatedMinutes"].isNull ? nil : value["estimatedMinutes"].int}, set:{next in value["estimatedMinutes"] = next.map { APIValue.n($0) } ?? .null; edited("estimatedMinutes")}), start:value["plannedStart"].string)
+                } else {
+                    APIFieldEditor(field:field,value:Binding(get:{value[field.id]},set:{value[field.id]=$0;edited(field.id)}),options:options)
+                }
                 if field.id != fields.last?.id { Divider() }
             }
         }

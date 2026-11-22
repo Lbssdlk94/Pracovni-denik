@@ -14,7 +14,18 @@ struct WatchJob: Codable, Identifiable, Equatable {
     var kindLabel: String { ["service":"Servis", "installation":"Realizace", "survey":"Zaměření"][kind] ?? kind }
     var disciplineLabel: String { ["irrigation":"Závlaha", "garden":"Garden"][discipline] ?? "" }
     var compactTime: String { !plannedStart.isEmpty ? plannedStart : !arrivalStart.isEmpty ? "Příjezd \(arrivalStart)" : !originalStart.isEmpty ? "Původní čas \(originalStart)" : "Čas neurčen" }
-    var workLabel: String { plannedStart.isEmpty ? "Začátek práce neurčen" : "Práce \(plannedStart)" + (estimatedMinutes.map { " · \($0) min" } ?? " · délka neurčena") }
+    var workLabel: String { plannedStart.isEmpty ? "Začátek práce neurčen" : "Práce \(plannedStart)" + (estimatedMinutes.map { " · \(WatchJob.durationLabel($0))" } ?? " · délka neurčena") }
+    private static func durationLabel(_ minutes: Int) -> String {
+        let hours = minutes / 60, mins = minutes % 60
+        func word(_ value: Int, _ one: String, _ few: String, _ many: String) -> String {
+            let mod = abs(value) % 100
+            let name = (11...14).contains(mod) ? many : (value % 10 == 1 ? one : ((2...4).contains(value % 10) ? few : many))
+            return "\(value) \(name)"
+        }
+        if hours > 0 && mins > 0 { return word(hours, "hodina", "hodiny", "hodin") + " " + word(mins, "minuta", "minuty", "minut") }
+        if hours > 0 { return word(hours, "hodina", "hodiny", "hodin") }
+        return word(mins, "minuta", "minuty", "minut")
+    }
     var navigationURL: URL? {
         guard !address.isEmpty else { return nil }
         var url = URLComponents(string: "https://maps.apple.com/")!
