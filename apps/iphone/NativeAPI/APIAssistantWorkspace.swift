@@ -64,18 +64,18 @@ struct APIAssistantWorkspace: View {
                 VStack(alignment:.leading) {
                     TextField("Den", text:termBinding(index, "date")).frame(minHeight:44)
                     TextField("Pracovníci", text:peopleBinding(index)).frame(minHeight:44)
-                    Button("Odebrat den", role:.destructive) { var rows=concept["terms"].array; if rows.indices.contains(index){rows.remove(at:index); concept["terms"]=.array(rows)} }.frame(minHeight:44)
+                    Button("Odebrat den", role:.destructive) { var rows=concept["terms"].array; if rows.indices.contains(index){rows.remove(at:index); concept["terms"] = .array(rows)} }.frame(minHeight:44)
                 }
             }
-            Button { var rows=concept["terms"].array; rows.append(.object(["date":.s(""),"start":.s("07:00"),"end":.s("15:00"),"people":.array([]),"note":.s("")])); concept["terms"]=.array(rows) } label: { Label("Přidat den", systemImage:"plus") }.frame(minHeight:44)
+            Button { var rows=concept["terms"].array; rows.append(.object(["date":.s(""),"start":.s("07:00"),"end":.s("15:00"),"people":.array([]),"note":.s("")])); concept["terms"] = .array(rows) } label: { Label("Přidat den", systemImage:"plus") }.frame(minHeight:44)
             TextField("Poznámky", text:binding("notes"), axis:.vertical).frame(minHeight:44)
             Button("Uložit zakázku") { Task { await confirm() } }.disabled(confirmID.isEmpty || busy).buttonStyle(.borderedProminent).frame(minHeight:44)
             Button("Zrušit koncept") { Task { await cancelConcept() } }.disabled(confirmID.isEmpty || busy).frame(minHeight:44)
         }
     }
     private func binding(_ key:String)->Binding<String> { Binding(get:{concept[key].string}, set:{concept[key] = .s($0)}) }
-    private func termBinding(_ index:Int, _ key:String)->Binding<String> { Binding(get:{concept["terms"].array.indices.contains(index) ? concept["terms"].array[index][key].string : ""}, set:{var rows=concept["terms"].array; guard rows.indices.contains(index) else {return}; rows[index][key]=.s($0); concept["terms"]=.array(rows)}) }
-    private func peopleBinding(_ index:Int)->Binding<String> { Binding(get:{concept["terms"].array.indices.contains(index) ? concept["terms"].array[index]["people"].array.map(\.string).joined(separator:", ") : ""}, set:{var rows=concept["terms"].array; guard rows.indices.contains(index) else {return}; rows[index]["people"]=.array($0.split(separator:",").map{APIValue.s(String($0).trimmingCharacters(in:.whitespaces))}.filter{!$0.string.isEmpty}); concept["terms"]=.array(rows)}) }
+    private func termBinding(_ index:Int, _ key:String)->Binding<String> { Binding(get:{concept["terms"].array.indices.contains(index) ? concept["terms"].array[index][key].string : ""}, set:{var rows=concept["terms"].array; guard rows.indices.contains(index) else {return}; rows[index][key] = .s($0); concept["terms"] = .array(rows)}) }
+    private func peopleBinding(_ index:Int)->Binding<String> { Binding(get:{concept["terms"].array.indices.contains(index) ? concept["terms"].array[index]["people"].array.map(\.string).joined(separator:", ") : ""}, set:{var rows=concept["terms"].array; guard rows.indices.contains(index) else {return}; rows[index]["people"] = .array($0.split(separator:",").map{APIValue.s(String($0).trimmingCharacters(in:.whitespaces))}.filter{!$0.string.isEmpty}); concept["terms"] = .array(rows)}) }
     private func send() async {
         let text = draft.trimmingCharacters(in:.whitespacesAndNewlines)
         guard !text.isEmpty, !busy else { return }

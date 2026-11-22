@@ -54,7 +54,7 @@ struct APIJobTermsEditor: View {
         var rows=value["terms"].array
         let last=rows.last?["date"].string ?? value["dueDate"].string
         let next=last.isEmpty ? DiaryDate.iso(Date()) : DiaryDate.iso(DiaryDate.parse(last)?.addingTimeInterval(86400) ?? Date())
-        rows.append(blank(next));value["terms"]=.array(rows)
+        rows.append(blank(next));value["terms"] = .array(rows)
     }
     private func copyCrew() {
         let crew=value["terms"].array.first?["people"] ?? .array([])
@@ -63,11 +63,11 @@ struct APIJobTermsEditor: View {
     private func termEditor(_ index:Int)->some View {
         let term=value["terms"].array[index]
         return VStack(alignment:.leading, spacing:8) {
-            DatePicker("Den", selection:Binding(get:{DiaryDate.parse(term["date"].string) ?? Date()}, set:{date in update(index){$0["date"]=.s(DiaryDate.iso(date))}}), displayedComponents:.date).environment(\.timeZone, TimeZone(identifier:"Europe/Prague")!)
-            TextField("Od", text:Binding(get:{term["start"].string}, set:{text in update(index){$0["start"]=.s(text)}})).accessibilityLabel("Čas od")
-            TextField("Do", text:Binding(get:{term["end"].string}, set:{text in update(index){$0["end"]=.s(text)}})).accessibilityLabel("Čas do")
-            TextField("Poznámka", text:Binding(get:{term["note"].string}, set:{text in update(index){$0["note"]=.s(text)}}))
-            Picker("Stav dne", selection:Binding(get:{term["status"].string=="done" ? "done" : "planned"}, set:{status in update(index){$0["status"]=.s(status)}})) {
+            DatePicker("Den", selection:Binding(get:{DiaryDate.parse(term["date"].string) ?? Date()}, set:{date in update(index){$0["date"] = .s(DiaryDate.iso(date))}}), displayedComponents:.date).environment(\.timeZone, TimeZone(identifier:"Europe/Prague")!)
+            TextField("Od", text:Binding(get:{term["start"].string}, set:{text in update(index){$0["start"] = .s(text)}})).accessibilityLabel("Čas od")
+            TextField("Do", text:Binding(get:{term["end"].string}, set:{text in update(index){$0["end"] = .s(text)}})).accessibilityLabel("Čas do")
+            TextField("Poznámka", text:Binding(get:{term["note"].string}, set:{text in update(index){$0["note"] = .s(text)}}))
+            Picker("Stav dne", selection:Binding(get:{term["status"].string=="done" ? "done" : "planned"}, set:{status in update(index){$0["status"] = .s(status)}})) {
                 Text("Naplánováno").tag("planned");Text("Dokončeno").tag("done")
             }
             ForEach(people, id:\.id) { person in
@@ -77,12 +77,12 @@ struct APIJobTermsEditor: View {
                     row["people"] = .array(crew)
                 }}))
             }
-            Button("Odebrat den", role:.destructive) {var rows=value["terms"].array;if rows.indices.contains(index){rows.remove(at:index);value["terms"]=.array(rows)}}.frame(minHeight:44)
+            Button("Odebrat den", role:.destructive) {var rows=value["terms"].array;if rows.indices.contains(index){rows.remove(at:index);value["terms"] = .array(rows)}}.frame(minHeight:44)
         }.padding(.vertical, 8)
     }
     private func update(_ index:Int, _ change:(inout APIValue)->Void) {
         var rows=value["terms"].array
         guard rows.indices.contains(index) else {return}
-        change(&rows[index]);value["terms"]=.array(rows)
+        change(&rows[index]);value["terms"] = .array(rows)
     }
 }
