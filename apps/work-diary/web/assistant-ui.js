@@ -289,7 +289,7 @@ function ensureDraft(thread){
 }
 function conceptPayload(thread){
   if(!thread?.draftConcept) return null;
-  return {title:thread.draftConcept.title||'', notes:thread.draftConcept.notes||'', terms:thread.draftConcept.terms||[], materials:thread.draftConcept.materials||[]};
+  return {title:thread.draftConcept.title||'', notes:thread.draftConcept.notes||'', customerName:thread.draftConcept.customerName||'', address:thread.draftConcept.address||'', city:thread.draftConcept.city||'', terms:thread.draftConcept.terms||[], materials:thread.draftConcept.materials||[]};
 }
 function stage(thread){
   if(runtime.detail) return detailPanel();
@@ -317,7 +317,9 @@ function conceptStage(thread){
   return `<div class="assistant-concept-sheet">
     <header class="assistant-sheet-title"><h2>Nová zakázka</h2><span class="assistant-pill is-concept">Koncept</span></header>
     <div class="assistant-concept-grid">
-      <label>Zákazník *<span class="assistant-control">${personIcon()}<input value="${esc(concept.customerName||'')}" readonly aria-label="Zákazník"></span></label>
+      <label>Zákazník *<span class="assistant-control">${personIcon()}<input data-concept-field="customerName" value="${esc(concept.customerName||'')}" aria-label="Zákazník"></span></label>
+      <label>Adresa<span class="assistant-control"><input data-concept-field="address" value="${esc(concept.address||'')}" aria-label="Adresa"></span></label>
+      <label>Město<span class="assistant-control"><input data-concept-field="city" value="${esc(concept.city||'')}" aria-label="Město"></span></label>
       <label>Typ zakázky *<span class="assistant-control">${sprinkler()}<input data-concept-field="title" value="${esc(concept.title||'')}" aria-label="Typ zakázky"></span></label>
     </div>
     <section><h3>${calendar()} Harmonogram realizace</h3>${terms}<p class="assistant-duration-total" data-duration-total></p><button type="button" class="assistant-add" data-add-term>${plus()} Přidat den</button></section>
@@ -408,6 +410,9 @@ function applyConceptField(thread, key, value){
   const [group, index, field] = key.split(':');
   if(group==='title') concept.title = value;
   else if(group==='notes') concept.notes = value;
+  else if(group==='customerName') concept.customerName = value;
+  else if(group==='address') concept.address = value;
+  else if(group==='city') concept.city = value;
   else if(group==='term'&&concept.terms?.[index]){
     if(field==='people') concept.terms[index].people = value.split(',').map(item=>item.trim()).filter(Boolean);
     else if(field==='start'||field==='end') concept.terms[index][field] = clockValue(value);
@@ -418,7 +423,7 @@ function applyConceptField(thread, key, value){
 function syncPlan(thread){
   const concept = thread.draftConcept;
   if(!concept) return;
-  thread.context = {...(thread.context||{}), plan:{...(thread.context?.plan||{}), title:concept.title, customer:thread.context?.plan?.customer||concept.customerName, terms:concept.terms, materials:concept.materials||[]}};
+  thread.context = {...(thread.context||{}), plan:{...(thread.context?.plan||{}), title:concept.title, customer:concept.customerName||thread.context?.plan?.customer||'', customerName:concept.customerName||thread.context?.plan?.customerName||'', address:concept.address||'', city:concept.city||'', terms:concept.terms, materials:concept.materials||[]}};
 }
 function adoptConcept(thread, concept){
   if(!concept) return;
@@ -440,6 +445,9 @@ function mergeConcept(local, incoming, touched){
   const next = JSON.parse(JSON.stringify(incoming));
   if(touched.title) next.title = local.title;
   if(touched.notes) next.notes = local.notes;
+  if(touched.customerName) next.customerName = local.customerName;
+  if(touched.address) next.address = local.address;
+  if(touched.city) next.city = local.city;
   next.terms = (incoming.terms||[]).map((term,index)=>{
     const kept = local.terms?.[index];
     if(!kept) return term;
@@ -613,14 +621,15 @@ async function ask(text, api, paint, confirmId, cancelId, file, concept){
     if(session?.rolePreview?.active&&(confirmId||cancelId)){if(alive()) push(session,'assistant','V náhledu role změny neukládám.');return;}
     if(!confirmId&&!cancelId&&!file&&runtime.mode==='local'){
       const model = localMinistral();
-      if(!model.snapshot().installed){if(alive()) push(session,'assistant','Nejdřív stáhněte Ministral 3B. Nic jsem se neptal serveru.');return;}
-      let answer = '';
-      try{answer = await model.answer(clean);}catch(error){if(alive()) push(session,'assistant', error?.message||'Ministral teď neodpověděl. Základní asistent zůstává k dispozici.');return;}
-      if(!alive()) return;
-      const command = extractLocalCommand(answer);
-      if(!command){push(session,'assistant', `${answer}\n\nTohle není údaj z deníku. Jména, hodiny a ceny beru jen z evidence.`);return;}
-      push(session,'assistant', `Rozumím tomu jako: ${command}`);
-      commandText = command;
+      if(!model.snapshot().installed){if(alive()) push(session,'assistant','Ministral 3B v prohlížeči není. Používám základní režim, který bere jen data z evidence.');}
+      else{
+        let answer = '';
+        try{answer = await model.answer(clean);}catch(error){if(alive()) push(session,'assistant', (error?.message||'Ministral teď neodpověděl.')+' Pokračuji základním režimem.');answer='';}
+        if(!alive()) return;
+        const command = answer?extractLocalCommand(answer):'';
+        if(answer&&!command){push(session,'assistant', `${answer}\n\nTohle není údaj z deníku. Jména, hodiny a ceny beru jen z evidence.`);return;}
+        if(command){push(session,'assistant', `Rozumím tomu jako: ${command}`);commandText = command;}
+      }
     }
     if(!alive()) return;
     if(!navigator.onLine && !confirmId && !cancelId){
@@ -644,7 +653,8 @@ async function ask(text, api, paint, confirmId, cancelId, file, concept){
   }catch(error){
     if(!alive()) return;
     const offline = !navigator.onLine||error?.status===0||/fetch|network|Failed/i.test(error?.message||'');
-    push(session,'assistant', offline?'Potřebná data nejsou v zařízení. Připojte se a příkaz zopakujte. Rozpracované změny deníku zůstávají beze změny.':(error?.message||'Asistent teď neodpověděl.'));
+    const kept = current()?.draftConcept?' Rozpracovaný koncept zůstává v zařízení. Až se připojení vrátí, můžete ho upravit nebo uložit znovu.':'';
+    push(session,'assistant', (offline?'Potřebná data nejsou v zařízení. Připojte se a příkaz zopakujte. Rozpracované změny deníku zůstávají beze změny.':(error?.message||'Asistent teď neodpověděl.'))+kept);
   }finally{if(alive()){runtime.busy=false;paint();}}
 }
 function stop(){runtime.recognition?.stop();runtime.listening=false;}

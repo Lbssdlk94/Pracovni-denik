@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {api} from '../worker/api.js';
 import {environment, people, request} from './fixtures.mjs';
 import {nextWeekday} from '../web/assistant-commands.js';
+import {describeApiFailure} from '../worker/api.js';
 
 const ctx = {waitUntil:task=>task.catch(()=>{})};
 const call = (env, path, person, method='GET', value, extra)=>api(request(path, person, method, value, extra), env, ctx);
@@ -406,6 +407,75 @@ test('Job search understands last week, Wednesday, declined names, and a 30 hour
     assert.match(hours.body.reply, /30 h/);
     assert.match(hours.body.reply, /chybně/);
     assert.doesNotMatch(hours.body.reply, /45 h/);
+  }finally{env.sqlite.close();}
+});
+
+test('Separate weekdays become one unsent concept and save only after people are confirmed', async()=>{
+  const env = environment();
+  try{
+    await ready(env);
+    await call(env, '/api/invitations', people.owner, 'POST', {email:people.worker.email, role:'worker'});
+    await call(env, '/api/me', people.worker);
+    env.sqlite.prepare('UPDATE members SET name=? WHERE user_id=?').run('Luboš', people.owner.id);
+    env.sqlite.prepare('UPDATE members SET name=? WHERE user_id=?').run('Zdeněk', people.worker.id);
+    assert.equal((await call(env, '/api/customers/petrik', people.owner, 'PUT', {version:0, name:'Pan Petřík', phones:[], addresses:[{id:'addr-petrik', address:'Lipová 8', city:'Plzeň'}]})).status, 200);
+    const text = 'Vytvoř zakázku na pondělí a středu u pana Petříka. Realizace závlahy od 8 hodin do 16 hodin.';
+    const basic = await json(await call(env, '/api/assistant', people.owner, 'POST', {text, mode:'basic'}));
+    assert.equal(basic.status, 200, JSON.stringify(basic.body));
+    assert.equal(basic.body.concept.customerName, 'Pan Petřík');
+    assert.equal(basic.body.concept.address, 'Lipová 8');
+    assert.equal(basic.body.concept.city, 'Plzeň');
+    assert.equal(basic.body.concept.title, 'Realizace závlahy');
+    assert.equal(basic.body.concept.terms.length, 2);
+    assert.deepEqual(basic.body.concept.terms.map(term=>[term.start, term.end]), [['08:00','16:00'],['08:00','16:00']]);
+    assert.notEqual(basic.body.concept.terms[0].date, basic.body.concept.terms[1].date);
+    assert.match(basic.body.reply, /16 hodin/);
+    assert.match(basic.body.reply, /Kdo bude/);
+    assert.equal(env.sqlite.prepare("SELECT count(*) n FROM jobs WHERE title='Realizace závlahy'").get().n, 0);
+    const local = await json(await call(env, '/api/assistant', people.owner, 'POST', {text, mode:'local'}));
+    assert.equal(local.status, 200, JSON.stringify(local.body));
+    assert.equal(local.body.concept.terms.length, 2);
+    assert.doesNotMatch(local.body.reply, /Týmové úložiště není dostupné/);
+    const denied = await json(await call(env, '/api/assistant', people.worker, 'POST', {text, mode:'basic'}));
+    assert.equal(denied.body.confirm, null);
+    assert.match(denied.body.reply, /správce/);
+    const missing = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Vytvoř zakázku na pondělí a středu u pana Neznámého. Realizace závlahy od 8 hodin do 16 hodin.'}));
+    assert.equal(missing.body.confirm, null);
+    assert.match(missing.body.reply, /nenašel/);
+    const crew = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'V pondělí bude Luboš a ve středu Zdeněk. Potřebujeme 10 m potrubí k nákupu.', context:basic.body.context, mode:'local'}));
+    assert.equal(crew.status, 200, JSON.stringify(crew.body));
+    assert.deepEqual(crew.body.concept.terms.map(term=>term.people), [['Luboš'],['Zdeněk']]);
+    assert.match(crew.body.concept.materials[0].name, /potrubí/i);
+    const tooSoon = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:basic.body.confirm.id, concept:basic.body.concept}));
+    assert.equal(tooSoon.status, 400);
+    assert.match(tooSoon.body.error, /pracovníka/);
+    assert.doesNotMatch(tooSoon.body.error, /Týmové úložiště není dostupné/);
+    assert.equal(env.sqlite.prepare("SELECT count(*) n FROM jobs WHERE title='Realizace závlahy'").get().n, 0);
+    const concept = crew.body.concept;
+    concept.notes = 'Ruční poznámka';
+    concept.terms[1].end = '12:00';
+    const saved = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:crew.body.confirm.id, concept}));
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    assert.match(saved.body.reply, /Lipová 8/);
+    const job = env.sqlite.prepare("SELECT id, description, estimated_minutes FROM jobs WHERE title='Realizace závlahy' AND deleted=0").get();
+    assert.match(job.description, /Ruční poznámka/);
+    assert.equal(job.estimated_minutes, null);
+    const terms = env.sqlite.prepare('SELECT term_date, start_time, end_time, assigned_users FROM job_terms WHERE job_id=? ORDER BY term_date').all(job.id);
+    assert.equal(terms.length, 2);
+    assert.equal(terms[0].start_time, '08:00');
+    assert.equal(terms[0].end_time, '16:00');
+    assert.equal(terms[1].end_time, '12:00');
+    assert.notEqual(terms[0].term_date, terms[1].term_date);
+    assert.match(terms[0].assigned_users, new RegExp(people.owner.id));
+    assert.match(terms[1].assigned_users, new RegExp(people.worker.id));
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM attendance_shifts').get().n, 0);
+    const again = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:basic.body.confirm.id, concept}));
+    assert.ok(again.status===400||again.status===409, JSON.stringify(again.body));
+    assert.match(again.body.error||again.body.reply||'', /koliz|pracovníka|už byla provedena|zrušené|vypršelo|Zkontrolujte/);
+    assert.doesNotMatch(JSON.stringify(again.body), /Týmové úložiště není dostupné/);
+    assert.equal(env.sqlite.prepare("SELECT count(*) n FROM jobs WHERE title='Realizace závlahy' AND deleted=0").get().n, 1);
+    assert.match(describeApiFailure(Object.assign(new Error(''), {name:'D1Error', cause:new Error('D1_ERROR: no such table: assistant_events')})), /no such table/);
+    assert.doesNotMatch(describeApiFailure(new Error('')), /Týmové úložiště není dostupné/);
   }finally{env.sqlite.close();}
 });
 

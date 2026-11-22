@@ -259,7 +259,8 @@ export function parseAssistantCommand(input, today){
     if(/kontrol|chybi|podpis|fotk|fotog/.test(text)) return {intent:'protocol.check', params:{query:capture(original, [/zakáz(?:ce|ku|ky)\s+(.+)/iu]).replace(/[?.!,]+$/g,'').trim(), current:/\b(aktualni|teto)\b/.test(text)}, text:original};
     return {intent:'protocol.draft', params:{query:softenName(capture(original, [/protokol(?:\s+(?:pro|k|na|ke))?\s+(.+)/iu]))}, text:original};
   }
-  if(/realizac/.test(text) && /\b(hodin|strav|celkem)/.test(text)) return {intent:'jobs.realizationHours', params:{}, text:original};
+  if(planWork(original, today)) return {intent:'jobs.plan', params:{text:original}, text:original};
+  if(/realizac/.test(text) && /\b(strav|celkem|odprac|kolik)\b/.test(text) && !/\bod\s+\d/.test(text)) return {intent:'jobs.realizationHours', params:{}, text:original};
   if(/cekaj/.test(text) && /servis/.test(text) && /zakaz/.test(text)) return {intent:'customers.waitingService', params:{}, text:original};
   if(/\b(hodin|dochaz|smen|vykaz|odprac)/.test(text)){
     if(/zakaz/.test(text)){
@@ -286,10 +287,9 @@ export function parseAssistantCommand(input, today){
     const intent = /histori/.test(text)?'customers.history':/kontakt/.test(text)?'customers.contact':'customers.search';
     return {intent, params:{query}, text:original};
   }
-  if(planWork(original, today)) return {intent:'jobs.plan', params:{text:original}, text:original};
   if(/\b(vytvor|zaloz|nova) zakazk/.test(text)){
     const body = capture(original, [/zakázku\s+(.+)/iu]);
-    const customer = softenName(clipField(capture(original, [/\bu\s+zákazníka\s+(\p{L}+)/iu, /\bpro\s+zákazníka\s+(\p{L}+)/iu, /\bu\s+(\p{L}+)/iu, /\bpro\s+(\p{L}+)/iu]), 80));
+    const customer = softenName(clipField(capture(original, [/\bu\s+zákazníka\s+(\p{L}+)/iu, /\bpro\s+zákazníka\s+(\p{L}+)/iu, /\bu\s+(?:pana|paní|pani|panu|pane)\s+(\p{L}+)/iu, /\bpro\s+(?:pana|paní|pani|panu|pane)\s+(\p{L}+)/iu, /\bu\s+(\p{L}+)/iu, /\bpro\s+(\p{L}+)/iu]), 80));
     const title = body
       .replace(/\s+u\s+zákazníka\s+\p{L}+/iu, '')
       .replace(/\s+pro\s+zákazníka\s+\p{L}+/iu, '')

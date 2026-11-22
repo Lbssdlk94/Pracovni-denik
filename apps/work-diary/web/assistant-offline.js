@@ -1,5 +1,5 @@
 // Offline answers use only the snapshot the caller already has. Missing data stays missing.
-import {attendanceHours} from './attendance-model.js';
+import {attendanceHours} from './attendance-model.js?v=workspace-roles-v1';
 
 const STATUS = {planned:'plánovaná', on_way:'na cestě', in_progress:'probíhá', done:'hotová', incomplete:'nedokončená'};
 const missing = 'Tento přehled v zařízení nemám. Připojte se. Nic jsem si nevymyslel.';

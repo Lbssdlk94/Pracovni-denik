@@ -1,5 +1,5 @@
 import {parseAssistantCommand, contextualCommand, assistantModeInfo, assistantSuggestions, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, planMaterialLines} from '../web/assistant-commands.js';
-import {planWork, revisePlan, matchPeople, planCollisions, planSummary, nameStem} from '../web/job-plan.js';
+import {planWork, revisePlan, matchPeople, planCollisions, planSummary, nameStem, customerHit} from '../web/job-plan.js';
 import {featureEnabled} from '../web/features.js';
 import {attendanceHours, attendanceInstant} from '../web/attendance-model.js';
 import {readImportSheet} from '../web/assistant-import.js';
@@ -183,6 +183,17 @@ async function applyConceptEdit(env, m, h, action, concept){
   if(!concept||typeof concept!=='object'||Array.isArray(concept)||action.intent!=='jobs.plan'||!action.params) return;
   if(typeof concept.title==='string'&&concept.title.trim()) action.params.title = concept.title.trim().slice(0,120);
   if(typeof concept.notes==='string') action.params.description = concept.notes.trim().slice(0,2000);
+  if(typeof concept.customerName==='string' && concept.customerName.trim() && concept.customerName.trim()!==action.params.customerName){
+    const found = await findPlannedCustomer(env, m, h, {customer:concept.customerName.trim(), customerStem:nameStem(concept.customerName)});
+    if(found.error) h.fail(400, found.error);
+    action.params.customerId = found.customerId;
+    action.params.customerName = found.customerName;
+    action.params.customerAddressId = found.customerAddressId;
+    if(typeof concept.address!=='string' || !concept.address.trim()) action.params.address = found.address;
+    if(typeof concept.city!=='string' || !concept.city.trim()) action.params.city = found.city;
+  }
+  if(typeof concept.address==='string') action.params.address = concept.address.trim().slice(0,500);
+  if(typeof concept.city==='string') action.params.city = concept.city.trim().slice(0,120);
   if(Array.isArray(concept.materials)) action.params.materials = concept.materials.slice(0,20).map(item=>({name:String(item?.name||'').slice(0,120), quantity:String(item?.quantity||'').slice(0,20), unit:String(item?.unit||'').slice(0,20), readiness:item?.readiness==='on_hand'?'on_hand':'to_buy'})).filter(item=>item.name);
   if(!Array.isArray(concept.terms)) return;
   const members = await env.DB.prepare("SELECT user_id AS id, name FROM members WHERE EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND actor.role IN ('owner','administrator','admin'))").bind(m.user_id).all();
@@ -197,7 +208,8 @@ async function applyConceptEdit(env, m, h, action, concept){
     if(end<=start) h.fail(400,'Konec dne musí být po začátku. Nic jsem neuložil.');
     const names = (Array.isArray(term.people)?term.people:[String(term.people||'')]).flatMap(name=>String(name).split(',')).map(name=>name.trim()).filter(Boolean);
     const matched = matchPeople(names, members.results||[]);
-    if(!names.length||matched.ambiguous.length||matched.resolved.length!==names.length) h.fail(400,'Pracovníka z konceptu nevidím v týmu. Nic jsem neuložil.');
+    if(!names.length) h.fail(400,'Doplňte pracovníka ke každému dni. Nic jsem neuložil.');
+    if(matched.ambiguous.length||matched.resolved.length!==names.length) h.fail(400,'Pracovníka z konceptu nevidím v týmu. Nic jsem neuložil.');
     terms.push({date, start, end, note:String(term.note||'').slice(0,300), names, people:matched.resolved.map(person=>person.id), status:term.status==='done'?'done':'planned'});
   }
   if(!terms.length) h.fail(400,'Koncept nemá žádný den. Nic jsem neuložil.');
@@ -218,9 +230,9 @@ async function confirm(env, ctx, m, h, id, mode, preview, concept){
     if(row.kind==='committing') return reply(mode, 'Toto potvrzení se právě zpracovává. Znovu ho nespouštím.');
     h.fail(409,'Potvrzení vypršelo. Zadejte příkaz znovu.');
   }
-  const action = JSON.parse(row.payload);
-  let done;
+  let action, done;
   try{
+    action = JSON.parse(row.payload);
     if(concept) await applyConceptEdit(env, m, h, action, concept);
     done = await run(env, ctx, m, h, action, pragueDate(new Date()), {propose:false, preview});
   }catch(error){
@@ -656,42 +668,70 @@ async function linkedCustomer(env, m, h, params){
   return {customerId:list[0].id, customerName:list[0].name};
 }
 
+async function findPlannedCustomer(env, m, h, plan){
+  if(plan?.customerId){
+    const one = await customersGet(env, m, h, '/api/customers/'+encodeURIComponent(plan.customerId));
+    if(!one.ok||!one.data.customer) return {error:'Zákazník z konceptu už není dostupný. Zakázku jsem nezaložil.'};
+    const row = one.data.customer, place = (row.addresses||[])[0]||{};
+    return {customerId:row.id, customerName:row.name, customerAddressId:plan.customerAddressId||place.id||null, address:plan.address||place.address||'', city:plan.city||place.city||''};
+  }
+  if(!plan?.customer) return {error:'Napište, u kterého zákazníka zakázka je. Nic jsem nevymyslel ani neuložil.'};
+  if(!on(h.features,'customers')) return {error:'Seznam zákazníků je vypnutý. Zakázku jsem nezaložil.'};
+  const queries = [...new Set([String(plan.customer).slice(0,40), String(plan.customerStem||nameStem(plan.customer)).slice(0,40)].filter(Boolean))];
+  let rows = [];
+  for(const query of queries){
+    const found = await customersGet(env, m, h, '/api/customers?q='+encodeURIComponent(query));
+    if(!found.ok) return {error:blocked(found)||'Zákazníky se nepodařilo načíst. Zakázku jsem nezaložil.'};
+    rows.push(...(found.data.customers||[]));
+  }
+  let unique = [...new Map(rows.map(customer=>[customer.id, customer])).values()].filter(customer=>customerHit(plan.customer, customer.name));
+  if(!unique.length){
+    const all = await customersGet(env, m, h, '/api/customers');
+    if(!all.ok) return {error:blocked(all)||'Zákazníky se nepodařilo načíst. Zakázku jsem nezaložil.'};
+    unique = (all.data.customers||[]).filter(customer=>customerHit(plan.customer, customer.name));
+  }
+  if(!unique.length) return {error:`Zákazníka „${plan.customer}“ jsem v evidenci nenašel. Zakázku jsem nezaložil.`};
+  if(unique.length>1) return {error:'Vyhovuje víc zákazníků: '+unique.slice(0,4).map(customer=>customer.name).join(', ')+'. Upřesněte jméno. Zakázku jsem nezaložil.'};
+  const row = unique[0], place = (row.addresses||[])[0]||{};
+  return {customerId:row.id, customerName:row.name, customerAddressId:place.id||null, address:place.address||'', city:place.city||''};
+}
 async function planJob(env, m, h, params, today, options){
   if(!manager(m)) return {reply:'Vícedenní zakázku zakládá vlastník nebo správce. Nic jsem neuložil.'};
   if(options.preview) return {reply:'V náhledu role zakázku nezakládám.'};
   if(Array.isArray(params.terms)) return commitPlan(env, m, h, params);
   const plan = params.base ? revisePlan(params.base, params.text) : planWork(params.text, today);
   if(!plan) return {reply:'Tomuhle plánu nerozumím. Zakázku jsem nezaložil.'};
-  const found = await customersGet(env, m, h, '/api/customers?q='+encodeURIComponent(String(plan.customer||'').slice(0,5)));
-  if(!found.ok) return {reply:blocked(found)||'Zákazníky se nepodařilo načíst. Zakázku jsem nezaložil.'};
-  const customers = (found.data.customers||[]).filter(customer=>nameStem(customer.name)===plan.customerStem);
-  if(!customers.length) return {reply:`Zákazníka „${plan.customer}“ jsem nenašel. Zakázku jsem nezaložil.`};
-  if(customers.length>1) return {reply:'Vyhovuje víc zákazníků: '+customers.slice(0,4).map(customer=>customer.name).join(', ')+'. Zakázku jsem nezaložil.'};
-  const customer = {customerId:customers[0].id, customerName:customers[0].name};
-  const place = (customers[0].addresses||[])[0]||{};
+  const customer = await findPlannedCustomer(env, m, h, plan);
+  if(customer.error) return {reply:customer.error};
+  Object.assign(plan, {customerId:customer.customerId, customerName:customer.customerName, customer:customer.customerName, customerStem:nameStem(customer.customerName), customerAddressId:customer.customerAddressId, address:customer.address, city:customer.city});
   const members = await env.DB.prepare("SELECT user_id AS id, name FROM members WHERE EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND actor.role IN ('owner','administrator','admin'))").bind(m.user_id).all();
-  const wanted = [...new Set(plan.terms.flatMap(term=>term.people))];
-  if(!wanted.length) return {reply:'Napište, kdo bude na zakázce pracovat. Nic jsem neuložil.', context:{plan, customerName:customer.customerName}};
-  const matched = matchPeople(wanted, members.results||[]);
-  if(matched.ambiguous.length){
-    const line = matched.ambiguous.map(item=>item.options.length?`${item.query}: ${item.options.join(', ')}`:`${item.query} v týmu není`).join('; ');
-    return {reply:`Jméno není jednoznačné. ${line}. Zakázku jsem nezaložil.`, context:{plan, customerName:customer.customerName}};
-  }
+  const wanted = [...new Set(plan.terms.flatMap(term=>term.people||[]))];
+  const matched = wanted.length?matchPeople(wanted, members.results||[]):{resolved:[], ambiguous:[]};
   const byStem = new Map(matched.resolved.map(person=>[nameStem(person.query), person]));
-  const terms = plan.terms.map(term=>({date:term.date, start:term.start, end:term.end, note:term.note||'', names:term.people, people:term.people.map(person=>byStem.get(nameStem(person)).id), status:'planned'}));
+  const unresolved = wanted.filter(name=>!byStem.has(nameStem(name))&&!matched.ambiguous.some(item=>item.query===name));
+  const terms = plan.terms.map(term=>({date:term.date, start:term.start, end:term.end, note:term.note||'', names:[...(term.people||[])], people:(term.people||[]).map(person=>byStem.get(nameStem(person))?.id).filter(Boolean), status:'planned'}));
   const firstDate = terms[0].date, lastDate = terms[terms.length-1].date;
-  const listed = await jobsGet(env, m, h, `/api/jobs?state=active&order=schedule&from=${firstDate}&to=${lastDate}`);
+  const listed = wanted.length?await jobsGet(env, m, h, `/api/jobs?state=active&order=schedule&from=${firstDate}&to=${lastDate}`):{ok:true, data:{jobs:[]}};
   const collisions = listed.ok?planCollisions(plan, (listed.data.jobs||[]).map(job=>({title:job.title, dueDate:job.dueDate, assignedNames:String(job.assignedName||'').split(',').map(name=>name.trim()).filter(Boolean), termDates:(job.terms||[]).map(term=>term.date)}))):[];
-  const warning = collisions.length?` Kolize: ${collisions.slice(0,4).map(item=>`${item.person} ${item.date} už má „${item.title}“`).join('; ')}.`:' Kolizi s jinou zakázkou nevidím.';
-  const material = plan.askMaterial?' Potřebujeme objednat materiál?':'';
-  const summary = `${planSummary({...plan, customer:customer.customerName})}${warning}${material} Uloží se jedna zakázka až po potvrzení.`;
-  const stored = {operationId:crypto.randomUUID(), title:plan.title, discipline:(m._workspace&&m._workspace.selectedDiscipline&&m._workspace.selectedDiscipline!=='all')?m._workspace.selectedDiscipline:((m._workspace&&m._workspace.disciplines&&m._workspace.disciplines[0])||null), customerId:customer.customerId, customerName:customer.customerName, customerAddressId:place.id||null, address:place.address||'', city:place.city||'', terms, materials:plan.materials};
+  const questions = [];
+  if(!wanted.length) questions.push('Kdo bude na zakázce pracovat? Lze je zadat pro všechny dny, nebo jinak pro každý den.');
+  else if(unresolved.length||matched.ambiguous.length) questions.push('Jméno není jednoznačné. '+matched.ambiguous.map(item=>item.options.length?`${item.query}: ${item.options.join(', ')}`:`${item.query} v týmu není`).concat(unresolved.map(name=>`${name} v týmu není`)).join('; ')+'.');
+  if(plan.askMaterial) questions.push('Jaký materiál je potřeba koupit a co už máte?');
+  if(!customer.address) questions.push('Adresu u zákazníka v evidenci nevidím. Doplňte ji do konceptu.');
+  const namesUnclear = unresolved.length>0 || matched.ambiguous.length>0;
+  const warning = collisions.length?` Kolize: ${collisions.slice(0,4).map(item=>`${item.person} ${item.date} už má „${item.title}“`).join('; ')}.`:'';
+  const summary = `${planSummary(plan)}${warning}${questions.length?' '+questions.join(' '):''}${namesUnclear?' Upřesněte jména, nic jsem neuložil.':' Zakázka se uloží až po potvrzení.'}`;
+  const concept = {title:plan.title, customerName:customer.customerName, address:customer.address, city:customer.city, terms:plan.terms, materials:plan.materials, askMaterial:plan.askMaterial, notes:''};
+  const planContext = {plan, customerName:customer.customerName};
+  if(namesUnclear) return {reply:summary, concept, context:planContext};
+  const stored = {operationId:crypto.randomUUID(), title:plan.title, discipline:(m._workspace&&m._workspace.selectedDiscipline&&m._workspace.selectedDiscipline!=='all')?m._workspace.selectedDiscipline:((m._workspace&&m._workspace.disciplines&&m._workspace.disciplines[0])||null), customerId:customer.customerId, customerName:customer.customerName, customerAddressId:customer.customerAddressId, address:customer.address, city:customer.city, terms, materials:plan.materials};
   const confirm = await propose(env, m, {intent:'jobs.plan', params:stored}, summary);
-  return {reply:summary, confirm, concept:{title:plan.title, customerName:customer.customerName, terms:plan.terms, materials:plan.materials, askMaterial:plan.askMaterial}, context:{plan, customerName:customer.customerName}};
+  return {reply:summary, confirm, concept, context:planContext};
 }
 async function commitPlan(env, m, h, params){
   const id = 'plan-'+String(params.operationId||crypto.randomUUID()).replace(/[^a-zA-Z0-9_-]/g,'').slice(0, 80);
   const first = params.terms[0];
+  if(!first||params.terms.some(term=>!Array.isArray(term.people)||!term.people.length)) h.fail(400,'Doplňte pracovníka ke každému dni. Nic jsem neuložil.');
   const ids = [...new Set(params.terms.flatMap(term=>term.people))];
   const before = await env.DB.prepare('SELECT id FROM jobs WHERE id=? AND deleted=0').bind(id).first();
   if(before) return {reply:`Zakázka „${params.title}“ už je uložená. Podruhé jsem ji nezaložil.`, mutated:'jobs', context:{jobId:id, customerName:params.customerName||''}};
@@ -705,11 +745,11 @@ async function commitPlan(env, m, h, params){
     discipline:params.discipline||null, gardenId:null, startTime:'', endTime:'', defectIds:[], plannedStart:'', estimatedMinutes:null,
     arrivalWindowStart:'', arrivalWindowEnd:'', legacyTimeMeaning:'unknown', allowOverlaps:false, previewRevision:0
   }, h._headers), env, m, h));
-  if(!result.ok) return {reply:result.data.error||'Zakázku se nepodařilo vytvořit. Nic dalšího jsem neuložil.'};
+  if(!result.ok) h.fail(400, result.data.error||'Zakázku se nepodařilo vytvořit. Nic dalšího jsem neuložil.');
   const savedTerms = await env.DB.prepare('SELECT count(*) AS n FROM job_terms WHERE job_id=?').bind(id).first();
   if((savedTerms?.n||0)!==params.terms.length){
     await env.DB.batch([env.DB.prepare('DELETE FROM job_terms WHERE job_id=?').bind(id), env.DB.prepare('UPDATE jobs SET deleted=1, version=version+1 WHERE id=? AND deleted=0').bind(id)]);
-    return {reply:'Termíny se neuložily společně se zakázkou. Nic jsem nenechal rozdělené.'};
+    h.fail(400,'Termíny se neuložily společně se zakázkou. Nic jsem nenechal rozdělené.');
   }
   if(params.materials?.length){
     const note = params.materials.map(item=>`${item.name} ${item.quantity} ${item.unit} (${item.readiness==='on_hand'?'máme':'k nákupu'})`).join('; ').slice(0, 2000);
@@ -719,7 +759,7 @@ async function commitPlan(env, m, h, params){
     }, h._headers), env, {waitUntil(){}}, m, h));
     if(!material.ok){
       await env.DB.batch([env.DB.prepare('DELETE FROM job_terms WHERE job_id=?').bind(id), env.DB.prepare('UPDATE jobs SET deleted=1, version=version+1 WHERE id=? AND deleted=0').bind(id)]);
-      return {reply:material.data.error||'Materiál se nepodařilo uložit. Zakázku jsem neponechal.'};
+      h.fail(400, material.data.error||'Materiál se nepodařilo uložit. Zakázku jsem neponechal.');
     }
   }
   return {reply:`Zakázka „${params.title}“ je jedna, s ${params.terms.length} termíny od ${first.date}${params.address?' na adrese '+params.address:''}. Materiál ${params.materials?.length?'je u zakázky uložený a neobjednaný':'se neobjednává'}.`, mutated:'jobs', context:{jobId:id, customerName:params.customerName||''}};

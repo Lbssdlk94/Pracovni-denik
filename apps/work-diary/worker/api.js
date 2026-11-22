@@ -52,6 +52,15 @@ const ROLE_NAMES=TEAM_ROLE_NAMES;
 const ROLES=['administrator','admin','worker','reader'];
 class HttpError extends Error{constructor(status,message,extra={}){super(message);this.status=status;this.extra=extra;}}
 const fail=(status,message,extra)=>{throw new HttpError(status,message,extra);};
+export function describeApiFailure(error){
+  const bits=[];
+  const push=value=>{const text=String(value??'').trim();if(!text||text==='undefined'||text==='null'||bits.includes(text))return;bits.push(text);};
+  push(error?.message);push(error?.cause?.message);if(typeof error?.cause==='string')push(error.cause);
+  const detail=bits.join(' — ').slice(0,420);
+  if(/no such table|no such column|D1_ERROR|SQLITE_/i.test(detail))return `Databáze vrátila chybu: ${detail}. Nic se neuložilo.`;
+  if(detail)return detail;
+  return `Požadavek se nepodařilo dokončit (${error?.name||'chyba'}). Server neposlal podrobnost. Nic se neuložilo.`;
+}
 const json=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'}});
 const canWrite=m=>['owner','administrator','admin','worker'].includes(m.role),canManage=m=>['owner','administrator','admin'].includes(m.role);
 const checkWrite=m=>{if(!canWrite(m))fail(403,'Máte oprávnění pouze k prohlížení.');};
@@ -428,5 +437,5 @@ async function workspaceRawApi(request,env,ctx){
     }
     fail(404,'Požadavek nebyl nalezen.');
   }catch(error){if(new URL(request.url).pathname.startsWith('/api/auth/')||new URL(request.url).pathname.startsWith('/api/local-accounts')){if(String(error?.message).includes('UNIQUE constraint'))return json({error:'Účet nebo přihlašovací jméno se mezitím změnilo. Obnovte údaje.'},409);if(error?.status===503)return json({error:'Přihlašování je vytížené. Zkuste to za chvíli.'},503);}
- if(String(error?.message).includes('workspace_member_capacity'))return json({error:'Limit členů nebo pozvánek je v jednom z pracovních oborů vyčerpaný. Upravte příslušnost nebo licenci.',code:'workspace_member_capacity'},409);if(String(error?.message).includes('workspace_'))return json({error:'Změna neodpovídá aktuálnímu oboru nebo oprávnění. Obnovte údaje.',code:'workspace_conflict'},409);if(error instanceof HttpError)return json({error:error.message,...error.extra},error.status);console.error('Team API error',error?.name,error?.message);return json({error:String(error&&error.message)||'Týmové úložiště není dostupné. Zkuste to za chvíli.',code:'internal_error'},500);}
+ if(String(error?.message).includes('workspace_member_capacity'))return json({error:'Limit členů nebo pozvánek je v jednom z pracovních oborů vyčerpaný. Upravte příslušnost nebo licenci.',code:'workspace_member_capacity'},409);if(String(error?.message).includes('workspace_'))return json({error:'Změna neodpovídá aktuálnímu oboru nebo oprávnění. Obnovte údaje.',code:'workspace_conflict'},409);if(error instanceof HttpError)return json({error:error.message,...error.extra},error.status);console.error('Team API error',error?.name,error?.message,error?.stack);return json({error:describeApiFailure(error),code:'internal_error'},500);}
 }

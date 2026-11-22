@@ -10,6 +10,7 @@ struct APIRoot:View {
     @State private var inbox=false
     @State private var followUp:APIPhoneFollowUp?
     @State private var assistant=false
+    @StateObject private var assistantMemory=APIAssistantMemory()
     var body:some View {
         ZStack{
             if store.needsPasswordChange{APIPasswordView(store:store,mandatory:true)}
@@ -40,7 +41,7 @@ struct APIRoot:View {
             .sheet(isPresented:$inbox){NavigationStack{APIResourceList(store:store,resource:APIResource(entity:.notifications))}}
             .sheet(item:$followUp,onDismiss:{watch.clearFollowUp()}){request in Group{if request.action=="protocol"{APIProtocolEditor(store:store,jobID:request.job.id,completing:true)}else if request.action=="travelSms"{APIDepartureEditor(store:store,job:request.job,composeOnly:true)}else{NavigationStack{APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:request.job)}}}}
             .sheet(isPresented:$outbox){NavigationStack{APIOutboxView(store:store)}}
-            .fullScreenCover(isPresented:$assistant){APIAssistantWorkspace(store:store)}
+            .fullScreenCover(isPresented:$assistant){APIAssistantWorkspace(store:store, memory:assistantMemory)}
             .sheet(isPresented:$push.showSettings){NativePushSettings(push:push)}
             .sheet(isPresented:$watch.showSettings){WatchPhoneSettings()}
             .onChange(of:push.inboxRequest){_,_ in openInbox()}
