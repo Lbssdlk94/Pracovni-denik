@@ -1,4 +1,4 @@
-import {parseAssistantCommand, contextualCommand, assistantModeInfo, assistantSuggestions, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, planMaterialLines} from '../web/assistant-commands.js';
+import {parseAssistantCommand, contextualCommand, assistantModeInfo, assistantSuggestions, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, planMaterialLines, parseServiceDictation, reviseServiceDraft, annotateProtocolMaterials, serviceDraftQuestions} from '../web/assistant-commands.js';
 import {planWork, revisePlan, matchPeople, planCollisions, planSummary, nameStem, customerHit} from '../web/job-plan.js';
 import {featureEnabled} from '../web/features.js';
 import {attendanceHours, attendanceInstant} from '../web/attendance-model.js';
@@ -180,7 +180,9 @@ async function cancel(env, m, h, id, mode){
 }
 
 async function applyConceptEdit(env, m, h, action, concept){
-  if(!concept||typeof concept!=='object'||Array.isArray(concept)||action.intent!=='jobs.plan'||!action.params) return;
+  if(!concept||typeof concept!=='object'||Array.isArray(concept)||!action?.params) return;
+  if(action.intent==='protocol.report') return applyProtocolConceptEdit(action, concept);
+  if(action.intent!=='jobs.plan') return;
   if(typeof concept.title==='string'&&concept.title.trim()) action.params.title = concept.title.trim().slice(0,120);
   if(typeof concept.notes==='string') action.params.description = concept.notes.trim().slice(0,2000);
   if(typeof concept.customerName==='string' && concept.customerName.trim() && concept.customerName.trim()!==action.params.customerName){
@@ -244,7 +246,7 @@ async function confirm(env, ctx, m, h, id, mode, preview, concept){
     return reply(mode, done.reply, {confirm:done.confirm});
   }
   await auditCommit(env, row, done.reply, h);
-  return reply(mode, done.reply, {mutated:done.mutated||null});
+  return reply(mode, done.reply, {mutated:done.mutated||null, context:done.context||null, concept:done.concept||null});
 }
 
 async function run(env, ctx, m, h, command, today, options){
@@ -262,6 +264,7 @@ async function run(env, ctx, m, h, command, today, options){
   if(!options.propose&&intent==='attendance.leave') return applyPunch(env, m, h, 'departure', params);
   if(!options.propose&&intent==='materials.add'&&params.jobId) return applyMaterialLines(env, ctx, m, h, params);
   if(!options.propose&&intent==='protocol.note'&&params.jobId) return applyProtocolNote(env, ctx, m, h, params);
+  if(!options.propose&&intent==='protocol.report'&&params.jobId&&typeof params.work==='string') return commitProtocolReport(env, ctx, m, h, params);
   if(!options.propose&&intent==='import.customers') return applyCustomerImport(env, m, h, params);
   if(!options.propose&&intent==='import.materials') return applyMaterialImport(env, m, h, params);
   if(intent==='unknown') return {reply:'Tomuhle příkazu nerozumím. Můžete zkusit některou z dostupných akcí.', suggestions:assistantSuggestions()};
@@ -320,6 +323,7 @@ async function run(env, ctx, m, h, command, today, options){
   if(intent==='customers.search'||intent==='customers.contact'||intent==='customers.history'||intent==='customers.tariffs') return customerIntent(env, m, h, intent, params);
   if(intent==='materials.search') return materialSearch(env, m, h, params.query||'');
   if(intent==='materials.add'||intent==='materials.price'||intent==='materials.readiness'||intent==='materials.shopping') return materialCommand(env, ctx, m, h, intent, params, today, tomorrow, options);
+  if(intent==='protocol.report') return protocolReport(env, ctx, m, h, params, options);
   if(intent==='protocol.check'||intent==='protocol.note') return protocolCommand(env, ctx, m, h, intent, params, options);
   return {reply:'Tomuhle příkazu nerozumím.', suggestions:assistantSuggestions()};
 }
@@ -632,6 +636,156 @@ async function materialForJobs(env, ctx, m, h, list, day){
     chunks.push(`• ${job.title}: ${body}${status?` [${status}]`:''}`);
   }
   return {reply:`Materiál na ${day}:\n`+chunks.join('\n')+(list.length>8?`\n…a dalších ${list.length-8} zakázek.`:'')};
+}
+
+function slimProtocol(draft){
+  return {
+    jobId:draft.jobId||'',
+    work:String(draft.work||'').slice(0,4000),
+    asked:Array.isArray(draft.asked)?draft.asked.slice(0,16):[],
+    history:(draft.history||[]).slice(-6).map(item=>({jobId:item.jobId||'', work:item.work||'', asked:item.asked||[], materials:item.materials||[]})),
+    materials:(draft.materials||[]).slice(0,30).map(line=>({key:line.key||'', label:line.label||'', query:line.query||'', quantity:line.quantity??null, unit:line.unit||'', generic:line.generic!==false, status:line.status||'', itemId:line.itemId||'', itemVersion:line.itemVersion||0, catalogName:line.catalogName||'', choices:(line.choices||[]).slice(0,6)}))
+  };
+}
+function protocolConcept(draft, job, questions){
+  return {
+    kind:'protocol',
+    jobId:job?.id||draft.jobId||'',
+    jobTitle:job?.title||'',
+    customerName:job?.customerName||'',
+    address:job?.address||'',
+    city:job?.city||'',
+    work:draft.work||'',
+    materials:(draft.materials||[]).map(line=>({key:line.key, label:line.label, query:line.query, quantity:line.quantity==null?'':String(line.quantity), unit:line.unit||'', status:line.status||'', itemId:line.status==='matched'?line.itemId||'':'', choiceId:line.status==='matched'?line.itemId||'':'', name:line.catalogName||line.label, choices:line.choices||[]})),
+    questions:questions?.required||[],
+    optionalQuestions:questions?.optional||[]
+  };
+}
+function protocolReplyText(job, draft){
+  const questions = serviceDraftQuestions(draft);
+  const rows = (draft.materials||[]).map(line=>{
+    const qty = line.quantity==null?'množství k upřesnění':`${line.quantity} ${line.unit||''}`.trim();
+    if(line.status==='matched') return `• ${line.catalogName||line.label}: ${qty}.`;
+    if(line.status==='choices') return `• ${line.label}: ${qty}. V katalogu je víc možností, nic jsem nevybral.`;
+    if(line.status==='missing') return `• ${line.label}: ${qty}. V katalogu položku nevidím, novou nezakládám.`;
+    if(line.status==='unquantified') return `• ${line.label}: množství k upřesnění.`;
+    return `• ${line.label}: ${qty}.`;
+  });
+  const where = job?`Zakázka „${job.title}“${job.customerName?' · '+job.customerName:''}${job.address?' · '+job.address:''}.`:'Zakázku jsem jednoznačně nenašel. Zápis nikam neukládám.';
+  const ask = questions.required.length?'\nPotřebuji upřesnit:\n'+questions.required.map(item=>'• '+item).join('\n'):'';
+  const optional = questions.optional.length?'\nMůžete doplnit, není to povinné:\n'+questions.optional.map(item=>'• '+item).join('\n'):'';
+  return `${where}\n\nProvedené práce:\n${draft.work}\n\nSpotřebovaný materiál:\n${rows.join('\n')||'• Z diktátu nevidím materiál.'}${ask}${optional}${job?' Do protokolu se to zapíše až po potvrzení.':''}`;
+}
+function storedProtocol(draft){
+  return {
+    jobId:draft.jobId,
+    work:String(draft.work||'').slice(0,4000),
+    materials:(draft.materials||[]).slice(0,30).map(line=>({
+      key:String(line.key||'').slice(0,40), label:String(line.label||'').slice(0,80), query:String(line.query||'').slice(0,160),
+      quantity:line.quantity??null, unit:String(line.unit||'').slice(0,8), generic:line.generic!==false,
+      itemId:line.status==='matched'?String(line.itemId||''):'', itemVersion:line.status==='matched'?Number(line.itemVersion||0):0,
+      name:String(line.catalogName||line.label||'').slice(0,160),
+      choices:(line.choices||[]).slice(0,6).map(item=>({id:item.id, version:item.version, name:item.name, unit:item.unit}))
+    }))
+  };
+}
+function applyProtocolConceptEdit(action, concept){
+  if(concept.kind!=='protocol') return;
+  if(typeof concept.work==='string'&&concept.work.trim()) action.params.work = concept.work.trim().slice(0,4000);
+  if(!Array.isArray(concept.materials)) return;
+  action.params.materials = (action.params.materials||[]).map((line, index)=>{
+    const edited = concept.materials.find(item=>item&&item.key&&item.key===line.key)||concept.materials[index];
+    if(!edited||typeof edited!=='object') return line;
+    let quantity = line.quantity;
+    if(edited.quantity===''||edited.quantity==null) quantity = null;
+    else {
+      const number = Number(String(edited.quantity).replace(',','.'));
+      if(Number.isFinite(number)&&number>=0&&number<=1000000) quantity = Math.round(number*1000)/1000;
+    }
+    const allowed = [line.itemId, ...(line.choices||[]).map(item=>item.id)].filter(Boolean);
+    const choice = String(edited.choiceId||'');
+    if(choice && allowed.includes(choice)){
+      const picked = (line.choices||[]).find(item=>item.id===choice) || (choice===line.itemId?{id:line.itemId, version:line.itemVersion, name:line.name, unit:line.unit}:null);
+      if(picked) return {...line, quantity, itemId:picked.id, itemVersion:picked.version, name:picked.name, unit:picked.unit||line.unit};
+    }
+    if(!line.itemId) return {...line, quantity, itemId:'', itemVersion:0};
+    return {...line, quantity};
+  });
+}
+async function resolveProtocolJob(env, m, h, params, options, draft){
+  if(params.jobQuery){
+    const found = await findJobs(env, m, h, params.jobQuery);
+    if(found.error) return {error:found.error};
+    const picked = oneJob((found.jobs||[]).filter(job=>job.status!=='done'), params.jobQuery);
+    if(picked.error) return {error:picked.error};
+    if(picked.choices) return {choices:picked.choices};
+    return {job:picked.job};
+  }
+  const hinted = params.jobId || draft.jobId || options.context?.jobId || '';
+  if(hinted){
+    const loaded = await jobsGet(env,m,h,'/api/jobs/'+encodeURIComponent(hinted));
+    if(!loaded.ok) return {error:blocked(loaded)||'Otevřenou zakázku se nepodařilo načíst. Nic jsem nepřiřadil.'};
+    return {job:loaded.data.job};
+  }
+  const listed = await jobsGet(env,m,h,'/api/jobs?state=active&assignee='+encodeURIComponent(m.user_id));
+  if(!listed.ok) return {error:blocked(listed)||'Zakázky se nepodařilo načíst. Nic jsem nepřiřadil.'};
+  if(listed.data.nextCursor) return {error:'Otevřených zakázek je víc, než můžu bezpečně projít. Napište název. Nic jsem nepřiřadil.'};
+  const jobs = listed.data.jobs||[];
+  const running = jobs.filter(job=>job.status==='in_progress');
+  if(running.length===1) return {job:running[0]};
+  if(running.length>1) return {choices:running};
+  const today = pragueDate(new Date());
+  const due = jobs.filter(job=>job.dueDate===today && job.status!=='done');
+  if(due.length===1) return {job:due[0]};
+  if(due.length>1) return {choices:due};
+  if(jobs.length) return {choices:jobs};
+  return {error:'Nemáte přiřazenou otevřenou zakázku. Napište její název. Nic jsem nepřiřadil.'};
+}
+async function protocolReport(env, ctx, m, h, params, options){
+  if(!writer(m)) return {reply:'Protokol může připravit pracovník nebo správce. Nic jsem neuložil.'};
+  if(options.preview) return {reply:'V náhledu role protokol neukládám. Nic jsem neuložil.'};
+  let draft = null;
+  if(params.base){
+    const revised = reviseServiceDraft(params.base, params.text||'');
+    if(revised?.undo==='empty') return {reply:'Žádnou předchozí úpravu protokolu nemám. Nic jsem neměnil.', concept:protocolConcept(params.base, null, serviceDraftQuestions(params.base)), context:{protocol:slimProtocol(params.base), jobId:params.base.jobId||options.context?.jobId||''}};
+    draft = revised?.draft || params.base;
+  }
+  if(!draft) draft = params.draft || parseServiceDictation(params.text||'');
+  if(!draft?.work) return {reply:'Tomuhle zápisu nerozumím. Protokol jsem neměnil.'};
+  const catalog = await materialsGet(env, m, h);
+  if(!catalog.ok) return {reply:blocked(catalog)||'Katalog se nepodařilo načíst. Nic jsem neuložil.'};
+  if(catalog.data.nextCursor) return {reply:'Katalog je delší než jedna stránka. Položky jsem nespároval, ať nesáhnu vedle. Nic jsem neuložil.'};
+  draft = annotateProtocolMaterials(draft, catalog.data.items||[]);
+  const picked = await resolveProtocolJob(env, m, h, params, options, draft);
+  const questions = serviceDraftQuestions(draft);
+  const shown = {...draft, asked:[...new Set([...(draft.asked||[]), ...questions.optional])]};
+  if(picked.choices){
+    shown.jobId = '';
+    return {reply:`Není jednoznačně aktivní zakázka. Zápis nikam neukládám.\n${lines(picked.choices, jobLine, '')}\n\n${protocolReplyText(null, draft)}`, concept:protocolConcept(draft, null, questions), context:{protocol:slimProtocol(shown)}};
+  }
+  if(picked.error||!picked.job) return {reply:`${picked.error||'Zakázku jsem nenašel. Nic jsem nepřiřadil.'}\n\n${protocolReplyText(null, draft)}`, concept:protocolConcept(draft, null, questions), context:{protocol:slimProtocol(shown)}};
+  draft.jobId = picked.job.id;
+  shown.jobId = picked.job.id;
+  const summary = protocolReplyText(picked.job, draft);
+  const confirm = await propose(env, m, {intent:'protocol.report', params:storedProtocol(draft)}, summary);
+  return {reply:summary, confirm, concept:protocolConcept(draft, picked.job, questions), context:{protocol:slimProtocol(shown), jobId:picked.job.id, customerName:picked.job.customerName||''}};
+}
+async function commitProtocolReport(env, ctx, m, h, params){
+  if(!writer(m)) return {reply:'Protokol může připravit pracovník nebo správce. Nic jsem neuložil.'};
+  const service = await serviceGet(env, ctx, m, h, params.jobId);
+  if(!service.ok) return {reply:blocked(service)||'Zakázku se nepodařilo otevřít. Nic jsem neuložil.'};
+  const current = service.data;
+  const merged = new Map((current.report?.materialItems||[]).map(line=>[line.itemId, {itemId:line.itemId, itemVersion:line.itemVersion, quantity:line.quantity}]));
+  for(const line of params.materials||[]){
+    if(!line?.itemId||!Number.isSafeInteger(line.itemVersion)||line.itemVersion<1) continue;
+    if(line.quantity==null) continue;
+    if(Number(line.quantity)<=0){merged.delete(line.itemId); continue;}
+    merged.set(line.itemId, {itemId:line.itemId, itemVersion:line.itemVersion, quantity:line.quantity});
+  }
+  const result = await callJson(()=>handleServiceWork(write('/api/jobs/'+encodeURIComponent(params.jobId)+'/service','PUT', protocolBody(current, keptReport(current, {work:String(params.work||'').slice(0,4000), materialItems:[...merged.values()]})), h._headers), env, ctx, m, h));
+  if(!result.ok) return {reply:result.data.error||'Protokol se nepodařilo uložit. Nic dalšího jsem nezměnil.'};
+  const saved = result.data.report?.materialItems||[];
+  return {reply:`Servisní protokol „${current.job.title}“ je uložený ke kontrole. Katalogové položky: ${saved.length}. Stejné množství není zapsané ještě jednou v textu materiálu.`, mutated:'jobs', context:{jobId:params.jobId, customerName:current.job.customerName||'', protocol:{jobId:params.jobId, work:params.work, materials:params.materials, asked:[], history:[]}}};
 }
 
 async function protocolDraft(env, ctx, m, h, job, options){

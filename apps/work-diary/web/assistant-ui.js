@@ -1,7 +1,7 @@
-import {parseAssistantCommand, contextualCommand} from './assistant-commands.js?v=assistant-v10';
-import {answerOffline} from './assistant-offline.js?v=assistant-v2';
+import {parseAssistantCommand, contextualCommand} from './assistant-commands.js?v=assistant-protocol-v1';
+import {answerOffline} from './assistant-offline.js?v=assistant-protocol-v1';
 import {peekCachedJobs} from './cloud.js?v=completion-v1';
-import {extractLocalCommand, localMinistral} from './assistant-local.js?v=assistant-v6';
+import {extractLocalCommand, localMinistral} from './assistant-local.js?v=assistant-protocol-v1';
 import {durationPickerMarkup, refreshDurationTotals} from './planning-fields.js?v=workspace-roles-v1';
 
 function esc(value){
@@ -289,12 +289,37 @@ function ensureDraft(thread){
 }
 function conceptPayload(thread){
   if(!thread?.draftConcept) return null;
-  return {title:thread.draftConcept.title||'', notes:thread.draftConcept.notes||'', customerName:thread.draftConcept.customerName||'', address:thread.draftConcept.address||'', city:thread.draftConcept.city||'', terms:thread.draftConcept.terms||[], materials:thread.draftConcept.materials||[]};
+  const concept = thread.draftConcept;
+  if(concept.kind==='protocol') return {kind:'protocol', jobId:concept.jobId||'', work:concept.work||'', materials:(concept.materials||[]).map(item=>({key:item.key||'', label:item.label||'', quantity:item.quantity??'', unit:item.unit||'', itemId:item.itemId||'', choiceId:item.choiceId||''}))};
+  return {title:concept.title||'', notes:concept.notes||'', customerName:concept.customerName||'', address:concept.address||'', city:concept.city||'', terms:concept.terms||[], materials:concept.materials||[]};
 }
 function stage(thread){
   if(runtime.detail) return detailPanel();
+  if(thread?.draftConcept?.kind==='protocol') return protocolStage(thread);
   if(thread?.draftConcept) return conceptStage(thread);
   return '<aside class="assistant-detail" hidden></aside><div class="assistant-empty-stage"><strong>Výsledek</strong><p>Po příkazu se tady otevře zákazník, zakázka, kalendář nebo koncept. Nic se neuloží bez potvrzení.</p></div>';
+}
+function protocolStage(thread){
+  const concept = thread.draftConcept;
+  const confirm = [...(thread.items||[])].reverse().find(item=>item.confirm)?.confirm;
+  const place = [concept.customerName, concept.address, concept.city].filter(Boolean).join(' · ');
+  const materials = (concept.materials||[]).map((item,index)=>{
+    const choices = item.choices||[];
+    const select = choices.length?`<label><span>Katalog</span><select data-concept-field="material:${index}:choiceId" aria-label="Položka katalogu">${`<option value="">Nevybráno</option>`}${choices.map(choice=>`<option value="${esc(choice.id)}" ${choice.id===(item.choiceId||item.itemId)?'selected':''}>${esc(choice.name)} (${esc(choice.unit||'')})</option>`).join('')}</select></label>`:`<p>${esc(item.status==='matched'?item.name||item.label:item.status==='missing'?'V katalogu není, novou položku nezakládám.':item.status==='unquantified'?'Množství chybí, do katalogu se nezapíše.':item.name||'')}</p>`;
+    return `<div class="assistant-material"><label><span>${esc(item.label||'Položka')}</span><span class="assistant-control">${layers()}<input data-concept-field="material:${index}:quantity" inputmode="decimal" value="${esc(item.quantity??'')}" aria-label="Množství ${esc(item.label||'')}"></span></label><span>${esc(item.unit||'')}</span>${select}</div>`;
+  }).join('');
+  const required = (concept.questions||[]).map(item=>`<li>${esc(item)}</li>`).join('');
+  const optional = (concept.optionalQuestions||[]).map(item=>`<li>${esc(item)}</li>`).join('');
+  return `<div class="assistant-concept-sheet">
+    <header class="assistant-sheet-title"><h2>Servisní protokol</h2><span class="assistant-pill is-concept">Koncept</span></header>
+    <p>${esc(concept.jobTitle||'Zakázka není vybraná')}${place?' · '+esc(place):''}</p>
+    <label class="assistant-notes">Provedené práce<textarea data-concept-field="work" aria-label="Provedené práce">${esc(concept.work||'')}</textarea></label>
+    <section><h3>${layers()} Spotřebovaný materiál</h3>${materials||'<p>Z diktátu nevidím materiál.</p>'}</section>
+    ${required?`<section><h3>Potřebuji upřesnit</h3><ul>${required}</ul></section>`:''}
+    ${optional?`<section><h3>Není povinné</h3><ul>${optional}</ul></section>`:''}
+    ${thread.resultNotice?`<p class="assistant-warning">${esc(thread.resultNotice)}</p>`:''}
+    <div class="assistant-concept-actions"><button type="button" data-cancel="${esc(confirm?.id||'')}" ${confirm?'':'disabled'}>Zrušit</button><button type="button" class="yes" data-confirm="${esc(confirm?.id||'')}" ${confirm?'':'disabled'}>Uložit do protokolu</button></div>
+  </div>`;
 }
 function conceptStage(thread){
   const concept = thread.draftConcept;
@@ -407,6 +432,15 @@ function bindConcept(host, session, paint){
 }
 function applyConceptField(thread, key, value){
   const concept = thread.draftConcept;
+  if(concept?.kind==='protocol'){
+    if(key==='work') concept.work = value;
+    else {
+      const [group, index, field] = key.split(':');
+      if(group==='material'&&concept.materials?.[index]&&(field==='quantity'||field==='choiceId')) concept.materials[index][field] = value;
+    }
+    syncProtocol(thread);
+    return;
+  }
   const [group, index, field] = key.split(':');
   if(group==='title') concept.title = value;
   else if(group==='notes') concept.notes = value;
@@ -423,14 +457,28 @@ function applyConceptField(thread, key, value){
 function syncPlan(thread){
   const concept = thread.draftConcept;
   if(!concept) return;
+  if(concept.kind==='protocol') return syncProtocol(thread);
   thread.context = {...(thread.context||{}), plan:{...(thread.context?.plan||{}), title:concept.title, customer:concept.customerName||thread.context?.plan?.customer||'', customerName:concept.customerName||thread.context?.plan?.customerName||'', address:concept.address||'', city:concept.city||'', terms:concept.terms, materials:concept.materials||[]}};
+}
+function syncProtocol(thread){
+  const concept = thread.draftConcept;
+  if(!concept) return;
+  const previous = thread.context?.protocol||{};
+  thread.context = {...(thread.context||{}), jobId:concept.jobId||thread.context?.jobId||'', protocol:{
+    jobId:concept.jobId||'',
+    work:concept.work||'',
+    asked:previous.asked||[],
+    history:previous.history||[],
+    materials:(concept.materials||[]).map(item=>({key:item.key, label:item.label, query:item.query, quantity:item.quantity===''||item.quantity==null?null:Number(String(item.quantity).replace(',','.')), unit:item.unit||'', generic:item.generic!==false, status:item.status||'', itemId:item.choiceId||item.itemId||'', choices:item.choices||[]}))
+  }};
 }
 function adoptConcept(thread, concept){
   if(!concept) return;
   const touched = thread.conceptTouched||{};
-  if(thread.draftConcept&&Object.keys(touched).length){
-    thread.draftConcept = mergeConcept(thread.draftConcept, concept, touched);
-    thread.resultNotice = 'Ruční úpravy jsem nechal. Zkontrolujte je, než zakázku uložíte.';
+  const sameKind = (thread.draftConcept?.kind||'')===(concept.kind||'');
+  if(thread.draftConcept&&sameKind&&Object.keys(touched).length){
+    thread.draftConcept = concept.kind==='protocol'?mergeProtocol(thread.draftConcept, concept, touched):mergeConcept(thread.draftConcept, concept, touched);
+    thread.resultNotice = 'Ruční úpravy jsem nechal. Zkontrolujte je před uložením.';
   }else{
     thread.draftConcept = JSON.parse(JSON.stringify(concept));
     thread.conceptTouched = {};
@@ -439,7 +487,21 @@ function adoptConcept(thread, concept){
   runtime.mobileTab = 'result';
   runtime.resultFresh = true;
   runtime.detail = null;
-  syncPlan(thread);
+  if(concept.kind==='protocol') syncProtocol(thread);
+  else syncPlan(thread);
+}
+function mergeProtocol(local, incoming, touched){
+  const next = JSON.parse(JSON.stringify(incoming));
+  if(touched.work) next.work = local.work;
+  next.materials = (incoming.materials||[]).map((item,index)=>{
+    const kept = local.materials?.[index];
+    if(!kept) return item;
+    const copy = {...item};
+    if(touched[`material:${index}:quantity`]) copy.quantity = kept.quantity;
+    if(touched[`material:${index}:choiceId`]) copy.choiceId = kept.choiceId;
+    return copy;
+  });
+  return next;
 }
 function mergeConcept(local, incoming, touched){
   const next = JSON.parse(JSON.stringify(incoming));
@@ -487,7 +549,8 @@ function bubble(item){
   const cards = (item.cards||[]).map(card=>cardView(card)).join('');
   const suggestions = (item.suggestions||[]).map(text=>`<button type="button" data-quick="${esc(text)}">${esc(suggestionLabel(text))}</button>`).join('');
   const concept = item.concept?conceptCard(item.concept):'';
-  const confirm = item.confirm?`<div class="assistant-confirm"><p>${esc(item.confirm.detail||item.text)}</p><div><button type="button" class="yes" data-confirm="${esc(item.confirm.id)}">Potvrdit a vytvořit</button><button type="button" data-cancel="${esc(item.confirm.id)}">Zrušit</button></div></div>`:'';
+  const confirmLabel = item.concept?.kind==='protocol'?'Uložit do protokolu':'Potvrdit a vytvořit';
+  const confirm = item.confirm?`<div class="assistant-confirm"><p>${esc(item.confirm.detail||item.text)}</p><div><button type="button" class="yes" data-confirm="${esc(item.confirm.id)}">${confirmLabel}</button><button type="button" data-cancel="${esc(item.confirm.id)}">Zrušit</button></div></div>`:'';
   return `<div class="assistant-row"><span class="assistant-spark">${spark}</span><div class="assistant-answer"><div class="assistant-said"><p>${esc(item.text)}</p><time>${esc(clock(item.at))}</time></div>${cards}${concept}${confirm}${suggestions?`<p class="assistant-next-label">Co chcete udělat dál?</p><div class="assistant-next">${suggestions}</div>`:''}</div></div>`;
 }
 function suggestionLabel(text){

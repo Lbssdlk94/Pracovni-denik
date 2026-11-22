@@ -65,6 +65,13 @@ final class APIAssistantMemory: ObservableObject {
     }
     func syncPlanFromConcept() {
         guard !active.concept.isNull else { return }
+        if active.concept["kind"].string == "protocol" {
+            var context = active.context.isNull ? APIValue.object([:]) : active.context
+            context["jobId"] = active.concept["jobId"]
+            context["protocol"] = active.concept
+            setContext(context)
+            return
+        }
         var plan = active.context["plan"]
         if plan.isNull { plan = .object([:]) }
         plan["title"] = active.concept["title"]
@@ -173,6 +180,43 @@ struct APIAssistantWorkspace: View {
         }
     }
     private var conceptForm: some View {
+        Group {
+            if concept["kind"].string == "protocol" { protocolForm }
+            else { jobConceptForm }
+        }
+    }
+    private var protocolForm: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack { Text("Servisní protokol").font(.headline); Text("Koncept").font(.caption.weight(.bold)).padding(.horizontal, 8).padding(.vertical, 4).background(DiaryStyle.soft, in: Capsule()) }
+            Text([concept["jobTitle"].string, concept["customerName"].string, concept["address"].string].filter { !$0.isEmpty }.joined(separator: " · ")).font(.subheadline)
+            TextField("Provedené práce", text: binding("work"), axis: .vertical).frame(minHeight: 88).accessibilityLabel("Provedené práce")
+            ForEach(Array(concept["materials"].array.enumerated()), id: \.offset) { index, row in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(row["label"].string.isEmpty ? "Materiál" : row["label"].string).font(.caption.weight(.semibold))
+                    HStack {
+                        TextField("Množství", text: materialBinding(index, "quantity")).frame(minHeight: 44).accessibilityLabel("Množství \(row["label"].string)")
+                        Text(row["unit"].string).frame(minWidth: 28)
+                    }
+                    if !row["choices"].array.isEmpty {
+                        Picker("Katalog", selection: choiceBinding(index)) {
+                            Text("Nevybráno").tag("")
+                            ForEach(Array(row["choices"].array.enumerated()), id: \.offset) { _, choice in
+                                Text(choice["name"].string).tag(choice["id"].string)
+                            }
+                        }.frame(minHeight: 44)
+                    } else if row["status"].string == "missing" {
+                        Text("V katalogu není. Novou položku nezakládám.").font(.caption).foregroundStyle(.secondary)
+                    } else if row["status"].string == "unquantified" {
+                        Text("Množství chybí, do katalogu se nezapíše.").font(.caption).foregroundStyle(.secondary)
+                    }
+                }.padding(8).background(DiaryStyle.surface, in: RoundedRectangle(cornerRadius: 14))
+            }
+            ForEach(concept["questions"].array, id: \.string) { question in Text(question.string).font(.caption) }
+            Button("Uložit do protokolu") { Task { await confirm() } }.disabled(memory.active.confirmID.isEmpty || busy).buttonStyle(.borderedProminent).frame(minHeight: 44)
+            Button("Zrušit koncept") { Task { await cancelConcept() } }.disabled(memory.active.confirmID.isEmpty || busy).frame(minHeight: 44)
+        }
+    }
+    private var jobConceptForm: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack { Text("Nová zakázka").font(.headline); Text("Koncept").font(.caption.weight(.bold)).padding(.horizontal, 8).padding(.vertical, 4).background(DiaryStyle.soft, in: Capsule()) }
             field("Zákazník", "customerName")
@@ -225,6 +269,18 @@ struct APIAssistantWorkspace: View {
         }
     }
     private func field(_ title: String, _ key: String) -> some View { TextField(title, text: binding(key)).frame(minHeight: 44).accessibilityLabel(title) }
+    private func choiceBinding(_ index: Int) -> Binding<String> {
+        Binding(get: {
+            guard concept["materials"].array.indices.contains(index) else { return "" }
+            let row = concept["materials"].array[index]
+            return row["choiceId"].string.isEmpty ? row["itemId"].string : row["choiceId"].string
+        }, set: { value in
+            var rows = concept["materials"].array
+            guard rows.indices.contains(index) else { return }
+            rows[index]["choiceId"] = .s(value)
+            concept["materials"] = .array(rows)
+        })
+    }
     private func binding(_ key: String) -> Binding<String> { Binding(get: { concept[key].string }, set: { concept[key] = .s($0) }) }
     private func termBinding(_ index: Int, _ key: String) -> Binding<String> {
         Binding(get: { concept["terms"].array.indices.contains(index) ? concept["terms"].array[index][key].string : "" }, set: { var rows = concept["terms"].array; guard rows.indices.contains(index) else { return }; rows[index][key] = .s($0); concept["terms"] = .array(rows) })
@@ -290,7 +346,12 @@ struct APIAssistantWorkspace: View {
             let response = try await store.write("/api/assistant", method: "POST", body: .object(["confirmId": .s(id), "concept": concept, "mode": .s("basic")]))
             memory.append(response["reply"].string, mine: false)
             memory.setNotice("")
-            if !response["mutated"].isNull { memory.setConcept(.null); memory.setConfirm(""); memory.setContext(.null); memory.setTab("chat") }
+            if !response["mutated"].isNull {
+                memory.setConcept(.null)
+                memory.setConfirm("")
+                if !response["context"].isNull { memory.setContext(response["context"]) }
+                memory.setTab("chat")
+            }
         } catch {
             let shown = ((error as? LocalizedError)?.errorDescription ?? error.localizedDescription).trimmingCharacters(in: .whitespacesAndNewlines)
             let message = (shown.isEmpty ? "Uložení se nepodařilo. Server neposlal podrobnost." : shown) + " Koncept zůstává, můžete ho opravit a uložit znovu."

@@ -69,7 +69,7 @@ const PLAN_WEEKDAY_FORMS = [
   ['patek', ['patek','patku','patka']],
   ['sobota', ['sobota','sobotu','sobote','soboty']]
 ];
-function planClock(hour, minute){
+function planHourClock(hour, minute){
   const h = Number(hour), m = Number(minute||0);
   if(!Number.isInteger(h)||!Number.isInteger(m)||h<0||h>23||m<0||m>59) return '';
   return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
@@ -79,8 +79,8 @@ function planClockSpans(folded){
   const spans = [];
   let match;
   while((match = re.exec(folded))){
-    const start = planClock(match[1], match[2]||0);
-    const end = planClock(match[3], match[4]||0);
+    const start = planHourClock(match[1], match[2]||0);
+    const end = planHourClock(match[3], match[4]||0);
     if(start&&end&&end>start) spans.push({at:match.index, start, end});
   }
   return spans;

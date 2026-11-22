@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseAssistantCommand, contextualCommand, assistantModeInfo, ASSISTANT_MODES, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, foldCzech, nextWeekday, parseMaterialAddition, planMaterialLines, weekdayDate, weekSpan} from '../web/assistant-commands.js';
+import {parseAssistantCommand, contextualCommand, assistantModeInfo, ASSISTANT_MODES, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, foldCzech, nextWeekday, parseMaterialAddition, planMaterialLines, weekdayDate, weekSpan, parseServiceDictation, reviseServiceDraft, matchProtocolQuery, annotateProtocolMaterials, serviceDraftQuestions} from '../web/assistant-commands.js';
 import {answerOffline} from '../web/assistant-offline.js';
 
 const today = '2026-11-21';
@@ -131,4 +131,112 @@ test('Offline answers stay inside the stored snapshot', ()=>{
   assert.match(missing.reply, /nevymyslel/);
   const empty = answerOffline(parseAssistantCommand('Co máme dnes za práci?', today), {});
   assert.equal(empty.missing, true);
+});
+
+const CANONICAL_WORK = 'V rámci servisního zásahu byla provedena výměna čtyř ventilů a dvou postřikovačů závlahového systému. Dále bylo opraveno poškozené potrubí a upraveno nastavení třetí závlahové sekce.';
+const SPOKEN_WORK = 'Na zakázce jsme vyměnili 4 ventily, 2 postřikovače, opravili prasklé potrubí a nastavili třetí sekci.';
+const FITTING_WORK = 'Použili jsme 20 metrů třicet dvojky, čtyři kolena, dva T-kusy a šest postřikovačů Rain Bird.';
+
+test('Service dictation becomes an editable protocol, not invented work', ()=>{
+  const command = parseAssistantCommand(SPOKEN_WORK, today);
+  assert.equal(command.intent, 'protocol.report');
+  const draft = command.params.draft;
+  assert.equal(draft.work, CANONICAL_WORK);
+  assert.doesNotMatch(draft.work, /těsnost|plně funkční/);
+  assert.deepEqual(draft.materials.map(line=>[line.key, line.query, line.quantity, line.unit]), [
+    ['ventil', 'ventil', 4, 'ks'],
+    ['postrkovac', 'postřikovač', 2, 'ks'],
+    ['potrubi', 'potrubí', null, 'm']
+  ]);
+  const questions = serviceDraftQuestions(draft);
+  assert.ok(questions.required.some(item=>item==='Kolik metrů potrubí bylo spotřebováno?'));
+  assert.ok(questions.optional.includes('Byla provedena kontrola těsnosti?'));
+  assert.ok(questions.optional.includes('Je systém plně funkční?'));
+  assert.ok(questions.optional.includes('Je nutná další návštěva?'));
+  assert.ok(questions.optional.includes('Byly zjištěny další závady?'));
+  const quiet = serviceDraftQuestions({...draft, asked:['tightness','functional','next','defects']});
+  assert.equal(quiet.optional.some(item=>/těsnosti|funkční|návštěva|závady/.test(item)), false);
+  const typed = serviceDraftQuestions({materials:[{key:'ventil', label:'Ventily', quantity:4, generic:true, status:'matched'}], asked:['tightness','functional','next','defects']});
+  assert.ok(typed.optional.some(item=>/typ ventilů/.test(item)));
+
+  const fittings = parseServiceDictation(FITTING_WORK);
+  assert.equal(fittings.work, 'V rámci servisního zásahu bylo použito dvacet metrů potrubí o průměru 32 mm, čtyři kolena, dva T-kusy a šest postřikovačů Rain Bird.');
+  assert.deepEqual(fittings.materials.map(line=>[line.key, line.query, line.quantity, line.unit, line.generic]), [
+    ['potrubi', 'potrubí PE 32 mm', 20, 'm', false],
+    ['koleno', 'koleno', 4, 'ks', true],
+    ['tkus', 'T-kus', 2, 'ks', true],
+    ['postrkovac', 'postřikovač Rain Bird', 6, 'ks', false]
+  ]);
+  assert.equal(intent('Zkontroluj protokol u zakázky Beta.'), 'protocol.check');
+  assert.equal(intent('Přidej k aktuální zakázce pět postřikovačů.'), 'materials.add');
+  assert.equal(intent('Vytvoř zakázku servis u Petříka na zítra.'), 'jobs.create');
+  assert.equal(intent('Kolik hodin jsem dnes odpracoval?'), 'attendance.hours');
+});
+
+test('Protocol follow-ups edit the open draft and do not steal other intents', ()=>{
+  let revised = reviseServiceDraft(parseServiceDictation(SPOKEN_WORK), 'Přidej ještě jeden ventil.');
+  assert.equal(revised.draft.materials.find(line=>line.key==='ventil').quantity, 5);
+  revised = reviseServiceDraft(revised.draft, 'Přidej ještě dva ventily.');
+  assert.equal(revised.draft.materials.find(line=>line.key==='ventil').quantity, 7);
+  revised = reviseServiceDraft(revised.draft, 'Ty postřikovače byly Rain Bird.');
+  assert.equal(revised.draft.materials.find(line=>line.key==='postrkovac').query, 'postřikovač Rain Bird');
+  assert.equal(revised.draft.materials.find(line=>line.key==='postrkovac').generic, false);
+  revised = reviseServiceDraft(revised.draft, 'Oprav množství potrubí na 25 metrů.');
+  assert.equal(revised.draft.materials.find(line=>line.key==='potrubi').quantity, 25);
+  assert.equal(revised.draft.materials.find(line=>line.key==='potrubi').unit, 'm');
+  revised = reviseServiceDraft(revised.draft, 'Dva ventily nakonec nebyly potřeba.');
+  assert.equal(revised.draft.materials.find(line=>line.key==='ventil').quantity, 5);
+  revised = reviseServiceDraft(revised.draft, 'Připiš, že jsme zkontrolovali všechny sekce.');
+  assert.match(revised.draft.work, /Dále byla provedena kontrola všech závlahových sekcí\.$/);
+  assert.equal(revised.draft.work.startsWith(CANONICAL_WORK), true);
+  const shown = reviseServiceDraft(revised.draft, 'Ukaž mi celý protokol.');
+  assert.equal(shown.show, true);
+  assert.match(shown.draft.work, /kontrola všech závlahových sekcí/);
+  const undone = reviseServiceDraft(shown.draft, 'Vrať poslední změnu.');
+  assert.equal(undone.undo, true);
+  assert.doesNotMatch(undone.draft.work, /kontrola všech závlahových sekcí/);
+  assert.equal(reviseServiceDraft({work:'x', materials:[], asked:[], history:[]}, 'Vrať poslední změnu.').undo, 'empty');
+
+  const open = parseServiceDictation(SPOKEN_WORK);
+  const hours = contextualCommand(parseAssistantCommand('Kolik hodin jsme dnes strávili na zakázce?', today), {protocol:open, jobId:'job-1'});
+  assert.equal(hours.intent, 'jobs.hours');
+  const check = contextualCommand(parseAssistantCommand('Zkontroluj protokol.', today), {protocol:open});
+  assert.equal(check.intent, 'protocol.check');
+  const named = contextualCommand(parseAssistantCommand('Zakázka Severní zahrada', today), {protocol:open});
+  assert.equal(named.intent, 'protocol.report');
+  assert.equal(named.params.jobQuery, 'Severní zahrad');
+  const offline = answerOffline(parseAssistantCommand(SPOKEN_WORK, today), {jobs:[], today});
+  assert.equal(offline.missing, true);
+  assert.match(offline.reply, /neukládám/);
+});
+
+test('Protocol catalogue match bills one exact item and never invents a row', ()=>{
+  const items = [
+    {id:'pe', version:1, name:'Potrubí PE 32 mm', sku:'PE32', unit:'m', active:true},
+    {id:'elbow-pe', version:1, name:'Koleno PE', unit:'ks', active:true},
+    {id:'elbow-head', version:1, name:'Koleno postřikovač', unit:'ks', active:true},
+    {id:'tee16', version:1, name:'T - kus 16mm', unit:'ks', active:true},
+    {id:'tee', version:1, name:'T-kus', unit:'ks', active:true},
+    {id:'rain', version:1, name:'Postřikovač Rain Bird', unit:'ks', active:true},
+    {id:'drip', version:1, name:'Kapkovací potrubí / kapka', unit:'m', active:true}
+  ];
+  assert.equal(matchProtocolQuery('potrubí PE 32 mm', items).item.id, 'pe');
+  assert.ok(matchProtocolQuery('koleno', items).choices?.length>=2);
+  assert.equal(matchProtocolQuery('koleno', items).item, undefined);
+  assert.equal(matchProtocolQuery('T-kus', items).item.id, 'tee');
+  assert.equal(matchProtocolQuery('postřikovač Rain Bird', items).item.id, 'rain');
+  assert.ok(matchProtocolQuery('postřikovač', items).choices?.length);
+  assert.equal(matchProtocolQuery('postřikovač', items).item, undefined);
+  assert.equal(matchProtocolQuery('ventil', items).missing, true);
+  assert.equal(matchProtocolQuery('potrubí', items).missing, true);
+  const annotated = annotateProtocolMaterials(parseServiceDictation(FITTING_WORK), items);
+  assert.equal(annotated.materials.find(line=>line.key==='potrubi').status, 'matched');
+  assert.equal(annotated.materials.find(line=>line.key==='potrubi').itemId, 'pe');
+  assert.equal(annotated.materials.find(line=>line.key==='koleno').status, 'choices');
+  assert.equal(annotated.materials.find(line=>line.key==='koleno').itemId, '');
+  assert.equal(annotated.materials.find(line=>line.key==='tkus').itemId, 'tee');
+  assert.equal(annotated.materials.find(line=>line.key==='postrkovac').itemId, 'rain');
+  const asked = serviceDraftQuestions(annotated);
+  assert.ok(asked.required.some(item=>/Kolena/.test(item)&&/nezakládám/.test(item)));
+  assert.equal(asked.required.some(item=>/Rain Bird/.test(item)), false);
 });

@@ -479,6 +479,129 @@ test('Separate weekdays become one unsent concept and save only after people are
   }finally{env.sqlite.close();}
 });
 
+test('Spoken service work is stored only after confirmation and catalogue lines are not doubled', async()=>{
+  const env = environment();
+  try{
+    await ready(env);
+    await call(env, '/api/materials/categories/cat-protocol', people.owner, 'PUT', {version:0, name:'Protokol', sortOrder:9, active:true});
+    await call(env, '/api/materials/items/item-pe32', people.owner, 'PUT', {version:0, name:'Potrubí PE 32 mm', categoryId:'cat-protocol', sku:'PE32', unit:'m', priceMinor:4500, currency:'CZK', active:true});
+    await call(env, '/api/materials/items/item-tkus', people.owner, 'PUT', {version:0, name:'T-kus', categoryId:'cat-protocol', sku:'TEE', unit:'ks', priceMinor:2300, currency:'CZK', active:true});
+    await call(env, '/api/materials/items/item-rain', people.owner, 'PUT', {version:0, name:'Postřikovač Rain Bird', categoryId:'cat-protocol', sku:'RB', unit:'ks', priceMinor:12500, currency:'CZK', active:true});
+    const catalogCount = env.sqlite.prepare('SELECT count(*) n FROM material_items').get().n;
+    const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    const created = await call(env, '/api/jobs/job-service', people.owner, 'PUT', {version:0, title:'Severní zahrada', status:'in_progress', jobType:'service', dueDate:today, customerName:'Novák', address:'Zahradní 1', city:'Brno', incompleteReason:'', assignedTo:people.owner.id});
+    assert.equal(created.status, 200, await created.clone().text());
+    const spoken = 'Na zakázce jsme vyměnili 4 ventily, 2 postřikovače, opravili prasklé potrubí a nastavili třetí sekci.';
+    const proposed = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:spoken, mode:'basic'}));
+    assert.equal(proposed.status, 200, JSON.stringify(proposed.body));
+    assert.equal(proposed.body.concept.kind, 'protocol');
+    assert.equal(proposed.body.concept.jobId, 'job-service');
+    assert.equal(proposed.body.concept.work, 'V rámci servisního zásahu byla provedena výměna čtyř ventilů a dvou postřikovačů závlahového systému. Dále bylo opraveno poškozené potrubí a upraveno nastavení třetí závlahové sekce.');
+    assert.doesNotMatch(proposed.body.concept.work, /těsnost|plně funkční/);
+    assert.ok(proposed.body.concept.optionalQuestions.includes('Byla provedena kontrola těsnosti?'));
+    assert.ok(proposed.body.concept.questions.some(item=>/Kolik metrů potrubí/.test(item)));
+    assert.ok(proposed.body.concept.questions.some(item=>/Novou položku nezakládám/.test(item)));
+    assert.ok(proposed.body.confirm?.id);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM service_reports').get().n, 0);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM material_items').get().n, catalogCount);
+    const first = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:proposed.body.confirm.id, concept:proposed.body.concept}));
+    assert.equal(first.status, 200, JSON.stringify(first.body));
+    const plain = env.sqlite.prepare('SELECT work, material, material_items FROM service_reports WHERE job_id=?').get('job-service');
+    assert.equal(plain.work, proposed.body.concept.work);
+    assert.doesNotMatch(plain.work, /těsnost|plně funkční/);
+    assert.equal(plain.material, '');
+    assert.deepEqual(JSON.parse(plain.material_items), []);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM material_items').get().n, catalogCount);
+    const repeated = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:proposed.body.confirm.id}));
+    assert.equal(repeated.status, 200, JSON.stringify(repeated.body));
+    assert.match(repeated.body.reply, /už byla provedena/);
+    assert.deepEqual(JSON.parse(env.sqlite.prepare('SELECT material_items FROM service_reports WHERE job_id=?').get('job-service').material_items), []);
+
+    const fittings = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Použili jsme 20 metrů třicet dvojky, čtyři kolena, dva T-kusy a šest postřikovačů Rain Bird.', mode:'basic', context:{jobId:'job-service'}}));
+    assert.equal(fittings.status, 200, JSON.stringify(fittings.body));
+    assert.equal(fittings.body.concept.work, 'V rámci servisního zásahu bylo použito dvacet metrů potrubí o průměru 32 mm, čtyři kolena, dva T-kusy a šest postřikovačů Rain Bird.');
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM service_reports WHERE job_id=?').get('job-service').n, 1);
+    const concept = structuredClone(fittings.body.concept);
+    concept.materials.find(line=>line.key==='postrkovac').quantity = '9';
+    concept.materials.find(line=>line.key==='koleno').choiceId = 'item-pe32';
+    const billed = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:fittings.body.confirm.id, concept}));
+    assert.equal(billed.status, 200, JSON.stringify(billed.body));
+    assert.match(billed.body.reply, /není zapsané ještě jednou/);
+    const rows = JSON.parse(env.sqlite.prepare('SELECT work, material, material_items FROM service_reports WHERE job_id=?').get('job-service').material_items);
+    assert.deepEqual(rows.map(item=>[item.itemId, item.quantity]).sort(), [['item-pe32',20],['item-rain',9],['item-tkus',2]]);
+    assert.equal(env.sqlite.prepare('SELECT material FROM service_reports WHERE job_id=?').get('job-service').material, '');
+    assert.equal(env.sqlite.prepare("SELECT count(*) n FROM material_items WHERE name LIKE '%Koleno%'").get().n, env.sqlite.prepare("SELECT count(*) n FROM material_items WHERE name='Koleno postřikovač'").get().n);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM material_items').get().n, catalogCount);
+    const corrected = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Oprav množství potrubí na 25 metrů.', context:billed.body.context}));
+    assert.equal(corrected.status, 200, JSON.stringify(corrected.body));
+    assert.ok(corrected.body.confirm?.id);
+    assert.equal(JSON.parse(env.sqlite.prepare('SELECT material_items FROM service_reports WHERE job_id=?').get('job-service').material_items).find(item=>item.itemId==='item-pe32').quantity, 20);
+    const stored = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:corrected.body.confirm.id}));
+    assert.equal(stored.status, 200, JSON.stringify(stored.body));
+    const after = JSON.parse(env.sqlite.prepare('SELECT material_items FROM service_reports WHERE job_id=?').get('job-service').material_items);
+    assert.equal(after.find(item=>item.itemId==='item-pe32').quantity, 25);
+    assert.equal(after.find(item=>item.itemId==='item-rain').quantity, 9);
+    assert.equal(after.find(item=>item.itemId==='item-tkus').quantity, 2);
+    assert.equal(after.length, 3);
+    const twice = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:corrected.body.confirm.id}));
+    assert.match(twice.body.reply, /už byla provedena/);
+    assert.equal(JSON.parse(env.sqlite.prepare('SELECT material_items FROM service_reports WHERE job_id=?').get('job-service').material_items).find(item=>item.itemId==='item-pe32').quantity, 25);
+  }finally{env.sqlite.close();}
+});
+
+test('A service note is not guessed onto a job, another company, or someone else', async()=>{
+  const env = environment();
+  try{
+    await ready(env);
+    await call(env, '/api/invitations', people.owner, 'POST', {email:people.worker.email, role:'worker'});
+    await call(env, '/api/me', people.worker);
+    const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    const job = (id, title, status)=>({version:0, title, status, jobType:'service', dueDate:today, customerName:'Novák', incompleteReason:'', assignedTo:people.owner.id});
+    assert.equal((await call(env, '/api/jobs/job-north', people.owner, 'PUT', job('job-north','Severní zahrada','in_progress'))).status, 200);
+    assert.equal((await call(env, '/api/jobs/job-south', people.owner, 'PUT', job('job-south','Jižní zahrada','in_progress'))).status, 200);
+    const ambiguous = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Na zakázce jsme vyměnili 4 ventily a nastavili třetí sekci.'}));
+    assert.equal(ambiguous.body.confirm, null);
+    assert.match(ambiguous.body.reply, /Severní zahrada/);
+    assert.match(ambiguous.body.reply, /Jižní zahrada/);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM service_reports').get().n, 0);
+    const named = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Zakázka Severní zahrada', context:ambiguous.body.context}));
+    assert.equal(named.status, 200, JSON.stringify(named.body));
+    assert.equal(named.body.concept.jobId, 'job-north');
+    assert.ok(named.body.confirm?.id);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM service_reports').get().n, 0);
+    const outsider = await json(await call(env, '/api/assistant', people.worker, 'POST', {text:'Na zakázce jsme vyměnili 4 ventily a nastavili třetí sekci.'}));
+    assert.equal(outsider.body.confirm, null);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM service_reports').get().n, 0);
+    const foreign = env.sqlite.prepare('SELECT company_id FROM assistant_events WHERE id=?').get(named.body.confirm.id);
+    env.sqlite.prepare("UPDATE assistant_events SET company_id='jina-firma' WHERE id=?").run(named.body.confirm.id);
+    const denied = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:named.body.confirm.id}));
+    assert.equal(denied.status, 404);
+    env.sqlite.prepare('UPDATE assistant_events SET company_id=? WHERE id=?').run(foreign.company_id, named.body.confirm.id);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM service_reports').get().n, 0);
+  }finally{env.sqlite.close();}
+});
+
+test('One job due today is used only when nothing is already in progress', async()=>{
+  const env = environment();
+  try{
+    await ready(env);
+    const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    const created = await call(env, '/api/jobs/job-today-only', people.owner, 'PUT', {version:0, title:'Dnešní servis', status:'planned', jobType:'service', dueDate:today, customerName:'Novák', incompleteReason:'', assignedTo:people.owner.id});
+    assert.equal(created.status, 200, await created.clone().text());
+    const one = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Na zakázce jsme opravili prasklé potrubí.'}));
+    assert.equal(one.body.concept?.jobId, 'job-today-only');
+    assert.ok(one.body.confirm?.id);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM service_reports').get().n, 0);
+    const second = await call(env, '/api/jobs/job-today-two', people.owner, 'PUT', {version:0, title:'Druhý servis', status:'planned', jobType:'service', dueDate:today, customerName:'Novák', incompleteReason:'', assignedTo:people.owner.id});
+    assert.equal(second.status, 200, await second.clone().text());
+    const many = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Na zakázce jsme opravili prasklé potrubí.'}));
+    assert.equal(many.body.confirm, null);
+    assert.match(many.body.reply, /Dnešní servis/);
+    assert.match(many.body.reply, /Druhý servis/);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM service_reports').get().n, 0);
+  }finally{env.sqlite.close();}
+});
+
 
 
 
