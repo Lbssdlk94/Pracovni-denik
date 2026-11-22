@@ -20,6 +20,7 @@ struct APIJobDetailContent:View {
     var body:some View {
         VStack(alignment:.leading,spacing:16){
             APIJobCompactHeader(job:job,states:projected["states"].array)
+            APIJobScheduleSection(job:job)
             quickActions
             APIJobCompletionCard(store:store,job:job)
             if store.enabled("attendance") {

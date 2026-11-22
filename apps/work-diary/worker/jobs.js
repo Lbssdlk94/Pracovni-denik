@@ -11,8 +11,31 @@ import {jobAssignedIds,jobAssignment} from './assignments.js';
 async function jobTermRows(env, jobId){
  try{
   const rows=await env.DB.prepare('SELECT term_date,start_time,end_time,assigned_users,status,note FROM job_terms WHERE job_id=? ORDER BY sort_order,term_date').bind(jobId).all();
-  return (rows.results||[]).map(row=>({date:row.term_date,start:row.start_time,end:row.end_time,people:JSON.parse(row.assigned_users||'[]'),status:row.status,note:row.note}));
+  let intervals=[];
+  try{intervals=(await env.DB.prepare("SELECT user_name,start_at,end_at FROM job_time_intervals WHERE job_id=? AND end_at IS NOT NULL AND kind='work'").bind(jobId).all()).results||[];}catch{intervals=[];}
+  const day=ms=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague'}).format(new Date(ms));
+  return (rows.results||[]).map(row=>{
+   const same=intervals.filter(item=>day(item.start_at)===row.term_date);
+   const byName=new Map();
+   for(const item of same) byName.set(item.user_name,(byName.get(item.user_name)||0)+(item.end_at-item.start_at));
+   const worked=[...byName].map(([name,ms])=>({name,ms}));
+   return {date:row.term_date,start:row.start_time,end:row.end_time,people:JSON.parse(row.assigned_users||'[]'),status:row.status,note:row.note,workedMs:worked.reduce((sum,item)=>sum+item.ms,0),worked};
+  });
  }catch{return [];}
+}
+async function withSchedules(env, jobs){
+ if(!jobs.length) return jobs;
+ try{
+  const rows=await env.DB.prepare(`SELECT job_id,term_date,status FROM job_terms WHERE job_id IN (${jobs.map(()=>'?').join(',')}) ORDER BY sort_order,term_date`).bind(...jobs.map(job=>job.id)).all();
+  const grouped=new Map();
+  for(const row of rows.results||[]){const item=grouped.get(row.job_id)||[];item.push(row);grouped.set(row.job_id,item);}
+  return jobs.map(job=>{
+   const item=grouped.get(job.id)||[];
+   if(item.length<2) return job;
+   const next=item.find(row=>row.status!=='done')?.term_date||'';
+   return {...job,schedule:{days:item.length,done:item.filter(row=>row.status==='done').length,next,dates:item.map(row=>row.term_date)}};
+  });
+ }catch{return jobs;}
 }
 // Every read and write is scoped on the server; client filters are only presentation.
 export async function handleJobs(request,env,m,h){
@@ -77,7 +100,8 @@ export async function handleJobs(request,env,m,h){
   const ordering=order==='schedule'?`${statusKey},${dateKey},${timeKey},j.id`:'j.created_at DESC,j.id DESC';
   const rows=await all(env.DB,select+' WHERE '+clauses.join(' AND ')+' ORDER BY '+ordering+' LIMIT 101',...args),more=rows.length>100,list=rows.slice(0,100),last=list.at(-1);
   const listRevisionAfter=cacheSnapshot?((await one(env.DB,"SELECT version FROM settings WHERE key='job-planner-revision'"))?.version||0):null;
-  return json({...cacheSnapshot?{listRevision:listRevision===listRevisionAfter?listRevision:null}:{},jobs:list.map(record),nextCursor:more?btoa(JSON.stringify(order==='schedule'?{order,filter,completed:last.status==='in_progress'?0:last.status==='incomplete'?2:last.status==='done'?3:1,date:last.due_date||'9999-99-99',time:last.planned_start||last.start_time||'24:00',id:last.id}:{at:last.created_at,id:last.id})):null,...(calendar?{calendar}:{})});
+  const jobs=await withSchedules(env,list.map(record));
+  return json({...cacheSnapshot?{listRevision:listRevision===listRevisionAfter?listRevision:null}:{},jobs,nextCursor:more?btoa(JSON.stringify(order==='schedule'?{order,filter,completed:last.status==='in_progress'?0:last.status==='incomplete'?2:last.status==='done'?3:1,date:last.due_date||'9999-99-99',time:last.planned_start||last.start_time||'24:00',id:last.id}:{at:last.created_at,id:last.id})):null,...(calendar?{calendar}:{})});
  }
  const match=path.match(/^\/api\/jobs\/([-a-zA-Z0-9_]{1,100})(\/(?:status|departure|geocode|completion|completion-target))?$/);if(!match)fail(404,'Zakázka nebyla nalezena.');
  const id=match[1],statusOnly=match[2]==='/status',departure=match[2]==='/departure';
@@ -160,9 +184,8 @@ export async function handleJobs(request,env,m,h){
   }
   if(b.terms!==undefined){
     if(!Array.isArray(b.terms)||b.terms.length>14)fail(400,'Zakázka může mít nejvýše 14 termínů.');
-    const seen=new Set();
-    jobStatements.push(env.DB.prepare('DELETE FROM job_terms WHERE job_id=? AND EXISTS(SELECT 1 FROM jobs WHERE id=? AND version=? AND updated_by=? AND deleted=0)').bind(id,id,version+1,m.user_id));
-    for(const [index,term] of b.terms.entries()){
+    const seen=new Set(),normalized=[];
+    for(const term of b.terms){
       if(!term||typeof term!=='object'||Array.isArray(term))fail(400,'Neplatný termín.');
       const date=typeof term.date==='string'?term.date:'';
       if(!calendarDate(date)||seen.has(date))fail(400,'Každý termín musí mít vlastní platné datum.');
@@ -171,9 +194,22 @@ export async function handleJobs(request,env,m,h){
       if(end<=start)fail(400,'Konec termínu musí být po začátku.');
       const people=Array.isArray(term.people)?term.people:[];
       if(people.length>20||people.some(person=>typeof person!=='string'||!/^[-a-zA-Z0-9_]{1,100}$/.test(person))||new Set(people).size!==people.length)fail(400,'Neplatný pracovník termínu.');
-      const termStatus=['planned','done'].includes(term.status)?term.status:'planned';
-      jobStatements.push(env.DB.prepare('INSERT INTO job_terms(id,job_id,term_date,start_time,end_time,assigned_users,status,note,sort_order) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM jobs WHERE id=? AND version=? AND updated_by=? AND deleted=0)').bind(id+':'+date,id,date,start,end,JSON.stringify(people),termStatus,cleanText(term.note||'',300),index,id,version+1,m.user_id));
+      normalized.push({date,start,end,people,status:['planned','done'].includes(term.status)?term.status:'planned',note:cleanText(term.note||'',300)});
     }
+    if(normalized.length&&!b.allowOverlaps){
+      const marks=normalized.map(()=>'?').join(',');
+      let existing=[];
+      try{existing=await all(env.DB,`SELECT j.title,t.term_date,t.start_time,t.end_time,t.assigned_users FROM job_terms t JOIN jobs j ON j.id=t.job_id WHERE j.deleted=0 AND j.status<>'done' AND j.id<>? AND t.term_date IN (${marks})`,id,...normalized.map(term=>term.date));}catch{existing=[];}
+      const hits=[];
+      for(const term of normalized) for(const row of existing){
+        if(row.term_date!==term.date||term.end<=row.start_time||row.end_time<=term.start) continue;
+        const theirs=JSON.parse(row.assigned_users||'[]');
+        if(term.people.some(person=>theirs.includes(person))) hits.push({kind:'overlap',otherTitle:row.title,date:term.date,startTime:row.start_time,endTime:row.end_time});
+      }
+      if(hits.length){const revision=(await one(env.DB,"SELECT version FROM settings WHERE key='job-planner-revision'"))?.version||0;fail(409,'Zkontrolujte kolize jednotlivých termínů.',{code:'job_schedule_warning',preview:{revision,overlaps:hits.slice(0,8),warnings:[]}});}
+    }
+    jobStatements.push(env.DB.prepare('DELETE FROM job_terms WHERE job_id=? AND EXISTS(SELECT 1 FROM jobs WHERE id=? AND version=? AND updated_by=? AND deleted=0)').bind(id,id,version+1,m.user_id));
+    normalized.forEach((term,index)=>jobStatements.push(env.DB.prepare('INSERT INTO job_terms(id,job_id,term_date,start_time,end_time,assigned_users,status,note,sort_order) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM jobs WHERE id=? AND version=? AND updated_by=? AND deleted=0)').bind(id+':'+term.date,id,term.date,term.start,term.end,JSON.stringify(term.people),term.status,term.note,index,id,version+1,m.user_id)));
   }
   const kind=old&&old.status!==status?(status==='in_progress'?'work':['done','incomplete'].includes(status)?'stop':null):null,time=kind&&(kind==='stop'||h.timeTracking&&h.features?.attendance!==false)?await timeLegacyStatements(env,m,old,kind,fail):[];
   result=(await timeBatch(env,[...time,...jobStatements,...(time.length?[timeAssertApplied(env,id,m.user_id,linkOperation)]:[])],fail))[time.length];if(time.length)myTime=await timeState(env,m.user_id,m);

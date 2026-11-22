@@ -110,7 +110,7 @@ struct APIEntityEditor: View {
             ScrollView {
                 VStack(alignment:.leading,spacing:18) {
                     if loading { ProgressView("Načítám údaje…") }
-                    else { APIFieldsView(fields:fields.filter{!extras.contains($0.id)},value:$value,options:visibleOptions,edited:edited).diaryCard();if !fields.filter({extras.contains($0.id)}).isEmpty{DisclosureGroup("Doplňující údaje"){APIFieldsView(fields:fields.filter{extras.contains($0.id)},value:$value,options:visibleOptions,edited:edited)}.diaryCard()} }
+                    else { APIFieldsView(fields:fields.filter{!extras.contains($0.id)},value:$value,options:visibleOptions,edited:edited).diaryCard();if resource.entity == .jobs {APIJobTermsEditor(value:$value,people:options["people"] ?? []).diaryCard()};if !fields.filter({extras.contains($0.id)}).isEmpty{DisclosureGroup("Doplňující údaje"){APIFieldsView(fields:fields.filter{extras.contains($0.id)},value:$value,options:visibleOptions,edited:edited)}.diaryCard()} }
                     if resource.entity == .defects,!value["sourceJobId"].string.isEmpty {APIProtocolPhotoPicker(store:store,jobID:value["sourceJobId"].string,photos:Binding(get:{value["photos"]},set:{value["photos"]=$0})).diaryCard()}
                     if !overlap.isNull {VStack(alignment:.leading){ForEach(Array(overlap["warnings"].array.enumerated()),id:\.offset){_,warning in Text(warning["message"].string).foregroundStyle(DiaryStyle.warning)};if !overlap["overlaps"].array.isEmpty{Text("Překryvy práce: \(overlap["overlaps"].array.count). Zkontrolujte přiřazení, čas a rezervu mezi návštěvami.").foregroundStyle(DiaryStyle.warning)}};Button("Přesto uložit po kontrole překryvů"){value["allowOverlaps"] = .bool(true);value["previewRevision"]=overlap["revision"];Task{await save()}}.diaryBubble()}
                     if let problem { DiaryStatusBanner(text:problem,warning:true) }
@@ -142,7 +142,14 @@ struct APIEntityEditor: View {
         do {
             let refs=Set(fields.flatMap { [$0.reference].compactMap{$0} + $0.children.compactMap(\.reference) })
             for ref in refs { options[ref] = try await APIDomainLogic.referenceRows(ref,store:store) }
-            await loadAddresses();hydrateGarden();loading=false
+            await loadAddresses();hydrateGarden()
+            if resource.entity == .jobs && !isNew && !touched.contains("terms") {
+                if let response = try? await store.get("/api/jobs/"+original.id), !response["job"]["terms"].array.isEmpty {
+                    value["terms"] = response["job"]["terms"]
+                    if response["job"]["terms"].array.count>1 { value["termMode"] = .s("multi") }
+                }
+            }
+            loading=false
         } catch { problem=error.localizedDescription;loading=false }
     }
     func loadAddresses() async {

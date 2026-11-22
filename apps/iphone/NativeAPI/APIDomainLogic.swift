@@ -39,6 +39,7 @@ enum APIDomainLogic {
         case .jobs:
             body=body.merged(["customerAddressId":value["customerAddressId"].string.isEmpty ? .null : value["customerAddressId"],"assignedTo":value["assignedTos"].array.first ?? value["assignedTo"],"status":value["status"].isNull ? .s("planned") : value["status"],"incompleteReason":value["incompleteReason"].isNull ? .s("") : value["incompleteReason"]])
             if !value["previewRevision"].isNull { body["previewRevision"]=value["previewRevision"];body["allowOverlaps"]=value["allowOverlaps"] }
+            if !value["terms"].isNull { body["terms"] = .array(value["terms"].array.map{term in .object(["date":term["date"],"start":term["start"].string.isEmpty ? .s("07:00") : term["start"],"end":term["end"].string.isEmpty ? .s("15:00") : term["end"],"note":term["note"],"status":term["status"].string.isEmpty ? .s("planned") : term["status"],"people":.array(term["people"].array.map{person in .s(person.string.isEmpty ? person["id"].string : person.string)})])}) }
         case .gardens: if isNew { path="/api/gardens";method="POST";body["id"] = .s(id) } else { method="PATCH" }
         case .defects:
             body["mutationId"] = .s(operationID);body["photos"] = value["photos"].isNull ? .array([]) : value["photos"]
