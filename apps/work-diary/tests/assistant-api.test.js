@@ -364,6 +364,51 @@ test('The result form saves the edited day instead of the original proposal', as
   }finally{env.sqlite.close();}
 });
 
+test('Job search understands last week, Wednesday, declined names, and a 30 hour day is flagged', async()=>{
+  const env = environment();
+  try{
+    await ready(env);
+    await call(env, '/api/invitations', people.owner, 'POST', {email:people.worker.email, role:'worker'});
+    await call(env, '/api/me', people.worker);
+    env.sqlite.prepare('UPDATE members SET name=? WHERE user_id=?').run('Petřík', people.worker.id);
+    const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    const {weekSpan, weekdayDate} = await import('../web/assistant-commands.js');
+    const {attendanceInstant} = await import('../web/attendance-model.js');
+    const last = weekSpan(today, 'last');
+    const wednesday = weekdayDate(today, 'streda', 'this');
+    const put = (id, title, dueDate, assignedTo)=>call(env, '/api/jobs/'+id, people.owner, 'PUT', {version:0, title, status:'planned', dueDate, startTime:'07:00', endTime:'12:00', customerName:'Novák', incompleteReason:'', assignedTo});
+    assert.equal((await put('job-last', 'Zavážení štěrku', last.start, people.owner.id)).status, 200);
+    assert.equal((await put('job-wed-me', 'Realizace závlahy', wednesday, people.owner.id)).status, 200);
+    assert.equal((await put('job-wed-him', 'Servis u Petříka', wednesday, people.worker.id)).status, 200);
+    assert.equal((await put('job-today', 'Dnešní kontrola', today, people.worker.id)).status, 200);
+    const week = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Najdi mi zakázky za minulý týden.'}));
+    assert.equal(week.status, 200, JSON.stringify(week.body));
+    assert.match(week.body.reply, /Zavážení štěrku/);
+    assert.doesNotMatch(week.body.reply, /Dnešní kontrola|Realizace závlahy/);
+    const mine = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Najdi mé zakázky na středu.'}));
+    assert.match(mine.body.reply, /Realizace závlahy/);
+    assert.match(mine.body.reply, /středu/);
+    assert.doesNotMatch(mine.body.reply, /Servis u Petříka|Zavážení/);
+    const person = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Najdi mi zakázky pro Petříka.'}));
+    assert.match(person.body.reply, /Servis u Petříka/);
+    assert.match(person.body.reply, /Petřík/);
+    assert.doesNotMatch(person.body.reply, /Realizace závlahy/);
+    const typo = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Najdi mi zakázky pro Petrika.'}));
+    assert.match(typo.body.reply, /Servis u Petříka/);
+    const start = attendanceInstant(today+'T00:00');
+    const hour = 60*60*1000;
+    const insert = env.sqlite.prepare('INSERT INTO attendance_shifts(id,user_id,user_name,start_at,end_at,start_gps_status,version,created_at,updated_at) VALUES(?,?,?,?,?,?,1,1,1)');
+    insert.run('shift-a', people.owner.id, 'Majitel', start, start+15*hour, 'unavailable');
+    insert.run('shift-b', people.owner.id, 'Majitel', start+hour, start+16*hour, 'unavailable');
+    insert.run('shift-c', people.worker.id, 'Petřík', start, start+15*hour, 'unavailable');
+    const hours = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Kolik hodin jsem dnes odpracoval?'}));
+    assert.equal(hours.status, 200, JSON.stringify(hours.body));
+    assert.match(hours.body.reply, /30 h/);
+    assert.match(hours.body.reply, /chybně/);
+    assert.doesNotMatch(hours.body.reply, /45 h/);
+  }finally{env.sqlite.close();}
+});
+
 
 
 

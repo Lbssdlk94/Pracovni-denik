@@ -1,5 +1,5 @@
 import {rolePreviewMarkup} from './role-preview-model.js?v=role-preview-v1';
-import {mountWorkAssistant} from './assistant-ui.js?v=assistant-v9';
+import {mountWorkAssistant} from './assistant-ui.js?v=assistant-v10';
 import {createAccountUI} from './local-auth-ui.js?v=session-startup-v1';
 import {installNativeClient} from './native-client.js?v=job-three-month-v1';
 import {transientConnectionError} from './io.js?v=connection-recovery-v1';

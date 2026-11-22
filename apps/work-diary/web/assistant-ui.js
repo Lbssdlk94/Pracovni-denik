@@ -1,4 +1,4 @@
-import {parseAssistantCommand, contextualCommand} from './assistant-commands.js?v=assistant-v7';
+import {parseAssistantCommand, contextualCommand} from './assistant-commands.js?v=assistant-v10';
 import {answerOffline} from './assistant-offline.js?v=assistant-v2';
 import {peekCachedJobs} from './cloud.js?v=completion-v1';
 import {extractLocalCommand, localMinistral} from './assistant-local.js?v=assistant-v6';
@@ -49,7 +49,7 @@ localMinistral().subscribe(()=>repaint());
 export function mountWorkAssistant({db, getSession, onChanged, openCustomer, openJob, openMaterial}={}){
   const session = getSession?.();
   const existingRoot = document.querySelector('#assistant-root');
-  if(!session?.user){existingRoot?.remove(); runtime.scope=''; return;}
+  if(!session?.user){existingRoot?.remove(); document.body.classList.remove('assistant-open'); runtime.scope=''; return;}
   const embedded = [...document.querySelectorAll('#assistant-page')].find(node=>!node.closest('#assistant-root'));
   let bubble = existingRoot;
   let host = embedded;
@@ -87,8 +87,27 @@ export function mountWorkAssistant({db, getSession, onChanged, openCustomer, ope
 function applyBubble(root){
   root.classList.toggle('is-open', !!runtime.open);
   root.querySelector('.assistant-launch')?.setAttribute('aria-expanded', runtime.open?'true':'false');
+  document.body.classList.toggle('assistant-open', !!runtime.open);
 }
 
+function bindKeyboard(host){
+  const root = host.closest('#assistant-root')||host;
+  if(root.dataset.viewport==='1'||!window.visualViewport) return;
+  root.dataset.viewport='1';
+  const apply = ()=>{
+    const view = window.visualViewport;
+    const keyboard = window.innerHeight - view.height - view.offsetTop > 80;
+    root.style.setProperty('--vv-height', Math.round(view.height)+'px');
+    root.style.setProperty('--vv-top', Math.round(view.offsetTop)+'px');
+    root.style.setProperty('--kb-pad', keyboard?'0px':'env(safe-area-inset-bottom)');
+    const field = host.querySelector('textarea');
+    const log = host.querySelector('.assistant-log');
+    if(keyboard && field && document.activeElement===field && log) log.scrollTop = log.scrollHeight;
+  };
+  window.visualViewport.addEventListener('resize', apply);
+  window.visualViewport.addEventListener('scroll', apply);
+  apply();
+}
 function current(){
   return runtime.threads.find(item=>item.id===runtime.threadId) || null;
 }
@@ -104,16 +123,17 @@ function ensureThread(session){
 }
 function resolvedTheme(){
   const root = document.documentElement;
-  const explicit = root.dataset.theme || root.dataset.colorScheme;
+  const explicit = root.dataset.theme || root.dataset.colorScheme || document.body?.dataset?.theme;
   if(explicit==='light'||explicit==='dark') return explicit;
-  if(root.classList.contains('dark')) return 'dark';
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  if(root.classList.contains('dark')||document.body.classList.contains('dark')) return 'dark';
+  return 'light';
 }
 
 function render(host, session, paint, api){
   const thread = ensureDraft(current());
   const items = thread?.items||[];
   host.dataset.theme = resolvedTheme();
+  bindKeyboard(host);
   const scroll = runtime.keepScroll;
   host.innerHTML = page(session, thread, items);
   const log = host.querySelector('.assistant-log');
@@ -207,7 +227,7 @@ function page(session, thread, items){
   const name = session?.user?.name||'';
   const history = runtime.threads.filter(item=>!runtime.query||item.title.toLocaleLowerCase('cs').includes(runtime.query.toLocaleLowerCase('cs')));
   const shown = history.slice(0,12);
-  const messages = items.map(item=>bubble(item)).join('');
+  const messages = messageLog(items);
   const welcome = !items.length;
   const tiles = welcomeTiles(session);
   const fresh = runtime.resultFresh?' is-fresh':'';
@@ -222,6 +242,10 @@ function page(session, thread, items){
       <button type="button" class="assistant-icon-button" data-minimize aria-label="Minimalizovat">${minus()}</button>
       <button type="button" class="assistant-icon-button" data-menu aria-pressed="${runtime.menuOpen}" aria-label="Další možnosti">${moreIcon()}</button>
     </header>
+    <div class="assistant-tabs" role="tablist" aria-label="Asistent a výsledek">
+      <button type="button" data-tab="chat" aria-selected="${runtime.mobileTab!=='result'}">Asistent</button>
+      <button type="button" data-tab="result" aria-selected="${runtime.mobileTab==='result'}">Výsledek${fresh?' <span class="assistant-dot"></span>':''}</button>
+    </div>
     ${runtime.historyOpen?historyPopover(shown, history.length, thread):''}
     ${runtime.menuOpen?menuPopover():''}
     <div class="assistant-body">
@@ -237,11 +261,23 @@ function page(session, thread, items){
       <div class="assistant-split" data-split role="separator" aria-orientation="vertical" aria-label="Šířka panelů" tabindex="0"></div>
       <section class="assistant-stage" aria-label="Výsledek">${stage(thread)}</section>
     </div>
-    <div class="assistant-tabs" role="tablist" aria-label="Asistent a výsledek">
-      <button type="button" data-tab="chat" aria-selected="${runtime.mobileTab!=='result'}">Asistent</button>
-      <button type="button" data-tab="result" aria-selected="${runtime.mobileTab==='result'}">Výsledek${fresh?' <span class="assistant-dot"></span>':''}</button>
-    </div>
   </div>`;
+}
+function messageLog(items){
+  let previous = '';
+  return items.map(item=>{
+    const heading = dayHeading(item.at);
+    const mark = heading===previous?'':`<p class="assistant-day">${esc(heading)}</p>`;
+    previous = heading;
+    return mark+bubble(item);
+  }).join('');
+}
+function dayHeading(value){
+  const date = new Date(value), now = new Date();
+  if(date.toDateString()===now.toDateString()) return 'Dnes';
+  const yesterday = new Date(now); yesterday.setDate(now.getDate()-1);
+  if(date.toDateString()===yesterday.toDateString()) return 'Včera';
+  return new Intl.DateTimeFormat('cs-CZ',{day:'numeric', month:'numeric'}).format(date);
 }
 function ensureDraft(thread){
   if(!thread||thread.draftConcept) return thread;

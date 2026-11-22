@@ -38,8 +38,56 @@ export function nextWeekday(today, name){
   return date.toISOString().slice(0,10);
 }
 
-function weekdayIn(text){
-  return WEEKDAYS.find(name=>text.includes(name))||'';
+const WEEKDAY_FORMS = [
+  ['nedele', ['nedele','nedeli']],
+  ['pondeli', ['pondeli','pondelka','pondelku']],
+  ['utery', ['utery','uterku','uterek']],
+  ['streda', ['streda','stredu','strede','stredy']],
+  ['ctvrtek', ['ctvrtek','ctvrtku','ctvrtka']],
+  ['patek', ['patek','patku','patka']],
+  ['sobota', ['sobota','sobotu','sobote','soboty']]
+];
+
+function shiftIso(today, days){
+  const date = new Date(today+'T12:00:00Z');
+  date.setUTCDate(date.getUTCDate()+days);
+  return date.toISOString().slice(0,10);
+}
+export function weekdayMention(text){
+  for(const [name, forms] of WEEKDAY_FORMS) if(forms.some(form=>text.includes(form))) return name;
+  return '';
+}
+export function weekSpan(today, which){
+  const day = new Date(today+'T12:00:00Z').getUTCDay()||7;
+  const start = shiftIso(today, 1-day+(which==='last'?-7:which==='next'?7:0));
+  return {start, end:shiftIso(start, 6)};
+}
+export function weekdayDate(today, name, which){
+  const target = WEEKDAYS.indexOf(name);
+  if(target<0) return '';
+  const current = new Date(today+'T12:00:00Z').getUTCDay();
+  if(which==='last'){
+    let delta = (current-target+7)%7;
+    if(delta===0) delta = 7;
+    return shiftIso(today, -delta);
+  }
+  let delta = (target-current+7)%7;
+  if(which==='next'&&delta===0) delta = 7;
+  return shiftIso(today, delta);
+}
+export function jobSearchParams(original, text, today){
+  const mine = /\b(me|moje|moji|sve|svuj|svoje)\b/.test(text);
+  const dayName = weekdayMention(text);
+  const week = /tyd(?:en|n)/.test(text);
+  const which = /minul/.test(text)?'last':/prist/.test(text)?'next':'this';
+  const person = softenName(capture(original, [/\bpro\s+(\p{L}+)/iu]));
+  const span = week?weekSpan(today, which):null;
+  const dueDate = !week&&dayName?weekdayDate(today, dayName, which):'';
+  let query = '';
+  if(!span&&!dueDate&&!person&&!mine){
+    query = softenName(capture(original, [/zakáz(?:ku|ky|ka|ce)?\s+(.+)/iu])).replace(/^(na|za|pro|u)\s+/i,'').trim();
+  }
+  return {query, mine, person, dueDate, from:span?.start||'', to:span?.end||''};
 }
 
 export function foldCzech(value){
@@ -177,7 +225,7 @@ export function parseAssistantCommand(input, today){
   if(/\b(ukonci|ukoncit|odchod)\b/.test(text)&&/dochaz|smen|praci/.test(text)) return {intent:'attendance.leave', params:{}, text:original};
   if(/aktivni/.test(text)&&/dochaz|smen/.test(text)) return {intent:'attendance.active', params:{}, text:original};
   if(/\b(presun|preloz)\b/.test(text)){
-    const dayName = weekdayIn(text);
+    const dayName = weekdayMention(text);
     return {intent:'jobs.reschedule', params:{query:softenName(capture(original, [/zakázku\s+(?:u\s+)?(.+?)\s+na\s+/iu, /u\s+(.+?)\s+na\s+/iu])), dueDate:dayName?nextWeekday(today, dayName):(/\bzitra|zitre/.test(text)?'tomorrow':''), weekday:dayName}, text:original};
   }
   if(/\bprirad\b/.test(text)) return {intent:'jobs.assign', params:{person:softenName(capture(original, [/přiřaď\s+(\p{L}+)/iu])), query:softenName(capture(original, [/zakáz(?:ce|ku|ce)\s+(.+)/iu, /realizaci\s+(.+)/iu, /k\s+(.+)/iu]))}, text:original};
@@ -185,7 +233,10 @@ export function parseAssistantCommand(input, today){
     const status = /nedokonc/.test(text)?'incomplete':/hotov|dokonc/.test(text)?'done':/probiha|v praci/.test(text)?'in_progress':/plan/.test(text)?'planned':'';
     return {intent:'jobs.status', params:{query:softenName(capture(original, [/zakázku\s+(.+?)\s+jako\s+/iu])), status}, text:original};
   }
-  if(/\btyden/.test(text)&&/\b(prac|plan|zakaz|mame|navstev)\b/.test(text)&&!/vykaz|hodin|dochaz/.test(text)) return {intent:'jobs.week', params:{}, text:original};
+  if(/\btyd(?:en|n)/.test(text)&&/\b(prac|plan|zakaz|mame|navstev|najdi|ukaz|hledej)\b/.test(text)&&!/vykaz|hodin|dochaz/.test(text)){
+    if(/\b(najdi|hledej|ukaz)\b/.test(text)||/minul|prist/.test(text)) return {intent:'jobs.search', params:jobSearchParams(original, text, today), text:original};
+    return {intent:'jobs.week', params:{}, text:original};
+  }
   if(/\b(zapis|dopln)\b/.test(text)&&/zavad|poznam/.test(text)){
     const note = capture(original, [/závadu\s+(.+)/iu, /poznámku\s+(.+)/iu]);
     return {intent:'protocol.note', params:{field:/zavad/.test(text)?'defects':'notes', note, current:/\b(aktualni|teto)\b/.test(text), query:capture(original, [/zakáz(?:ce|ku|ky)\s+(.+?)(?:\s+závadu|\s+poznámku|$)/iu]).replace(/[?.!,]+$/g,'').trim()}, text:original};
@@ -220,7 +271,7 @@ export function parseAssistantCommand(input, today){
     }
     const person = /\b(jsem|jsme)\b/.test(text) ? '' : softenName(capture(original, [/odpracoval\s+(.+?)(?:\s+v\s+|\s+za\s+|$)/iu, /hodiny?\s+(.+?)(?:\s+v\s+|\s+za\s+|$)/iu]));
     const self = !person && /\b(jsem|me|moje|muj)\b/.test(text);
-    const period = month?'month':/\btydn/.test(text)?'week':/\bdnes\b/.test(text)?'today':'month';
+    const period = month?'month':/\btyd(?:en|n)/.test(text)?'week':/\bdnes\b/.test(text)?'today':'month';
     return {intent:/vykaz/.test(text)?'attendance.report':'attendance.hours', params:{person, self, period, month}, text:original};
   }
   if(/nedokonc/.test(text)) return {intent:'jobs.incomplete', params:{}, text:original};
@@ -248,13 +299,13 @@ export function parseAssistantCommand(input, today){
       .replace(/[?.!,]+$/g, '')
       .trim()
       .slice(0, 120) || 'Nová zakázka';
-    const dayName = weekdayIn(text);
+    const dayName = weekdayMention(text);
     return {intent:'jobs.create', params:{title, customer, when:dayName?'':(/\bzitra|zitre/.test(text)?'tomorrow':'today'), dueDate:dayName?nextWeekday(today, dayName):''}, text:original};
   }
   if(/\bzitra\b|\bzitrek\b|\bzitrej/.test(text)) return {intent:'jobs.tomorrow', params:{}, text:original};
   if(/budouc|co nas ceka|nadchaz/.test(text)) return {intent:'jobs.upcoming', params:{}, text:original};
   if(/\bdnes\b|dnesni|co mame za prac/.test(text)) return {intent:'jobs.today', params:{}, text:original};
-  if(/zakaz/.test(text)) return {intent:'jobs.search', params:{query:softenName(capture(original, [/zakáz(?:ku|ky|ka|ce)?\s+(.+)/iu]))}, text:original};
+  if(/zakaz/.test(text)) return {intent:'jobs.search', params:jobSearchParams(original, text, today), text:original};
   return unknown;
 }
 

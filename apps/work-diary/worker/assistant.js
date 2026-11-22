@@ -52,7 +52,7 @@ function jobCountLabel(count){
 function jobCards(jobs){
   return (jobs||[]).filter(job=>job?.id).slice(0,8).map(job=>({
     type:'job', id:job.id, title:job.title||'Zakázka',
-    subtitle:[job.customerName, job.city||job.address].filter(Boolean).join(' · '),
+    subtitle:[job.customerName, job.startTime&&job.endTime?job.startTime+'–'+job.endTime:'', job.city||job.address].filter(Boolean).join(' · '),
     meta:job.dueDate||'', status:job.status||'', statusLabel:STATUS[job.status]||job.status||'',
     openLabel:'Otevřít zakázku'
   }));
@@ -462,6 +462,7 @@ async function jobIntent(env, ctx, m, h, intent, params, today, tomorrow, option
     if(error) return {reply:error};
     return recordedJobHours(env, m, h, one.data.job, params.person);
   }
+  if(intent==='jobs.search'&&(params.dueDate||params.from||params.person||params.mine)) return scopedJobSearch(env, m, h, params, today);
   const found = await findJobs(env, m, h, params.query||'');
   if(found.error) return {reply:found.error};
   if(intent==='jobs.search') return {reply:params.query?`Zakázky pro „${params.query}“:\n`+lines(found.jobs, jobLine, 'Nic jsem nenašel.'):'Napište, jakou zakázku mám hledat.', cards:jobCards(found.jobs), suggestions:[]};
@@ -475,6 +476,85 @@ async function jobIntent(env, ctx, m, h, intent, params, today, tomorrow, option
   return protocolDraft(env, ctx, m, h, job, options);
 }
 
+function nearName(query, name){
+  const left = nameStem(query), right = nameStem(name);
+  if(!left||!right) return false;
+  if(left===right) return true;
+  if(Math.abs(left.length-right.length)>1||Math.min(left.length, right.length)<4) return false;
+  if(left.length===right.length){
+    let diff = 0;
+    for(let i=0;i<left.length;i++) if(left[i]!==right[i]&&++diff>1) return false;
+    return diff===1;
+  }
+  const short = left.length<right.length?left:right, long = left.length<right.length?right:left;
+  for(let i=0;i<long.length;i++) if(long.slice(0,i)+long.slice(i+1)===short) return true;
+  return false;
+}
+function czechDate(iso){
+  const date = new Date(iso+'T12:00:00Z');
+  const day = ['neděli','pondělí','úterý','středu','čtvrtek','pátek','sobotu'][date.getUTCDay()];
+  const rest = new Intl.DateTimeFormat('cs-CZ',{day:'numeric', month:'numeric', timeZone:'UTC'}).format(date);
+  return `${day} ${rest}`;
+}
+async function scopedJobSearch(env, m, h, params, today){
+  let assignee = params.mine?m.user_id:'';
+  let who = params.mine?'vás':'';
+  if(params.person){
+    const people = await attendanceGet(env, m, h, `/api/attendance?month=${today.slice(0,7)}`+(manager(m)?'&userId=all':''));
+    if(!people.ok) return {reply:blocked(people)||'Tým se nepodařilo načíst. Zakázky jsem nevypsal.'};
+    const hits = (people.data.employees||[]).filter(person=>nearName(params.person, person.name));
+    if(!hits.length) return {reply:`Pracovníka „${params.person}“ v týmu nevidím, ani po skloňování a drobném překlepu. Zakázky jsem nevypsal.`};
+    if(hits.length>1) return {reply:'Vyhovuje víc lidí: '+hits.map(person=>person.name).join(', ')+'. Upřesněte jméno.'};
+    assignee = hits[0].id;
+    who = hits[0].name;
+    if(!manager(m)&&assignee!==m.user_id) return {reply:'Můžete zobrazit jen vlastní zakázky.'};
+  }
+  const period = params.dueDate?`na ${czechDate(params.dueDate)}`:params.from?`od ${czechDate(params.from)} do ${czechDate(params.to)}`:'';
+  let path = params.dueDate
+    ? `/api/jobs?state=all&order=schedule&month=${params.dueDate.slice(0,7)}&day=${params.dueDate}`
+    : params.from
+      ? `/api/jobs?state=all&order=schedule&from=${params.from}&to=${params.to}`
+      : '/api/jobs?state=all&order=schedule';
+  if(assignee) path += `&assignee=${encodeURIComponent(assignee)}`;
+  const result = await jobsGet(env, m, h, path);
+  const error = blocked(result, 'Zakázky se nepodařilo načíst.');
+  if(error) return {reply:error};
+  const jobs = result.data.jobs||[];
+  const whose = who?` pro ${who}`:'';
+  const title = `Zakázky${whose}${period?' '+period:''}`;
+  return {reply:jobs.length?`${title}:\n`+lines(jobs, jobLine, ''):`${title}: nic jsem nenašel.`, cards:jobCards(jobs)};
+}
+function attendanceCaution(shifts, range, total){
+  if(!range) return '';
+  const now = Date.now();
+  const start = attendanceInstant(range.start+'T00:00');
+  const end = attendanceInstant(addDays(range.end, 1)+'T00:00');
+  const used = (shifts||[]).filter(shift=>{
+    const stop = shift.endAt==null?now:shift.endAt;
+    return stop>start && shift.startAt<end;
+  }).sort((a,b)=>a.startAt-b.startAt);
+  const notes = [];
+  if(used.some(shift=>shift.endAt==null)) notes.push('některá směna nemá odchod a pořád běží');
+  for(let i=1;i<used.length;i++){
+    const previous = used[i-1].endAt==null?now:used[i-1].endAt;
+    if(used[i].startAt<previous){notes.push('směny se překrývají, součet je proto vyšší než odpracovaný čas'); break;}
+  }
+  const dayMs = 16*60*60*1000;
+  let day = range.start, tooLong = false;
+  while(day<=range.end){
+    const dayStart = attendanceInstant(day+'T00:00'), dayEnd = attendanceInstant(addDays(day,1)+'T00:00');
+    let slice = 0;
+    for(const shift of used){
+      const stop = shift.endAt==null?now:shift.endAt;
+      slice += Math.max(0, Math.min(stop, dayEnd)-Math.max(shift.startAt, dayStart));
+    }
+    if(slice>dayMs) tooLong = true;
+    day = addDays(day, 1);
+  }
+  if(tooLong||total>dayMs*(1+Math.round((Date.parse(range.end)-Date.parse(range.start))/86400000))) notes.push('součet za den je neobvykle vysoký');
+  if(!notes.length) return '';
+  return ` Evidence vypadá chybně: ${[...new Set(notes)].join('; ')}. Číslo je ze záznamů, nevymyslel jsem ho, ale před použitím ho zkontrolujte.`;
+}
 function jobHoursUnavailable(){
   return {reply:'Odpracované hodiny na zakázce v téhle evidenci nemám. Plánovaný čas z rozvrhu nepoužívám, abych nic neodhadoval.'};
 }
@@ -702,7 +782,7 @@ async function attendanceIntent(env, m, h, intent, params, today){
   let userId = m.user_id, userName = m.name;
   if(params.person){
     const employees = people.data.employees||[{id:m.user_id, name:m.name}];
-    const hits = employees.filter(person=>person.name.toLocaleLowerCase('cs').includes(params.person.toLocaleLowerCase('cs')));
+    const hits = employees.filter(person=>nearName(params.person, person.name));
     if(!hits.length) return {reply:manager(m)?`Pracovníka „${params.person}“ v docházce nevidím.`:'Můžete zobrazit jen vlastní docházku.'};
     if(hits.length>1) return {reply:'Vyhovuje víc lidí: '+hits.map(person=>person.name).join(', ')+'.'};
     userId = hits[0].id; userName = hits[0].name;
@@ -715,13 +795,14 @@ async function attendanceIntent(env, m, h, intent, params, today){
   for(const value of months){
     const page = value===month&&(manager(m)?userId:m.user_id)?people:await attendanceGet(env,m,h,`/api/attendance?month=${value}&userId=${encodeURIComponent(userId)}`);
     if(!page.ok) return {reply:blocked(page)||'Docházku se nepodařilo načíst.'};
-    shifts = shifts.concat((page.data.shifts||[]).filter(shift=>!params.person||shift.userId===userId));
+    shifts = shifts.concat((page.data.shifts||[]).filter(shift=>shift.userId===userId||(intent==='attendance.report'&&!params.person&&manager(m))));
   }
   const unique = [...new Map(shifts.map(shift=>[shift.id, shift])).values()];
+  const own = unique.filter(shift=>shift.userId===userId);
   let total = 0;
   if(range){
     const start = attendanceInstant(range.start+'T00:00'), end = attendanceInstant(addDays(range.end,1)+'T00:00'), now = Date.now();
-    for(const shift of unique){
+    for(const shift of own){
       const stop = shift.endAt==null?now:shift.endAt;
       total += Math.max(0, Math.min(stop, end)-Math.max(shift.startAt, start));
     }
@@ -730,7 +811,8 @@ async function attendanceIntent(env, m, h, intent, params, today){
     total = row?.durationMs||0;
   }
   const label = period==='week'?'tento týden':period==='today'?'dnes':month;
-  const sentence = `${userName}: ${attendanceHours(total)} (${label}).`;
+  const caution = attendanceCaution(own, range, total);
+  const sentence = `${userName}: ${attendanceHours(total)} (${label}).${caution}`;
   if(intent==='attendance.report'){
     if(range){
       const startAt = attendanceInstant(range.start+'T00:00'), endAt = attendanceInstant(addDays(range.end,1)+'T00:00'), now = Date.now();
@@ -744,7 +826,7 @@ async function attendanceIntent(env, m, h, intent, params, today){
       }
       const rows = params.person?[{userName, durationMs:total}]:[...byUser.values()];
       const body = rows.map(row=>`• ${row.userName}: ${attendanceHours(row.durationMs||0)}`).join('\n')||sentence;
-      return {reply:`Pracovní výkaz ${label}\n${body}\nOtevřená směna se počítá jen do teď.`};
+      return {reply:`Pracovní výkaz ${label}\n${body}\nOtevřená směna se počítá jen do teď.${params.person||!manager(m)?caution:''}`};
     }
     const rows = manager(m)&&!params.person?(people.data.summary||[]):[{userName, durationMs:total}];
     const body = rows.map(row=>`• ${row.userName}: ${attendanceHours(row.durationMs||0)}`).join('\n')||sentence;

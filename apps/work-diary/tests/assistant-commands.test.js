@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseAssistantCommand, contextualCommand, assistantModeInfo, ASSISTANT_MODES, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, foldCzech, nextWeekday, parseMaterialAddition, planMaterialLines} from '../web/assistant-commands.js';
+import {parseAssistantCommand, contextualCommand, assistantModeInfo, ASSISTANT_MODES, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, foldCzech, nextWeekday, parseMaterialAddition, planMaterialLines, weekdayDate, weekSpan} from '../web/assistant-commands.js';
 import {answerOffline} from '../web/assistant-offline.js';
 
 const today = '2026-11-21';
@@ -31,6 +31,21 @@ test('Czech examples map to safe intents without an AI model', ()=>{
   assert.equal(parseAssistantCommand('Vytvoř pracovní výkaz za tento měsíc.', today).params.period, 'month');
   assert.equal(intent('Co máme zítra za práci?'), 'jobs.tomorrow');
   assert.equal(intent('Co máme tento týden za práci?'), 'jobs.week');
+  const lastWeek = parseAssistantCommand('Najdi mi zakázky za minulý týden.', today);
+  assert.equal(lastWeek.intent, 'jobs.search');
+  assert.equal(lastWeek.params.mine, false);
+  assert.deepEqual([lastWeek.params.from, lastWeek.params.to], [weekSpan(today, 'last').start, weekSpan(today, 'last').end]);
+  assert.equal(lastWeek.params.from, '2026-11-09');
+  const wednesday = parseAssistantCommand('Najdi mé zakázky na středu.', today);
+  assert.equal(wednesday.intent, 'jobs.search');
+  assert.equal(wednesday.params.mine, true);
+  assert.equal(wednesday.params.dueDate, weekdayDate(today, 'streda', 'this'));
+  assert.equal(wednesday.params.dueDate, '2026-11-25');
+  const person = parseAssistantCommand('Najdi mi zakázky pro Petříka.', today);
+  assert.equal(person.intent, 'jobs.search');
+  assert.equal(person.params.person, 'Petřík');
+  assert.equal(person.params.mine, false);
+  assert.equal(parseAssistantCommand('Najdi mi zakázky pro Petrika.', today).params.person, 'Petrik');
   assert.equal(intent('Ukaž všechny nedokončené zakázky.'), 'jobs.incomplete');
   assert.equal(intent('Jsem na cestě k zákazníkovi.'), 'jobs.depart');
   assert.equal(intent('Kdo má stále aktivní docházku?'), 'attendance.active');
