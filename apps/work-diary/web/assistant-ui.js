@@ -1,6 +1,7 @@
 import {parseAssistantCommand, contextualCommand} from './assistant-commands.js?v=assistant-v3';
 import {answerOffline} from './assistant-offline.js?v=assistant-v2';
 import {peekCachedJobs} from './cloud.js?v=completion-v1';
+import {extractLocalCommand, localMinistral} from './assistant-local.js?v=assistant-v6';
 
 function esc(value){
   return String(value??'').replace(/[&<>"']/g, char=>'&#'+char.codePointAt(0)+';');
@@ -15,6 +16,7 @@ function scopeOf(session){
 }
 function threadsKey(session){return `pd-assistant-threads-v1:${scopeOf(session)}`;}
 function themeKey(){return 'pd-assistant-theme';}
+function modeKey(){return 'pd-assistant-runtime';}
 function loadThreads(session){
   try{const value = JSON.parse(localStorage.getItem(threadsKey(session))||'[]');return Array.isArray(value)?value:[];}
   catch{return [];}
@@ -40,7 +42,9 @@ function dayLabel(value){
   return new Intl.DateTimeFormat('cs-CZ',{day:'numeric',month:'numeric'}).format(date);
 }
 
-const runtime = {scope:'', threadId:'', threads:[], busy:false, listening:false, recognition:null, detail:null, historyOpen:false, query:'', theme:'system', open:false};
+const runtime = {scope:'', threadId:'', threads:[], busy:false, listening:false, recognition:null, detail:null, historyOpen:false, query:'', theme:'system', open:false, mode:'basic'};
+let repaint = ()=>{};
+localMinistral().subscribe(()=>repaint());
 
 export function mountWorkAssistant({db, getSession, onChanged, openCustomer, openJob, openMaterial}={}){
   const session = getSession?.();
@@ -68,11 +72,13 @@ export function mountWorkAssistant({db, getSession, onChanged, openCustomer, ope
     runtime.historyOpen = false;
   }
   if(!runtime.theme) runtime.theme = localStorage.getItem(themeKey()) || 'system';
+  runtime.mode = localStorage.getItem(modeKey())==='local'?'local':'basic';
   const thread = current();
   const paint = ()=>render(host, session, paint, {db, getSession, onChanged, openCustomer, openJob, openMaterial});
   if(host.dataset.mounted!==scope){
     paint();
     host.dataset.mounted = scope;
+    if(runtime.mode==='local') localMinistral().refresh();
     const field = host.querySelector('textarea');
     if(field && document.activeElement!==field) field.value = thread?.draft||'';
   }
@@ -109,6 +115,7 @@ function render(host, session, paint, api){
   host.innerHTML = page(session, thread, items);
   const log = host.querySelector('.assistant-log');
   if(log) log.scrollTop = log.scrollHeight;
+  repaint = ()=>{if(host.isConnected) paint();};
   host.querySelector('[data-new]')?.addEventListener('click', ()=>{runtime.threadId='';runtime.detail=null;runtime.historyOpen=false;ensureThread(session);paint();});
   host.querySelector('[data-history]')?.addEventListener('click', ()=>{runtime.historyOpen=!runtime.historyOpen;paint();});
   host.querySelector('[data-query]')?.addEventListener('input', event=>{runtime.query=event.target.value;paint();host.querySelector('[data-query]')?.focus();});
@@ -131,6 +138,10 @@ function render(host, session, paint, api){
     persist(session);paint();
   });
   host.querySelectorAll('[data-theme-choice]').forEach(button=>button.onclick=()=>{runtime.theme=button.dataset.themeChoice;localStorage.setItem(themeKey(), runtime.theme);paint();});
+  host.querySelectorAll('[data-mode]').forEach(button=>button.onclick=()=>{runtime.mode=button.dataset.mode==='local'?'local':'basic';localStorage.setItem(modeKey(), runtime.mode);if(runtime.mode==='local') localMinistral().refresh();paint();});
+  host.querySelector('[data-model-download]')?.addEventListener('click', ()=>localMinistral().start());
+  host.querySelector('[data-model-cancel]')?.addEventListener('click', ()=>localMinistral().cancel());
+  host.querySelector('[data-model-delete]')?.addEventListener('click', ()=>{if(confirm('Smazat Ministral 3B z prohlížeče?')) localMinistral().remove();});
   host.querySelectorAll('[data-quick]').forEach(button=>button.onclick=()=>ask(button.dataset.quick, api, paint));
   host.querySelectorAll('[data-fill]').forEach(button=>button.onclick=()=>{const field=host.querySelector('textarea');if(!field)return;field.value=button.dataset.fill;field.focus();const live=current();if(live)live.draft=field.value;});
   host.querySelectorAll('[data-open-type]').forEach(button=>button.onclick=()=>{
@@ -148,6 +159,7 @@ function render(host, session, paint, api){
   const form = host.querySelector('form'), field = form?.querySelector('textarea');
   if(form&&field){
     field.oninput = ()=>{const live=current();if(live){live.draft=field.value;persist(session);}};
+    field.value = thread?.draft||'';
     form.onsubmit = event=>{event.preventDefault();ask(field.value, api, paint);};
     host.querySelector('[data-file]')?.addEventListener('change', event=>{
       const file = event.target.files?.[0];event.target.value='';
@@ -178,6 +190,8 @@ function page(session, thread, items){
         <div class="assistant-themes" role="group" aria-label="Vzhled">${['light','Světlý','dark','Tmavý','system','Systém'].reduce((html,item,index,list)=>index%2?html+`<button type="button" data-theme-choice="${list[index-1]}" aria-pressed="${runtime.theme===list[index-1]}">${item}</button>`:html,'')}</div>
         <button type="button" class="assistant-icon-button" data-close-assistant aria-label="Zavřít asistenta">×</button>
       </header>
+      <div class="assistant-modes" role="group" aria-label="Režim asistenta"><button type="button" data-mode="basic" aria-pressed="${runtime.mode!=='local'}">Základní</button><button type="button" data-mode="local" aria-pressed="${runtime.mode==='local'}">V zařízení</button></div>
+      ${runtime.mode==='local'?localCard():''}
       <div class="assistant-log">${welcome?welcomeBlock(name, tiles):messages}</div>
       <form class="assistant-composer">
         <label class="assistant-clip" aria-label="Přidat přílohu">${clip()}<input data-file type="file" accept=".csv,.txt,.tsv,text/csv,text/plain"></label>
@@ -216,6 +230,15 @@ function bubble(item){
 function suggestionLabel(text){
   if(text==='Zobraz jeho zakázky') return 'Zobrazit zakázky';
   return text;
+}
+function localCard(){
+  const model = localMinistral().snapshot();
+  const action = model.downloading
+    ? `<progress max="1" value="${model.progress}"></progress><button type="button" data-model-cancel>Zrušit stahování</button>`
+    : model.installed
+      ? `<button type="button" data-model-delete>Smazat model z prohlížeče</button>`
+      : `<button type="button" data-model-download>Stáhnout Ministral 3B</button>`;
+  return `<div class="assistant-local"><p>${esc(model.message)}</p>${action}</div>`;
 }
 function findCard(type, id){
   for(const item of current()?.items||[]){
@@ -324,12 +347,23 @@ async function ask(text, api, paint, confirmId, cancelId, file){
   const thread = ensureThread(session);
   if(!confirmId&&!cancelId) push(session, 'user', file?`Soubor ${file.name}${clean?': '+clean:''}`:clean);
   runtime.busy = true; paint();
+  let commandText = clean;
   try{
     if(session?.rolePreview?.active&&(confirmId||cancelId)){push(session,'assistant','V náhledu role změny neukládám.');return;}
+    if(!confirmId&&!cancelId&&!file&&runtime.mode==='local'){
+      const model = localMinistral();
+      if(!model.snapshot().installed){push(session,'assistant','Nejdřív stáhněte Ministral 3B. Nic jsem se neptal serveru.');return;}
+      let answer = '';
+      try{answer = await model.answer(clean);}catch(error){push(session,'assistant', error?.message||'Ministral teď neodpověděl. Základní asistent zůstává k dispozici.');return;}
+      const command = extractLocalCommand(answer);
+      if(!command){push(session,'assistant', `${answer}\n\nTohle není údaj z deníku. Jména, hodiny a ceny beru jen z evidence.`);return;}
+      push(session,'assistant', `Rozumím tomu jako: ${command}`);
+      commandText = command;
+    }
     if(!navigator.onLine && !confirmId && !cancelId){
       if(file){push(session,'assistant','Soubor bez připojení neukládám. Až budete online, vložte ho znovu. Nic se teď nezměnilo.');return;}
       const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-      const command = contextualCommand(parseAssistantCommand(clean, today), thread.context);
+      const command = contextualCommand(parseAssistantCommand(commandText, today), thread.context);
       let jobs = null;
       try{const cached = await peekCachedJobs(`/api/jobs?state=all&order=schedule&month=${today.slice(0,7)}`);jobs = cached?.jobs ?? null;}catch{jobs = null;}
       const tomorrowDate = new Date(today+'T12:00:00Z');tomorrowDate.setUTCDate(tomorrowDate.getUTCDate()+1);
@@ -338,7 +372,7 @@ async function ask(text, api, paint, confirmId, cancelId, file){
       return;
     }
     if(!navigator.onLine){push(session,'assistant','Potvrzení bez připojení neodešlu. Nic se neuložilo.');return;}
-    const data = await api.db.request('/api/assistant',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:clean, mode:'basic', ...(thread.context?{context:thread.context}:{}), ...(file?{file}:{}), ...(confirmId?{confirmId}:{}), ...(cancelId?{cancelId}:{})})});
+    const data = await api.db.request('/api/assistant',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:commandText, mode:'basic', ...(thread.context?{context:thread.context}:{}), ...(file?{file}:{}), ...(confirmId?{confirmId}:{}), ...(cancelId?{cancelId}:{})})});
     push(session,'assistant', data.reply||'Hotovo.', {confirm:data.confirm||null, suggestions:data.suggestions||[], cards:data.cards||[], context:data.context||thread.context});
     if(data.mutated) api.onChanged?.(data.mutated);
   }catch(error){

@@ -95,12 +95,12 @@ test('Synonyms, destructive refusals and mode registry stay local', ()=>{
   assert.deepEqual(ASSISTANT_MODES.map(mode=>mode.id), ['basic','local','cloud']);
   assert.equal(assistantModeInfo('cloud').id, 'cloud');
   assert.equal(assistantModeInfo('nope').id, 'basic');
-  assert.equal(assistantModeInfo('local').available, false);
+  assert.equal(assistantModeInfo('local').available, true);
   assert.equal(assistantModeInfo('cloud').available, false);
-  assert.match(assistantModeInfo('local').detail, /nestahuje/);
+  assert.match(assistantModeInfo('local').detail, /2,2 GB/);
   assert.match(assistantModeInfo('cloud').detail, /není zapojený/);
-  assert.deepEqual(ASSISTANT_PROVIDERS.filter(item=>item.available).map(item=>item.id), ['basic']);
-  assert.ok(ASSISTANT_PROVIDERS.some(item=>item.id==='ministral-3b'&&item.available===false));
+  assert.deepEqual(ASSISTANT_PROVIDERS.filter(item=>item.available).map(item=>item.id), ['basic','ministral-3b']);
+  assert.ok(ASSISTANT_PROVIDERS.some(item=>item.id==='ministral-3b'&&item.available===true));
   assert.ok(ASSISTANT_PROVIDERS.some(item=>item.id==='qwen'&&item.available===false));
   assert.ok(ASSISTANT_PROVIDERS.some(item=>item.id==='apple-foundation'&&item.available===false));
   assert.deepEqual(KNOWLEDGE_KINDS.map(item=>item.available), [false, false, false]);

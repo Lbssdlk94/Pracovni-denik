@@ -16,7 +16,13 @@
 .assistant-thread span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .assistant-thread small{color:var(--as-muted);white-space:nowrap}
 .assistant-chat{display:flex;flex-direction:column;min-width:0;min-height:640px}
-.assistant-top{display:flex;align-items:center;gap:12px;padding:18px 18px 8px}
+.assistant-modes{display:flex;gap:6px;padding:0 18px 8px}
+.assistant-modes button{min-height:36px;padding:0 12px;border:1px solid var(--as-line);border-radius:999px;background:transparent;color:var(--as-muted);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.assistant-modes button[aria-pressed=true]{background:var(--as-mint);color:var(--as-green);border-color:transparent}
+.assistant-local{margin:0 18px 8px;padding:12px;border:1px solid var(--as-line);border-radius:16px;background:var(--as-bg)}
+.assistant-local p{margin:0 0 8px;color:var(--as-muted);font-size:13px}
+.assistant-local progress{width:100%;height:8px;margin-bottom:8px}
+.assistant-local button{min-height:40px;padding:0 12px;border:0;border-radius:12px;background:var(--as-green);color:#fff;font:inherit;font-weight:700;cursor:pointer}
 .assistant-top strong{display:block;font-size:22px;letter-spacing:-.3px}
 .assistant-top p{margin:2px 0 0;color:var(--as-muted);font-size:13px}
 .assistant-themes{margin-left:auto;display:flex;gap:4px}

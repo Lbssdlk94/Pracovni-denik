@@ -4,14 +4,14 @@
 
 export const ASSISTANT_MODES = [
   {id:'basic', label:'Základní asistent', available:true, kind:'rules', detail:'Příkazy podle pravidel nad stávajícími daty. Bez AI a bez dalšího předplatného.'},
-  {id:'local', label:'V zařízení', available:false, kind:'local', detail:'Nedostupné. Model se nestahuje. Ministral 3B, Qwen ani Apple Foundation Models se v této verzi nezapínají.'},
+  {id:'local', label:'V zařízení', available:true, kind:'local', detail:'Ministral 3B se stáhne do prohlížeče, asi 2,2 GB. Do aplikace ani na server se model nevkládá. Firemní údaje dál bere stávající asistent a zápis čeká na potvrzení.'},
   {id:'cloud', label:'Cloud', available:false, kind:'cloud', detail:'Nedostupné. Cloudový poskytovatel není zapojený a placené API se nevolá.'}
 ];
 
 // Future runtimes. None of these download a model or call a paid API.
 export const ASSISTANT_PROVIDERS = [
   {id:'basic', label:'Základní', available:true, kind:'rules'},
-  {id:'ministral-3b', label:'Ministral 3B', available:false, kind:'local'},
+  {id:'ministral-3b', label:'Ministral 3B', available:true, kind:'local'},
   {id:'qwen', label:'Qwen', available:false, kind:'local'},
   {id:'apple-foundation', label:'Apple Foundation Models', available:false, kind:'device'},
   {id:'cloud', label:'Cloud', available:false, kind:'cloud'}
