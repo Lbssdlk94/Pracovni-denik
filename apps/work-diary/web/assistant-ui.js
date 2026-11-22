@@ -2,7 +2,9 @@ import {parseAssistantCommand, contextualCommand} from './assistant-commands.js?
 import {answerOffline} from './assistant-offline.js?v=assistant-v2';
 import {peekCachedJobs} from './cloud.js?v=completion-v1';
 
-const esc = value => String(value??'').replace(/[&<>"']/g, char=>({'&':'&','<':'<','>':'>','"':'"',"'":'&#39;'}[char]));
+function esc(value){
+  return String(value??'').replace(/[&<>"']/g, char=>'&#'+char.codePointAt(0)+';');
+}
 const spark = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.4 4.2L17.5 8.6 13.4 10 12 14.2 10.6 10 6.5 8.6l4.1-1.4L12 3z"/></svg>';
 const STATUS = {planned:'Naplánováno', on_way:'Na cestě', in_progress:'Probíhá', done:'Hotovo', incomplete:'Nedokončeno'};
 
@@ -40,7 +42,7 @@ function dayLabel(value){
 
 const runtime = {scope:'', threadId:'', threads:[], busy:false, listening:false, recognition:null, detail:null, historyOpen:false, query:'', theme:'system'};
 
-export function mountWorkAssistant({db, getSession, onChanged, openCustomer, openJob}={}){
+export function mountWorkAssistant({db, getSession, onChanged, openCustomer, openJob, openMaterial}={}){
   const host = document.querySelector('#assistant-page');
   document.body.dataset.assistantTheme = '';
   if(!host||!getSession?.()?.user) return;
@@ -55,7 +57,7 @@ export function mountWorkAssistant({db, getSession, onChanged, openCustomer, ope
   }
   if(!runtime.theme) runtime.theme = localStorage.getItem(themeKey()) || 'system';
   const thread = current();
-  const paint = ()=>render(host, session, paint, {db, getSession, onChanged, openCustomer, openJob});
+  const paint = ()=>render(host, session, paint, {db, getSession, onChanged, openCustomer, openJob, openMaterial});
   paint();
   const field = host.querySelector('textarea');
   if(field && document.activeElement!==field) field.value = thread?.draft||'';
@@ -111,7 +113,13 @@ function render(host, session, paint, api){
   host.querySelectorAll('[data-theme-choice]').forEach(button=>button.onclick=()=>{runtime.theme=button.dataset.themeChoice;localStorage.setItem(themeKey(), runtime.theme);paint();});
   host.querySelectorAll('[data-quick]').forEach(button=>button.onclick=()=>ask(button.dataset.quick, api, paint));
   host.querySelectorAll('[data-fill]').forEach(button=>button.onclick=()=>{const field=host.querySelector('textarea');if(!field)return;field.value=button.dataset.fill;field.focus();const live=current();if(live)live.draft=field.value;});
-  host.querySelectorAll('[data-open-card]').forEach(button=>button.onclick=()=>activate(JSON.parse(button.dataset.openCard), false, api, paint));
+  host.querySelectorAll('[data-open-type]').forEach(button=>button.onclick=()=>{
+    const type = button.dataset.openType;
+    const id = button.dataset.openId;
+    if(!id||!['customer','job','material'].includes(type)) return;
+    const known = findCard(type, id);
+    activate({type, id, title:known.title||button.querySelector('strong')?.textContent||'', openLabel:known.openLabel}, false, api, paint);
+  });
   host.querySelector('[data-close-detail]')?.addEventListener('click', ()=>{runtime.detail=null;paint();});
   host.querySelector('[data-full-profile]')?.addEventListener('click', ()=>{const card=runtime.detail?.card;if(card) activate(card, true, api, paint);});
   host.querySelectorAll('[data-confirm]').forEach(button=>button.onclick=()=>ask('', api, paint, button.dataset.confirm));
@@ -187,43 +195,89 @@ function suggestionLabel(text){
   if(text==='Zobraz jeho zakázky') return 'Zobrazit zakázky';
   return text;
 }
+function findCard(type, id){
+  for(const item of current()?.items||[]){
+    const card = (item.cards||[]).find(entry=>entry&&entry.type===type&&entry.id===id);
+    if(card) return card;
+  }
+  return runtime.detail?.card?.type===type&&runtime.detail.card.id===id?runtime.detail.card:{};
+}
+function openAttrs(type, id){
+  return `data-open-type="${esc(type)}" data-open-id="${esc(id)}"`;
+}
 function cardView(card){
-  const payload = esc(JSON.stringify({type:card.type,id:card.id,title:card.title}));
   const count = card.countLabel?`<small>${esc(card.countLabel)}</small>`:'';
   const status = card.statusLabel?`<em class="is-${esc(card.status)}">${esc(card.statusLabel)}</em>`:'';
-  const action = card.type==='material' ? '' : `<button type="button" data-open-card="${payload}">${esc(card.openLabel||'Otevřít')}</button>`;
+  const action = card.id&&['customer','job','material'].includes(card.type)?`<button type="button" ${openAttrs(card.type, card.id)}>${esc(card.openLabel||'Otevřít')}</button>`:'';
   return `<article class="assistant-card"><span class="assistant-card-mark">${spark}</span><div><strong>${esc(card.title)}</strong>${card.subtitle?`<p>${esc(card.subtitle)}</p>`:''}${count}</div>${status}${action}</article>`;
 }
 function detailPanel(){
   const detail = runtime.detail;
   if(!detail) return '<aside class="assistant-detail" hidden></aside>';
+  const kind = detail.card.type==='job'?'Zakázka':detail.card.type==='material'?'Materiál':'Zákazník';
+  const body = detail.loading?'<p>Načítám údaje z evidence…</p>':detail.error?`<p>${esc(detail.error)}</p>`:detailBody(detail);
+  return `<aside class="assistant-detail" aria-label="Detail záznamu">
+    <header><span class="assistant-card-mark">${spark}</span><div><strong>${esc(detail.card.title||kind)}</strong><p>${kind}</p></div><button type="button" data-close-detail aria-label="Zavřít panel">×</button></header>
+    ${body}
+    <button type="button" class="assistant-profile" data-full-profile>Otevřít celý profil</button>
+  </aside>`;
+}
+function detailBody(detail){
+  if(detail.card.type==='job'){
+    const job = detail.record||{};
+    const rows = [job.customerName, [job.dueDate, job.startTime].filter(Boolean).join(' '), job.assignedName, [job.address, job.city].filter(Boolean).join(', '), job.status?STATUS[job.status]||job.status:''].filter(Boolean);
+    return `<h3>Zakázka</h3><ul>${rows.map(row=>`<li>${esc(row)}</li>`).join('')||'<li>Další údaje v evidenci nejsou.</li>'}</ul>`;
+  }
+  if(detail.card.type==='material'){
+    const item = detail.record||{};
+    const rows = [item.categoryName, item.sku, item.unit, item.priceLabel].filter(Boolean);
+    return `<h3>Materiál</h3><ul>${rows.map(row=>`<li>${esc(row)}</li>`).join('')||'<li>Další údaje v katalogu nejsou.</li>'}</ul>`;
+  }
   const record = detail.record;
   const phones = (record?.phones||[]).map(item=>item.number).filter(Boolean);
   const address = (record?.addresses||[]).map(item=>[item.address, item.city].filter(Boolean).join(', ')).filter(Boolean);
   const jobs = (detail.jobs||[]).slice(0,6);
-  return `<aside class="assistant-detail" aria-label="Detail záznamu">
-    <header><span class="assistant-card-mark">${spark}</span><div><strong>${esc(detail.card.title)}</strong><p>Zákazník</p></div><button type="button" data-close-detail aria-label="Zavřít panel">×</button></header>
-    ${detail.loading?'<p>Načítám údaje z evidence…</p>':detail.error?`<p>${esc(detail.error)}</p>`:`<h3>Kontaktní údaje</h3><ul>${phones.map(phone=>`<li>${esc(phone)}</li>`).join('')||'<li>Telefon v evidenci není.</li>'}${record?.email?`<li>${esc(record.email)}</li>`:''}${address.map(line=>`<li>${esc(line)}</li>`).join('')||'<li>Adresa v evidenci není.</li>'}</ul>
-      <h3>Aktivní zakázky <span>${jobs.length}</span></h3>${jobs.map(job=>`<button type="button" class="assistant-side-job" data-open-card="${esc(JSON.stringify({type:'job',id:job.id,title:job.title}))}"><strong>${esc(job.title)}</strong><small>${esc([job.dueDate, job.city].filter(Boolean).join(' · '))}</small><em class="is-${esc(job.status)}">${esc(STATUS[job.status]||job.status||'')}</em></button>`).join('')||'<p>Aktivní zakázku k tomuto zákazníkovi nevidím.</p>'}`}
-    <button type="button" class="assistant-profile" data-full-profile>Otevřít celý profil</button>
-  </aside>`;
+  return `<h3>Kontaktní údaje</h3><ul>${phones.map(phone=>`<li>${esc(phone)}</li>`).join('')||'<li>Telefon v evidenci není.</li>'}${record?.email?`<li>${esc(record.email)}</li>`:''}${address.map(line=>`<li>${esc(line)}</li>`).join('')||'<li>Adresa v evidenci není.</li>'}</ul>
+    <h3>Aktivní zakázky <span>${jobs.length}</span></h3>${jobs.map(job=>`<button type="button" class="assistant-side-job" ${openAttrs('job', job.id)}><strong>${esc(job.title)}</strong><small>${esc([job.dueDate, job.city].filter(Boolean).join(' · '))}</small><em class="is-${esc(job.status)}">${esc(STATUS[job.status]||job.status||'')}</em></button>`).join('')||'<p>Aktivní zakázku k tomuto zákazníkovi nevidím.</p>'}`;
 }
 function activate(card, full, api, paint){
   const narrow = window.matchMedia?.('(max-width: 1099px)').matches;
-  if(card.type==='job') {api.openJob?.(card.id);return;}
-  if(card.type!=='customer') return;
-  if(full||narrow) {api.openCustomer?.(card.id);if(narrow&&!full)return;}
+  if(!card?.id||!['customer','job','material'].includes(card.type)) return;
+  if(full||narrow){
+    if(card.type==='customer') api.openCustomer?.(card.id);
+    if(card.type==='job') api.openJob?.(card.id);
+    if(card.type==='material') api.openMaterial?.(card.id);
+    if(narrow||full) return;
+  }
   runtime.detail = {card, loading:true, record:null, jobs:[], error:''};
   paint();
   loadDetail(card, api, paint);
 }
 async function loadDetail(card, api, paint){
   try{
-    const customer = await api.db.request('/api/customers/'+encodeURIComponent(card.id));
-    const jobs = await api.db.request('/api/jobs?state=active&q='+encodeURIComponent(String(card.title||'').slice(0,80)));
-    if(runtime.detail?.card?.id!==card.id) return;
-    const list = (jobs.jobs||[]).filter(job=>job.customerId===card.id||(!job.customerId&&job.customerName===card.title));
-    runtime.detail = {card, loading:false, record:customer.customer, jobs:list, error:''};
+    if(card.type==='job'){
+      const data = await api.db.request('/api/jobs/'+encodeURIComponent(card.id));
+      if(runtime.detail?.card?.id!==card.id) return;
+      if(!data?.job) throw Error('Zakázku se nepodařilo načíst.');
+      runtime.detail = {card:{...card, title:data.job.title||card.title}, loading:false, record:data.job, jobs:[], error:''};
+    }else if(card.type==='material'){
+      const data = await api.db.request('/api/materials');
+      if(runtime.detail?.card?.id!==card.id) return;
+      const item = (data.items||[]).find(entry=>entry.id===card.id);
+      if(!item) throw Error('Materiál v načteném katalogu nevidím.');
+      const category = (data.categories||[]).find(entry=>entry.id===item.categoryId);
+      let priceLabel = '';
+      if(Number.isSafeInteger(item.priceMinor)&&/^[A-Z]{3}$/.test(item.currency||'')){
+        try{priceLabel = new Intl.NumberFormat('cs-CZ',{style:'currency',currency:item.currency}).format(item.priceMinor/100);}catch{priceLabel='';}
+      }
+      runtime.detail = {card:{...card, title:item.name||card.title}, loading:false, record:{...item, categoryName:category?.name||'', priceLabel}, jobs:[], error:''};
+    }else{
+      const customer = await api.db.request('/api/customers/'+encodeURIComponent(card.id));
+      const jobs = await api.db.request('/api/jobs?state=active&q='+encodeURIComponent(String(card.title||'').slice(0,80)));
+      if(runtime.detail?.card?.id!==card.id) return;
+      const list = (jobs.jobs||[]).filter(job=>job.customerId===card.id||(!job.customerId&&job.customerName===card.title));
+      runtime.detail = {card:{...card, title:customer.customer?.name||card.title}, loading:false, record:customer.customer, jobs:list, error:''};
+    }
   }catch(error){
     if(runtime.detail?.card?.id!==card.id) return;
     runtime.detail = {card, loading:false, record:null, jobs:[], error:error?.message||'Detail se nepodařilo načíst. Nic jsem nedoplnil.'};

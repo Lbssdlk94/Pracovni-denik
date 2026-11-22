@@ -39,5 +39,16 @@ export function createMaterialsUI({db,esc,getSession,showModal,modal,toast}){
   f.querySelector('#material-delete')?.addEventListener('click',()=>{if(saving||dirty&&!confirm('Zahodit rozepsané změny a přejít ke smazání materiálu?'))return;dirty=false;controller.abort();removeItem(old.id);});
   f.onsubmit=e=>{e.preventDefault();save();};f.querySelector('#material-archive')?.addEventListener('click',()=>{if(confirm('Skrýt tuto položku pro další výběr? Starší protokoly zůstanou zachované.'))save(true);});
  }
- return {markup,bind,clear,refresh:load};
+ async function open(id){
+  if(!canView()||!id) return;
+  try{if(!data) data = await db.materialCatalog();}catch(error){toast(error.message,true);return;}
+  const item = data.items.find(entry=>entry.id===id);
+  if(!item){toast('Materiál v katalogu nevidím.',true);return;}
+  if(manager()){edit('items', id);return;}
+  const category = data.categories.find(entry=>entry.id===item.categoryId);
+  let price = '';
+  if(Number.isSafeInteger(item.priceMinor)&&item.currency){try{price = materialMoney(item.priceMinor, item.currency);}catch{price='';}}
+  showModal('Materiál', `<div data-material-dialog><h2>${esc(item.name)}</h2><p>${esc([category?.name, item.sku, item.unit, price].filter(Boolean).join(' · '))}</p></div>`);
+ }
+ return {markup,bind,clear,refresh:load,open};
 }
