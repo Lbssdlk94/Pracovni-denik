@@ -50,6 +50,8 @@ export function assistantSuggestions(){
     'Co máme dnes za práci?',
     'Ukaž nedokončené zakázky.',
     'Najdi zákazníka Nováka.',
+    'Přidej zákazníka Nováka.',
+    'Vytvoř zakázku servis u Nováka na zítra.',
     'Kolik hodin odpracoval Marek v listopadu?',
     'Jaký materiál potřebujeme na zítřek?',
     'Vytvoř servisní protokol.',
@@ -148,6 +150,19 @@ export function planMaterialLines(lines, items){
   return {lines:resolved};
 }
 
+function clipField(value, max){
+  return String(value||'').replace(/[?.!,]+$/g,'').trim().slice(0, max);
+}
+
+export function parseCustomerDraft(original){
+  const phone = clipField((original.match(/(?:telefon|tel\.?)\s*(\+?[0-9][0-9 ()\-./]{2,40})/iu)||[])[1], 50);
+  const email = clipField((original.match(/[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+/u)||[])[0], 254);
+  const addressRaw = clipField(capture(original, [/adres[aeu]?\s+(.+?)(?=\s+telefon|\s+tel\.|\s+e-?mail|$)/iu]), 500);
+  const parts = addressRaw.split(/\s*,\s*/).filter(Boolean);
+  const name = softenName(clipField(capture(original, [/(?:zákazníka|zákazník)\s+(.+?)(?=\s*,|\s+telefon|\s+tel\.|\s+e-?mail|\s+adres|$)/iu]), 160));
+  return {name, phone, email, address:parts[0]||'', city:clipField(parts.slice(1).join(', '), 120)};
+}
+
 export function parseAssistantCommand(input, today){
   const original = String(input||'').trim().slice(0,500);
   const text = foldCzech(original);
@@ -211,14 +226,28 @@ export function parseAssistantCommand(input, today){
   if(/histori/.test(text)&&/zakazk/.test(text)) return {intent:'jobs.history', params:{query:softenName(capture(original, [/zakáz(?:ky|ku|ka|ce)\s+(.+)/iu]))}, text:original};
   if(/\b(tarif|predplat)/.test(text)) return {intent:'customers.tariffs', params:{query:softenName(capture(original, [/(?:zákazníka|zákazník)\s+(.+)/iu]))}, text:original};
   if(/planovan/.test(text)&&/servis/.test(text)) return {intent:'jobs.plannedServices', params:{}, text:original};
+  if(/\b(pridej|zaloz|vytvor|novy)\b/.test(text) && /\bzakaznik/.test(text) && !/\bzakazk/.test(text)){
+    return {intent:'customers.create', params:parseCustomerDraft(original), text:original};
+  }
   if(/\b(zakaznik|kontakt|servisni histori)/.test(text)){
     const query = softenName(capture(original, [/(?:zákazníka|zákazník|kontakt na|kontakt)\s+(.+)/iu]));
     const intent = /histori/.test(text)?'customers.history':/kontakt/.test(text)?'customers.contact':'customers.search';
     return {intent, params:{query}, text:original};
   }
-  if(/\b(vytvor|zaloz|nova) zakaz/.test(text)){
-    const title = capture(original, [/zakázku\s+(.+)/iu])||'Nová zakázka';
-    return {intent:'jobs.create', params:{title, when:/\bzitra|zitre/.test(text)?'tomorrow':'today'}, text:original};
+  if(/\b(vytvor|zaloz|nova) zakazk/.test(text)){
+    const body = capture(original, [/zakázku\s+(.+)/iu]);
+    const customer = softenName(clipField(capture(original, [/\bu\s+zákazníka\s+(\p{L}+)/iu, /\bpro\s+zákazníka\s+(\p{L}+)/iu, /\bu\s+(\p{L}+)/iu, /\bpro\s+(\p{L}+)/iu]), 80));
+    const title = body
+      .replace(/\s+u\s+zákazníka\s+\p{L}+/iu, '')
+      .replace(/\s+pro\s+zákazníka\s+\p{L}+/iu, '')
+      .replace(/\s+u\s+\p{L}+/iu, '')
+      .replace(/\s+pro\s+\p{L}+/iu, '')
+      .replace(/\s+na\s+(zítra|zítřek|zítřejšek|dnes|pondělí|úterý|středu|čtvrtek|pátek|sobotu|neděli)\b/iu, '')
+      .replace(/[?.!,]+$/g, '')
+      .trim()
+      .slice(0, 120) || 'Nová zakázka';
+    const dayName = weekdayIn(text);
+    return {intent:'jobs.create', params:{title, customer, when:dayName?'':(/\bzitra|zitre/.test(text)?'tomorrow':'today'), dueDate:dayName?nextWeekday(today, dayName):''}, text:original};
   }
   if(/\bzitra\b|\bzitrek\b|\bzitrej/.test(text)) return {intent:'jobs.tomorrow', params:{}, text:original};
   if(/budouc|co nas ceka|nadchaz/.test(text)) return {intent:'jobs.upcoming', params:{}, text:original};

@@ -193,6 +193,7 @@ async function run(env, ctx, m, h, command, today, options){
   const tomorrow = addDays(today, 1);
   if(!options.propose&&intent==='protocol.draft'&&params.jobId) return protocolDraft(env, ctx, m, h, {id:params.jobId, title:params.title, description:params.description||'', dueDate:params.dueDate||''}, options);
   if(!options.propose&&intent==='jobs.create'&&params.dueDate) return createJob(env, m, h, params, today, tomorrow, options);
+  if(!options.propose&&intent==='customers.create'&&params.name) return createCustomer(env, m, h, params, options);
   if(!options.propose&&intent==='jobs.reschedule'&&params.jobId) return applyJobChange(env, m, h, params);
   if(!options.propose&&intent==='jobs.assign'&&params.jobId) return applyJobChange(env, m, h, params);
   if(!options.propose&&intent==='jobs.status'&&params.jobId) return applyStatus(env, m, h, params);
@@ -204,7 +205,7 @@ async function run(env, ctx, m, h, command, today, options){
   if(!options.propose&&intent==='import.customers') return applyCustomerImport(env, m, h, params);
   if(!options.propose&&intent==='import.materials') return applyMaterialImport(env, m, h, params);
   if(intent==='unknown') return {reply:'Tomuhle příkazu nerozumím. Můžete zkusit některou z dostupných akcí.', suggestions:assistantSuggestions()};
-  if(intent==='help') return {reply:'Umím zakázky, docházku, hodiny na zakázce z evidence, zákazníky, materiál a přípravu servisního protokolu. Zápis vždy nejdřív potvrdíte a stejné potvrzení se nespustí dvakrát. Mazání nechávám na stávajících obrazovkách.', suggestions:assistantSuggestions()};
+  if(intent==='help') return {reply:'Umím zakázky, docházku, hodiny na zakázce z evidence, zákazníky, materiál a přípravu servisního protokolu. Zákazníka a zakázku přidám jen tehdy, když to smí vaše role, a zápis nejdřív potvrdíte. Mazání nechávám na stávajících obrazovkách.', suggestions:assistantSuggestions()};
   if(intent==='refused.destructive') return {reply:'Smazání nebo zrušení tady nespouštím, aby se nic omylem neztratilo. Použijte stávající obrazovku záznamu.'};
 
   if(intent.startsWith('jobs.')||intent.startsWith('protocol.')){
@@ -252,6 +253,7 @@ async function run(env, ctx, m, h, command, today, options){
     return jobIntent(env, ctx, m, h, intent, params, today, tomorrow, options);
   }
   if(intent==='jobs.create') return createJob(env, m, h, params, today, tomorrow, options);
+  if(intent==='customers.create') return createCustomer(env, m, h, params, options);
   if(intent==='attendance.hours'||intent==='attendance.report') return attendanceIntent(env, m, h, intent, params, today);
   if(intent==='customers.search'||intent==='customers.contact'||intent==='customers.history'||intent==='customers.tariffs') return customerIntent(env, m, h, intent, params);
   if(intent==='materials.search') return materialSearch(env, m, h, params.query||'');
@@ -511,24 +513,69 @@ async function protocolDraft(env, ctx, m, h, job, options){
   return {reply:`Servisní protokol pro „${job.title}“ je ${state}. Zkontrolujte ho v zakázce před odesláním.`, mutated:'jobs'};
 }
 
+async function linkedCustomer(env, m, h, params){
+  if(params.customerId) return {customerId:params.customerId, customerName:params.customerName||''};
+  if(!params.customer) return {customerId:null, customerName:''};
+  if(!on(h.features,'customers')) return {error:'Seznam zákazníků je vypnutý. Zakázku jsem nezaložil.'};
+  const result = await customersGet(env, m, h, '/api/customers?q='+encodeURIComponent(String(params.customer).slice(0,100)));
+  if(!result.ok) return {error:blocked(result)||'Zákazníky se nepodařilo načíst. Zakázku jsem nezaložil.'};
+  const needle = String(params.customer).toLocaleLowerCase('cs');
+  const list = (result.data.customers||[]).filter(customer=>customer.name.toLocaleLowerCase('cs').includes(needle));
+  if(!list.length) return {error:`Zákazníka „${params.customer}“ jsem nenašel. Nejdřív ho přidejte. Zakázku jsem nezaložil.`};
+  if(list.length>1) return {error:'Vyhovuje víc zákazníků: '+list.slice(0,4).map(customer=>customer.name).join(', ')+'. Zakázku jsem nezaložil.'};
+  return {customerId:list[0].id, customerName:list[0].name};
+}
+
 async function createJob(env, m, h, params, today, tomorrow, options){
   if(!manager(m)) return {reply:'Novou zakázku zakládá vlastník nebo správce.'};
   if(options.preview) return {reply:'V náhledu role zakázku nezakládám.'};
   const dueDate = params.dueDate||(params.when==='tomorrow'?tomorrow:today);
   const title = String(params.title||'Nová zakázka').slice(0,120);
-  const summary = `Vytvořit zakázku „${title}“ na ${dueDate}? Bude plánovaná a bez přiřazení, dokud ji neupravíte.`;
+  const customer = await linkedCustomer(env, m, h, params);
+  if(customer.error) return {reply:customer.error};
+  const who = customer.customerName?` u zákazníka ${customer.customerName}`:' bez zákazníka';
+  const summary = `Vytvořit zakázku „${title}“ na ${dueDate}${who}? Bude plánovaná a bez přiřazení, dokud ji neupravíte.`;
   if(options.propose){
     const discipline = m._workspace?.selectedDiscipline&&m._workspace.selectedDiscipline!=='all'?m._workspace.selectedDiscipline:m._workspace?.disciplines?.[0];
-    const confirm = await propose(env, m, {intent:'jobs.create', params:{title, dueDate, discipline:discipline||null}}, summary);
+    const confirm = await propose(env, m, {intent:'jobs.create', params:{title, dueDate, discipline:discipline||null, customerId:customer.customerId, customerName:customer.customerName}}, summary);
     return {reply:summary, confirm};
   }
   const id = crypto.randomUUID();
   const result = await callJson(()=>handleJobs(write('/api/jobs/'+id,'PUT',{
     version:0, title, jobType:'service', status:'planned', incompleteReason:'', description:'Vytvořeno z pracovního asistenta.',
-    dueDate, customerName:'', assignedTo:'', assignedTos:[], ...(params.discipline?{discipline:params.discipline}:{})
+    dueDate, customerId:customer.customerId, customerName:customer.customerName, assignedTo:'', assignedTos:[], ...(params.discipline?{discipline:params.discipline}:{})
   }, h._headers), env, m, h));
-  if(!result.ok) return {reply:result.data.error||'Zakázku se nepodařilo vytvořit.'};
-  return {reply:`Zakázka „${result.data.job?.title||title}“ je založená na ${dueDate}.`, mutated:'jobs'};
+  if(!result.ok) return {reply:result.data.error||'Zakázku se nepodařilo vytvořit. Nic dalšího jsem neuložil.'};
+  return {reply:`Zakázka „${result.data.job?.title||title}“ je založená na ${dueDate}${customer.customerName?' u zákazníka '+customer.customerName:''}.`, mutated:'jobs'};
+}
+
+async function createCustomer(env, m, h, params, options){
+  if(!manager(m)) return {reply:'Zákazníka přidává vlastník nebo správce. Nic jsem neuložil.'};
+  if(options.preview) return {reply:'V náhledu role zákazníka nezakládám.'};
+  if(!on(h.features,'customers')) return {reply:'Zákazníci jsou v nastavení firmy vypnutí. Nic jsem neuložil.'};
+  const name = String(params.name||'').trim().slice(0,160);
+  const phone = String(params.phone||'').trim().slice(0,50);
+  const email = String(params.email||'').trim().slice(0,254);
+  const address = String(params.address||'').trim().slice(0,500);
+  const city = String(params.city||'').trim().slice(0,120);
+  if(name.length<2) return {reply:'Napište jméno zákazníka. Nic jsem neuložil.'};
+  if(phone&&!/^\+?[0-9 ()\-./#*;,]{3,50}$/.test(phone)) return {reply:'Telefon nevypadá správně. Zákazníka jsem nezaložil.'};
+  if(email&&!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email)) return {reply:'E-mail nevypadá správně. Zákazníka jsem nezaložil.'};
+  if(address&&!city) return {reply:'U adresy napište i město, třeba „adresa Zahradní 1, Brno“. Zákazníka jsem nezaložil.'};
+  const existing = await customersGet(env, m, h, '/api/customers?q='+encodeURIComponent(name.slice(0,100)));
+  if(!existing.ok) return {reply:blocked(existing)||'Stávající zákazníky se nepodařilo porovnat. Nic jsem neuložil.'};
+  if((existing.data.customers||[]).some(customer=>customer.name.toLocaleLowerCase('cs')===name.toLocaleLowerCase('cs'))) return {reply:`Zákazník „${name}“ už v evidenci je. Nového jsem nezaložil.`};
+  const detail = [phone&&'telefon '+phone, email, address&&'adresa '+address+(city?', '+city:'')].filter(Boolean).join(', ');
+  const summary = `Přidat zákazníka ${name}${detail?' ('+detail+')':''}? Uloží se až po potvrzení.`;
+  const stored = {name, phone, email, address, city};
+  if(options.propose) return {reply:summary, confirm:await propose(env, m, {intent:'customers.create', params:stored}, summary)};
+  const result = await callJson(()=>handleCustomers(write('/api/customers/'+crypto.randomUUID(),'PUT',{
+    version:0, name, email, irrigationOrigin:'unknown',
+    phones:phone?[{id:crypto.randomUUID(), label:'', number:phone}]:[],
+    addresses:address?[{id:crypto.randomUUID(), label:'', address, city}]:[]
+  }, h._headers), env, m, h));
+  if(!result.ok) return {reply:result.data.error||'Zákazníka se nepodařilo přidat. Nic jsem neuložil.'};
+  return {reply:`Zákazník „${result.data.customer?.name||name}“ je přidaný.`, mutated:'customers'};
 }
 
 async function attendanceIntent(env, m, h, intent, params, today){

@@ -234,6 +234,45 @@ test('A CSV file is previewed and written only after confirmation', async()=>{
   }finally{env.sqlite.close();}
 });
 
+test('Assistant adds a customer and a job only after confirmation', async()=>{
+  const env = environment();
+  try{
+    await ready(env);
+    await call(env, '/api/invitations', people.owner, 'POST', {email:people.worker.email, role:'worker'});
+    await call(env, '/api/me', people.worker);
+    const denied = await json(await call(env, '/api/assistant', people.worker, 'POST', {text:'Přidej zákazníka Petřík'}));
+    assert.match(denied.body.reply, /správce/);
+    assert.equal(denied.body.confirm, null);
+    const proposed = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Přidej zákazníka Petřík, telefon 777 222 333, adresa Zahradní 1, Brno'}));
+    assert.equal(proposed.status, 200, JSON.stringify(proposed.body));
+    assert.ok(proposed.body.confirm?.id);
+    assert.match(proposed.body.reply, /Petřík/);
+    assert.equal(env.sqlite.prepare("SELECT count(*) n FROM customers WHERE name='Petřík'").get().n, 0);
+    const saved = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:proposed.body.confirm.id}));
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    assert.equal(saved.body.mutated, 'customers');
+    const customer = env.sqlite.prepare("SELECT id, phones, addresses FROM customers WHERE name='Petřík' AND deleted=0").get();
+    assert.ok(customer);
+    assert.match(customer.phones, /777 222 333/);
+    const duplicate = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Přidej zákazníka Petřík'}));
+    assert.match(duplicate.body.reply, /už v evidenci/);
+    assert.equal(duplicate.body.confirm, null);
+    const missing = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Vytvoř zakázku servis u Nováka na zítra'}));
+    assert.match(missing.body.reply, /nenašel/);
+    assert.equal(missing.body.confirm, null);
+    const job = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Vytvoř zakázku servis u Petříka na zítra'}));
+    assert.equal(job.status, 200, JSON.stringify(job.body));
+    assert.match(job.body.reply, /Petřík/);
+    assert.equal(env.sqlite.prepare("SELECT count(*) n FROM jobs WHERE title='servis'").get().n, 0);
+    const done = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:job.body.confirm.id}));
+    assert.equal(done.status, 200, JSON.stringify(done.body));
+    assert.match(done.body.reply, /založená/);
+    const row = env.sqlite.prepare("SELECT customer_id, customer_name FROM jobs WHERE title='servis' AND deleted=0").get();
+    assert.equal(row.customer_id, customer.id);
+    assert.equal(row.customer_name, 'Petřík');
+  }finally{env.sqlite.close();}
+});
+
 
 
 
