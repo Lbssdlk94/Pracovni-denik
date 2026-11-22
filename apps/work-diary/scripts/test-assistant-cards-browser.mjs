@@ -90,11 +90,16 @@ try{
 
   const mobile = await openPage(390);
   for(const card of cards){
+    await mobile.locator('[data-tab="chat"]').click();
     await mobile.locator(`article.assistant-card [data-open-type="${card.type}"]`).click();
+    await mobile.locator('.assistant-detail:not([hidden])').waitFor();
   }
-  assert.deepEqual(await mobile.evaluate(()=>window.__opened), cards.map(card=>[card.type, card.id]));
-  assert.equal(await mobile.locator('.assistant-detail').isVisible(), false);
+  assert.deepEqual(await mobile.evaluate(()=>window.__opened), []);
+  await mobile.locator('[data-tab="chat"]').click();
   assert.match(await mobile.locator('.assistant-log').innerText(), /Našel jsem 1 zákazníka/);
+  await mobile.locator('[data-tab="result"]').click();
+  await mobile.locator('[data-full-profile]').click();
+  assert.deepEqual(await mobile.evaluate(()=>window.__opened.at(-1)), ['material','mat-quote']);
   assert.deepEqual(errors, []);
   const bubble = await browser.newPage({viewport:{width:390, height:844}});
   bubble.on('pageerror', error=>errors.push(error.message));

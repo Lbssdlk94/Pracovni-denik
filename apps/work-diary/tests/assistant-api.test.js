@@ -339,6 +339,31 @@ test('One sentence plans one multi-day job and writes nothing before confirmatio
   }finally{env.sqlite.close();}
 });
 
+test('The result form saves the edited day instead of the original proposal', async()=>{
+  const env = environment();
+  try{
+    await ready(env);
+    await call(env, '/api/invitations', people.owner, 'POST', {email:people.worker.email, role:'worker'});
+    await call(env, '/api/me', people.worker);
+    env.sqlite.prepare('UPDATE members SET name=? WHERE user_id=?').run('Luboš', people.owner.id);
+    env.sqlite.prepare('UPDATE members SET name=? WHERE user_id=?').run('Zdeněk', people.worker.id);
+    assert.equal((await call(env, '/api/customers/bambosova-form', people.owner, 'PUT', {version:0, name:'Bambošová', phones:[], addresses:[{id:'addr-form', address:'Zahradní 1', city:'Plzeň'}]})).status, 200);
+    const proposed = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'V pondělí budeme dělat realizaci závlahy u Bambošové asi na 4 dny. Bude tam Luboš a Zdeněk.'}));
+    assert.equal(proposed.status, 200, JSON.stringify(proposed.body));
+    assert.ok(proposed.body.concept, proposed.body.reply);
+    const concept = proposed.body.concept;
+    concept.terms[0].date = '2026-12-01';
+    concept.notes = 'Ruční poznámka z formuláře';
+    const saved = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:proposed.body.confirm.id, concept}));
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    const job = env.sqlite.prepare("SELECT id, description FROM jobs WHERE title='Realizace závlahy' AND deleted=0").get();
+    assert.match(job.description, /Ruční poznámka/);
+    const days = env.sqlite.prepare('SELECT term_date FROM job_terms WHERE job_id=? ORDER BY term_date').all(job.id).map(row=>row.term_date);
+    assert.equal(days.includes('2026-12-01'), true);
+    assert.equal(days.length, 4);
+  }finally{env.sqlite.close();}
+});
+
 
 
 

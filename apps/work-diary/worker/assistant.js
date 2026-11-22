@@ -154,7 +154,7 @@ export async function handleAssistant(request, env, ctx, m, h){
   const preview = request.headers.get('x-work-diary-preview-role');
   h._headers = request.headers;
   if(body.cancelId) return h.json(await cancel(env, m, h, body.cancelId, mode));
-  if(body.confirmId) return h.json(await confirm(env, ctx, m, h, body.confirmId, mode, preview));
+  if(body.confirmId) return h.json(await confirm(env, ctx, m, h, body.confirmId, mode, preview, body.concept));
   if(body.file){
     const answer = await fileImport(env, m, h, body, preview);
     return h.json(reply(mode, answer.reply, answer));
@@ -179,7 +179,31 @@ async function cancel(env, m, h, id, mode){
   h.fail(404,'Potvrzení už není platné. Zadejte příkaz znovu.');
 }
 
-async function confirm(env, ctx, m, h, id, mode, preview){
+async function applyConceptEdit(env, m, action, concept){
+  if(!concept||typeof concept!=='object'||Array.isArray(concept)||action.intent!=='jobs.plan'||!action.params) return;
+  if(typeof concept.title==='string'&&concept.title.trim()) action.params.title = concept.title.trim().slice(0,120);
+  if(typeof concept.notes==='string') action.params.description = concept.notes.trim().slice(0,2000);
+  if(Array.isArray(concept.materials)) action.params.materials = concept.materials.slice(0,20).map(item=>({name:String(item?.name||'').slice(0,120), quantity:String(item?.quantity||'').slice(0,20), unit:String(item?.unit||'').slice(0,20), readiness:item?.readiness==='on_hand'?'on_hand':'to_buy'})).filter(item=>item.name);
+  if(!Array.isArray(concept.terms)) return;
+  const members = await env.DB.prepare("SELECT user_id AS id, name FROM members WHERE EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND actor.role IN ('owner','administrator','admin'))").bind(m.user_id).all();
+  const terms = [];
+  const seen = new Set();
+  for(const term of concept.terms.slice(0,14)){
+    const date = String(term?.date||'');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||seen.has(date)) throw Error('Každý den konceptu musí mít vlastní platné datum. Nic jsem neuložil.');
+    seen.add(date);
+    const start = /^\d{2}:\d{2}$/.test(term?.start)?term.start:'07:00';
+    const end = /^\d{2}:\d{2}$/.test(term?.end)?term.end:'15:00';
+    if(end<=start) throw Error('Konec dne musí být po začátku. Nic jsem neuložil.');
+    const names = (Array.isArray(term.people)?term.people:[String(term.people||'')]).flatMap(name=>String(name).split(',')).map(name=>name.trim()).filter(Boolean);
+    const matched = matchPeople(names, members.results||[]);
+    if(!names.length||matched.ambiguous.length||matched.resolved.length!==names.length) throw Error('Pracovníka z konceptu nevidím v týmu. Nic jsem neuložil.');
+    terms.push({date, start, end, note:String(term.note||'').slice(0,300), names, people:matched.resolved.map(person=>person.id), status:term.status==='done'?'done':'planned'});
+  }
+  if(!terms.length) throw Error('Koncept nemá žádný den. Nic jsem neuložil.');
+  action.params.terms = terms.sort((a,b)=>a.date.localeCompare(b.date));
+}
+async function confirm(env, ctx, m, h, id, mode, preview, concept){
   if(typeof id!=='string'||!/^[-a-zA-Z0-9_]{1,100}$/.test(id)) h.fail(400,'Neplatné potvrzení.');
   if(preview) h.fail(403,'V náhledu role nelze ukládat změny. Nejdříve se vraťte ke své roli.',{code:'role_preview_readonly'});
   await ensureAudit(env);
@@ -197,6 +221,7 @@ async function confirm(env, ctx, m, h, id, mode, preview){
   const action = JSON.parse(row.payload);
   let done;
   try{
+    if(concept) await applyConceptEdit(env, m, action, concept);
     done = await run(env, ctx, m, h, action, pragueDate(new Date()), {propose:false, preview});
   }catch(error){
     await env.DB.prepare("UPDATE assistant_events SET kind='proposal' WHERE id=? AND actor_id=? AND company_id=? AND kind='committing'").bind(id, m.user_id, company).run();
@@ -592,7 +617,7 @@ async function commitPlan(env, m, h, params){
   if(before) return {reply:`Zakázka „${params.title}“ už je uložená. Podruhé jsem ji nezaložil.`, mutated:'jobs', context:{jobId:id, customerName:params.customerName||''}};
   const result = await callJson(()=>handleJobs(write('/api/jobs/'+id,'PUT',{
     version:0, title:params.title, jobType:'installation', status:'planned', incompleteReason:'',
-    description:params.terms.map(term=>`${term.date} ${term.start}–${term.end} ${(term.names||[]).join(', ')}`).join('\n'),
+    description:params.description||params.terms.map(term=>`${term.date} ${term.start}–${term.end} ${(term.names||[]).join(', ')}`).join('\n'),
     dueDate:first.date, address:params.address||'', city:params.city||'', customerAddressId:params.customerAddressId||null,
     customerId:params.customerId, customerName:params.customerName,
     assignedTo:ids[0]||'', assignedTos:ids, terms:params.terms

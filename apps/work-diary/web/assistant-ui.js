@@ -42,7 +42,7 @@ function dayLabel(value){
   return new Intl.DateTimeFormat('cs-CZ',{day:'numeric',month:'numeric'}).format(date);
 }
 
-const runtime = {scope:'', threadId:'', threads:[], busy:false, listening:false, recognition:null, detail:null, historyOpen:false, query:'', theme:'system', open:false, mode:'basic'};
+const runtime = {scope:'', threadId:'', threads:[], busy:false, listening:false, recognition:null, detail:null, historyOpen:false, query:'', theme:'system', open:false, mode:'basic', split:45, chatHidden:false, menuOpen:false, mobileTab:'chat', resultFresh:false, generation:0};
 let repaint = ()=>{};
 localMinistral().subscribe(()=>repaint());
 
@@ -103,23 +103,28 @@ function ensureThread(session){
   return thread;
 }
 function resolvedTheme(){
-  if(runtime.theme==='light'||runtime.theme==='dark') return runtime.theme;
+  const root = document.documentElement;
+  const explicit = root.dataset.theme || root.dataset.colorScheme;
+  if(explicit==='light'||explicit==='dark') return explicit;
+  if(root.classList.contains('dark')) return 'dark';
   return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
 function render(host, session, paint, api){
-  const thread = current();
+  const thread = ensureDraft(current());
   const items = thread?.items||[];
-  const dark = resolvedTheme();
-  host.dataset.theme = dark;
+  host.dataset.theme = resolvedTheme();
+  const scroll = runtime.keepScroll;
   host.innerHTML = page(session, thread, items);
   const log = host.querySelector('.assistant-log');
-  if(log) log.scrollTop = log.scrollHeight;
+  if(log) log.scrollTop = scroll??log.scrollHeight;
+  runtime.keepScroll = null;
   repaint = ()=>{if(host.isConnected) paint();};
-  host.querySelector('[data-new]')?.addEventListener('click', ()=>{runtime.threadId='';runtime.detail=null;runtime.historyOpen=false;ensureThread(session);paint();});
-  host.querySelector('[data-history]')?.addEventListener('click', ()=>{runtime.historyOpen=!runtime.historyOpen;paint();});
+  const remember = ()=>{const live=host.querySelector('.assistant-log'); if(live) runtime.keepScroll=live.scrollTop;};
+  host.querySelector('[data-new]')?.addEventListener('click', ()=>{remember(); runtime.threadId='';runtime.detail=null;runtime.historyOpen=false;runtime.menuOpen=false;runtime.mobileTab='chat';runtime.resultFresh=false;ensureThread(session);paint();});
+  host.querySelector('[data-history]')?.addEventListener('click', ()=>{runtime.historyOpen=!runtime.historyOpen;runtime.menuOpen=false;paint();});
   host.querySelector('[data-query]')?.addEventListener('input', event=>{runtime.query=event.target.value;paint();host.querySelector('[data-query]')?.focus();});
-  host.querySelectorAll('[data-thread]').forEach(button=>button.onclick=()=>{runtime.threadId=button.dataset.thread;runtime.detail=null;runtime.historyOpen=false;paint();});
+  host.querySelectorAll('[data-thread]').forEach(button=>button.onclick=()=>{runtime.threadId=button.dataset.thread;runtime.detail=null;runtime.historyOpen=false;runtime.mobileTab='chat';paint();});
   host.querySelectorAll('[data-rename]').forEach(button=>button.onclick=event=>{
     event.stopPropagation();
     const row = runtime.threads.find(item=>item.id===button.dataset.rename);
@@ -137,8 +142,10 @@ function render(host, session, paint, api){
     if(runtime.threadId===row.id){runtime.threadId=runtime.threads[0]?.id||'';runtime.detail=null;}
     persist(session);paint();
   });
-  host.querySelectorAll('[data-theme-choice]').forEach(button=>button.onclick=()=>{runtime.theme=button.dataset.themeChoice;localStorage.setItem(themeKey(), runtime.theme);paint();});
-  host.querySelectorAll('[data-mode]').forEach(button=>button.onclick=()=>{runtime.mode=button.dataset.mode==='local'?'local':'basic';localStorage.setItem(modeKey(), runtime.mode);if(runtime.mode==='local') localMinistral().refresh();paint();});
+  host.querySelectorAll('[data-mode]').forEach(button=>button.onclick=()=>{runtime.mode=button.dataset.mode==='local'?'local':'basic';localStorage.setItem(modeKey(), runtime.mode);runtime.menuOpen=false;if(runtime.mode==='local') localMinistral().refresh();paint();});
+  host.querySelector('[data-menu]')?.addEventListener('click', ()=>{runtime.menuOpen=!runtime.menuOpen;runtime.historyOpen=false;paint();});
+  host.querySelector('[data-hide-chat]')?.addEventListener('click', ()=>{runtime.chatHidden=!runtime.chatHidden;runtime.menuOpen=false;paint();});
+  host.querySelector('.assistant-tabs')?.addEventListener('click', event=>{const tab=event.target.closest('[data-tab]');if(!tab)return;runtime.mobileTab=tab.dataset.tab;if(runtime.mobileTab==='result')runtime.resultFresh=false;paint();});
   host.querySelector('[data-model-download]')?.addEventListener('click', ()=>localMinistral().start());
   host.querySelector('[data-model-cancel]')?.addEventListener('click', ()=>localMinistral().cancel());
   host.querySelector('[data-model-delete]')?.addEventListener('click', ()=>{if(confirm('Smazat Ministral 3B z prohlížeče?')) localMinistral().remove();});
@@ -151,15 +158,37 @@ function render(host, session, paint, api){
     const known = findCard(type, id);
     activate({type, id, title:known.title||button.querySelector('strong')?.textContent||'', openLabel:known.openLabel}, false, api, paint);
   });
-  host.querySelector('[data-close-assistant]')?.addEventListener('click', ()=>{runtime.open=false; const bubble=host.closest('#assistant-root'); if(bubble) applyBubble(bubble);});
+  const collapse = minimized=>()=>{remember(); runtime.open=false; runtime.minimized=minimized; const bubble=host.closest('#assistant-root'); if(bubble) applyBubble(bubble);};
+  host.querySelector('[data-close-assistant]')?.addEventListener('click', collapse(false));
+  host.querySelector('[data-minimize]')?.addEventListener('click', collapse(true));
+  host.querySelector('[data-back-result]')?.addEventListener('click', ()=>{runtime.detail=null;paint();});
   host.querySelector('[data-close-detail]')?.addEventListener('click', ()=>{runtime.detail=null;paint();});
   host.querySelector('[data-full-profile]')?.addEventListener('click', ()=>{const card=runtime.detail?.card;if(card) activate(card, true, api, paint);});
-  host.querySelectorAll('[data-confirm]').forEach(button=>button.onclick=()=>ask('', api, paint, button.dataset.confirm));
+  host.querySelectorAll('[data-confirm]').forEach(button=>button.onclick=()=>ask('', api, paint, button.dataset.confirm, null, null, conceptPayload(current())));
   host.querySelectorAll('[data-cancel]').forEach(button=>button.onclick=()=>ask('', api, paint, null, button.dataset.cancel));
+  host.querySelector('[data-stop]')?.addEventListener('click', ()=>{runtime.generation+=1;runtime.busy=false;localMinistral().cancel();paint();});
+  bindConcept(host, session, paint);
+  const split = host.querySelector('[data-split]');
+  if(split){
+    split.addEventListener('pointerdown', event=>{
+      const body = host.querySelector('.assistant-body');
+      split.setPointerCapture(event.pointerId);
+      const move = ev=>{
+        const rect = body.getBoundingClientRect();
+        runtime.split = Math.min(72, Math.max(28, ((ev.clientX-rect.left)/rect.width)*100));
+        host.querySelector('.assistant-workspace')?.style.setProperty('--split', runtime.split+'%');
+      };
+      split.addEventListener('pointermove', move);
+      split.addEventListener('pointerup', ()=>split.removeEventListener('pointermove', move), {once:true});
+    });
+  }
   const form = host.querySelector('form'), field = form?.querySelector('textarea');
   if(form&&field){
     field.oninput = ()=>{const live=current();if(live){live.draft=field.value;persist(session);}};
     field.value = thread?.draft||'';
+    field.addEventListener('keydown', event=>{
+      if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();if(!runtime.busy) form.requestSubmit();}
+    });
     form.onsubmit = event=>{event.preventDefault();ask(field.value, api, paint);};
     host.querySelector('[data-file]')?.addEventListener('change', event=>{
       const file = event.target.files?.[0];event.target.value='';
@@ -167,41 +196,161 @@ function render(host, session, paint, api){
     });
     host.querySelector('[data-voice]')?.addEventListener('click', ()=>toggleVoice(field, api, paint));
   }
+  host.addEventListener('keydown', event=>{
+    if(event.key!=='Escape') return;
+    if(runtime.historyOpen||runtime.menuOpen){runtime.historyOpen=false;runtime.menuOpen=false;paint();return;}
+    collapse(false)();
+  });
 }
 
 function page(session, thread, items){
   const name = session?.user?.name||'';
   const history = runtime.threads.filter(item=>!runtime.query||item.title.toLocaleLowerCase('cs').includes(runtime.query.toLocaleLowerCase('cs')));
-  const shown = history.slice(0,8);
+  const shown = history.slice(0,12);
   const messages = items.map(item=>bubble(item)).join('');
   const welcome = !items.length;
   const tiles = welcomeTiles(session);
-  return `<div class="assistant-workspace ${runtime.historyOpen?'history-open':''} ${runtime.detail?'detail-open':''}">
-    <aside class="assistant-history" aria-label="Historie konverzací">
-      <button type="button" class="assistant-new" data-new>${plus()} Nový chat</button>
-      <label class="assistant-search">Hledat v historii<input data-query value="${esc(runtime.query)}" placeholder="Hledat"></label>
-      <p>Historie konverzací</p>
-      <div class="assistant-thread-list">${shown.map(item=>`<div class="assistant-thread ${item.id===thread?.id?'is-current':''}"><button type="button" data-thread="${esc(item.id)}"><span>${esc(item.title)}</span><small>${esc(dayLabel(item.updatedAt))}</small></button><button type="button" data-rename="${esc(item.id)}" aria-label="Přejmenovat">✎</button><button type="button" data-delete="${esc(item.id)}" aria-label="Smazat konverzaci">×</button></div>`).join('')||'<p class="assistant-empty">Zatím tu žádný chat není.</p>'}${history.length>shown.length?'<p class="assistant-more">Dalších ${history.length-shown.length} je v zařízení.</p>':''}</div>
-    </aside>
-    <section class="assistant-chat" aria-label="Pracovní asistent">
-      <header class="assistant-top">
-        <button type="button" class="assistant-icon-button" data-history aria-label="Historie konverzací">☰</button>
-        <div><strong>Pracovní asistent</strong><p>Váš chytrý pomocník pro zákazníky, zakázky, docházku a práci v terénu.</p></div>
-        <div class="assistant-themes" role="group" aria-label="Vzhled">${['light','Světlý','dark','Tmavý','system','Systém'].reduce((html,item,index,list)=>index%2?html+`<button type="button" data-theme-choice="${list[index-1]}" aria-pressed="${runtime.theme===list[index-1]}">${item}</button>`:html,'')}</div>
-        <button type="button" class="assistant-icon-button" data-close-assistant aria-label="Zavřít asistenta">×</button>
-      </header>
-      <div class="assistant-modes" role="group" aria-label="Režim asistenta"><button type="button" data-mode="basic" aria-pressed="${runtime.mode!=='local'}">Základní</button><button type="button" data-mode="local" aria-pressed="${runtime.mode==='local'}">V zařízení</button></div>
-      ${runtime.mode==='local'?localCard():''}
-      <div class="assistant-log">${welcome?welcomeBlock(name, tiles):messages}</div>
-      <form class="assistant-composer">
-        <label class="assistant-clip" aria-label="Přidat přílohu">${clip()}<input data-file type="file" accept=".csv,.txt,.tsv,text/csv,text/plain"></label>
-        <textarea rows="1" maxlength="500" aria-label="Příkaz" placeholder="Napište příkaz..."></textarea>
-        <button type="button" data-voice aria-label="Hlasové zadání" aria-pressed="${runtime.listening}">${mic()}</button>
-        <button type="submit" aria-label="Odeslat" ${runtime.busy?'disabled':''}>${send()}</button>
-      </form>
-    </section>
-    ${detailPanel()}
+  const fresh = runtime.resultFresh?' is-fresh':'';
+  return `<div class="assistant-workspace ${runtime.chatHidden?'chat-hidden':''} ${runtime.mobileTab==='result'?'show-result':''} ${runtime.detail?'detail-open':''}" style="--split:${runtime.split}%">
+    <header class="assistant-bar">
+      <button type="button" class="assistant-icon-button" data-close-assistant aria-label="Zavřít asistenta">×</button>
+      <span class="assistant-spark">${spark}</span>
+      <div class="assistant-brand"><strong>Pracovní asistent</strong><small>${esc(statusLabel())}</small></div>
+      <button type="button" class="assistant-icon-button" data-history aria-pressed="${runtime.historyOpen}" aria-label="Historie konverzací">${clockIcon()}</button>
+      <button type="button" class="assistant-icon-button" data-new aria-label="Nový chat">${plus()}</button>
+      <button type="button" class="assistant-icon-button" data-hide-chat aria-pressed="${runtime.chatHidden}" aria-label="${runtime.chatHidden?'Zobrazit konverzaci':'Skrýt konverzaci'}">${panelIcon()}</button>
+      <button type="button" class="assistant-icon-button" data-minimize aria-label="Minimalizovat">${minus()}</button>
+      <button type="button" class="assistant-icon-button" data-menu aria-pressed="${runtime.menuOpen}" aria-label="Další možnosti">${moreIcon()}</button>
+    </header>
+    ${runtime.historyOpen?historyPopover(shown, history.length, thread):''}
+    ${runtime.menuOpen?menuPopover():''}
+    <div class="assistant-body">
+      <section class="assistant-chat" aria-label="Pracovní asistent">
+        <div class="assistant-log">${welcome?welcomeBlock(name, tiles):messages}</div>
+        <form class="assistant-composer">
+          <label class="assistant-clip" aria-label="Přidat přílohu">${clip()}<input data-file type="file" accept=".csv,.txt,.tsv,text/csv,text/plain"></label>
+          <textarea rows="1" maxlength="500" aria-label="Příkaz" placeholder="Napište příkaz..."></textarea>
+          <button type="button" data-voice aria-label="Hlasové zadání" aria-pressed="${runtime.listening}">${mic()}</button>
+          ${runtime.busy?`<button type="button" data-stop aria-label="Zastavit">■</button>`:`<button type="submit" aria-label="Odeslat">${send()}</button>`}
+        </form>
+      </section>
+      <div class="assistant-split" data-split role="separator" aria-orientation="vertical" aria-label="Šířka panelů" tabindex="0"></div>
+      <section class="assistant-stage" aria-label="Výsledek">${stage(thread)}</section>
+    </div>
+    <div class="assistant-tabs" role="tablist" aria-label="Asistent a výsledek">
+      <button type="button" data-tab="chat" aria-selected="${runtime.mobileTab!=='result'}">Asistent</button>
+      <button type="button" data-tab="result" aria-selected="${runtime.mobileTab==='result'}">Výsledek${fresh?' <span class="assistant-dot"></span>':''}</button>
+    </div>
   </div>`;
+}
+function ensureDraft(thread){
+  if(!thread||thread.draftConcept) return thread;
+  const last = [...(thread.items||[])].reverse().find(item=>item.concept);
+  if(last?.concept) thread.draftConcept = JSON.parse(JSON.stringify(last.concept));
+  thread.conceptTouched = thread.conceptTouched||{};
+  return thread;
+}
+function conceptPayload(thread){
+  if(!thread?.draftConcept) return null;
+  return {title:thread.draftConcept.title||'', notes:thread.draftConcept.notes||'', terms:thread.draftConcept.terms||[], materials:thread.draftConcept.materials||[]};
+}
+function stage(thread){
+  if(runtime.detail) return detailPanel();
+  if(thread?.draftConcept) return conceptStage(thread);
+  return '<aside class="assistant-detail" hidden></aside><div class="assistant-empty-stage"><strong>Výsledek</strong><p>Po příkazu se tady otevře zákazník, zakázka, kalendář nebo koncept. Nic se neuloží bez potvrzení.</p></div>';
+}
+function conceptStage(thread){
+  const concept = thread.draftConcept;
+  const confirm = [...(thread.items||[])].reverse().find(item=>item.confirm)?.confirm;
+  const terms = (concept.terms||[]).map((term,index)=>`<article class="assistant-term"><label>Den<input data-concept-field="term:${index}:date" type="date" value="${esc(term.date||'')}"></label><label>Od<input data-concept-field="term:${index}:start" type="time" value="${esc(term.start||'07:00')}"></label><label>Do<input data-concept-field="term:${index}:end" type="time" value="${esc(term.end||'15:00')}"></label><label>Pracovníci<input data-concept-field="term:${index}:people" value="${esc((term.people||[]).join(', '))}"></label><label>Poznámka<input data-concept-field="term:${index}:note" value="${esc(term.note||'')}"></label><button type="button" data-drop-term="${index}">Odebrat den</button></article>`).join('');
+  const materials = (concept.materials||[]).map((item,index)=>`<div class="assistant-material"><input data-concept-field="material:${index}:name" value="${esc(item.name||'')}" aria-label="Materiál"><input data-concept-field="material:${index}:quantity" value="${esc(item.quantity||'')}" aria-label="Množství"><input data-concept-field="material:${index}:unit" value="${esc(item.unit||'')}" aria-label="Jednotka"></div>`).join('');
+  const warning = thread.resultNotice||'';
+  return `<div class="assistant-concept-sheet"><header><div><strong>Nová zakázka</strong><span class="assistant-pill">Koncept</span></div><p>${esc(concept.customerName||'Zákazník z evidence')}</p><button type="button" data-back-result hidden>Zpět</button></header>
+    <label>Název<input data-concept-field="title" value="${esc(concept.title||'')}"></label>
+    <section><h3>Harmonogram realizace</h3>${terms}<button type="button" data-add-term>Přidat den</button></section>
+    <section><h3>Potřebný materiál</h3>${materials||'<p>Zatím bez položek.</p>'}<button type="button" data-add-material>Přidat materiál</button></section>
+    <label>Poznámky<textarea data-concept-field="notes">${esc(concept.notes||'')}</textarea></label>
+    ${warning?`<p class="assistant-warning">${esc(warning)}</p>`:''}
+    <div class="assistant-concept-actions"><button type="button" class="yes" data-confirm="${esc(confirm?.id||'')}" ${confirm?'':'disabled'}>Uložit zakázku</button><button type="button" data-cancel="${esc(confirm?.id||'')}" ${confirm?'':'disabled'}>Zrušit koncept</button></div>
+  </div>`;
+}
+function bindConcept(host, session, paint){
+  const thread = current();
+  if(!thread?.draftConcept) return;
+  host.querySelectorAll('[data-concept-field]').forEach(input=>input.addEventListener('input', ()=>{
+    const key = input.dataset.conceptField;
+    thread.conceptTouched = thread.conceptTouched||{};
+    thread.conceptTouched[key] = true;
+    applyConceptField(thread, key, input.value);
+    persist(session);
+  }));
+  host.querySelector('[data-add-term]')?.addEventListener('click', ()=>{
+    const last = thread.draftConcept.terms?.at(-1)?.date||'';
+    thread.draftConcept.terms = [...(thread.draftConcept.terms||[]), {date:last, start:'07:00', end:'15:00', people:[], note:''}];
+    thread.conceptTouched['term:'+(thread.draftConcept.terms.length-1)+':date'] = true;
+    syncPlan(thread);persist(session);paint();
+  });
+  host.querySelectorAll('[data-drop-term]').forEach(button=>button.onclick=()=>{
+    thread.draftConcept.terms = thread.draftConcept.terms.filter((_,index)=>index!==Number(button.dataset.dropTerm));
+    syncPlan(thread);persist(session);paint();
+  });
+  host.querySelector('[data-add-material]')?.addEventListener('click', ()=>{
+    thread.draftConcept.materials = [...(thread.draftConcept.materials||[]), {name:'', quantity:'1', unit:'ks', readiness:'to_buy'}];
+    syncPlan(thread);persist(session);paint();
+  });
+}
+function applyConceptField(thread, key, value){
+  const concept = thread.draftConcept;
+  const [group, index, field] = key.split(':');
+  if(group==='title') concept.title = value;
+  else if(group==='notes') concept.notes = value;
+  else if(group==='term'&&concept.terms?.[index]){
+    if(field==='people') concept.terms[index].people = value.split(',').map(item=>item.trim()).filter(Boolean);
+    else concept.terms[index][field] = value;
+  }else if(group==='material'&&concept.materials?.[index]) concept.materials[index][field] = value;
+  syncPlan(thread);
+}
+function syncPlan(thread){
+  const concept = thread.draftConcept;
+  if(!concept) return;
+  thread.context = {...(thread.context||{}), plan:{...(thread.context?.plan||{}), title:concept.title, customer:thread.context?.plan?.customer||concept.customerName, terms:concept.terms, materials:concept.materials||[]}};
+}
+function adoptConcept(thread, concept){
+  if(!concept) return;
+  const touched = thread.conceptTouched||{};
+  if(thread.draftConcept&&Object.keys(touched).length){
+    thread.draftConcept = mergeConcept(thread.draftConcept, concept, touched);
+    thread.resultNotice = 'Ruční úpravy jsem nechal. Zkontrolujte je, než zakázku uložíte.';
+  }else{
+    thread.draftConcept = JSON.parse(JSON.stringify(concept));
+    thread.conceptTouched = {};
+    thread.resultNotice = '';
+  }
+  runtime.mobileTab = 'result';
+  runtime.resultFresh = true;
+  runtime.detail = null;
+  syncPlan(thread);
+}
+function mergeConcept(local, incoming, touched){
+  const next = JSON.parse(JSON.stringify(incoming));
+  if(touched.title) next.title = local.title;
+  if(touched.notes) next.notes = local.notes;
+  next.terms = (incoming.terms||[]).map((term,index)=>{
+    const kept = local.terms?.[index];
+    if(!kept) return term;
+    const copy = {...term};
+    for(const field of ['date','start','end','people','note']) if(touched[`term:${index}:${field}`]) copy[field] = kept[field];
+    return copy;
+  });
+  if((local.terms||[]).length>(incoming.terms||[]).length) next.terms.push(...local.terms.slice(incoming.terms.length));
+  return next;
+}
+function statusLabel(){return runtime.busy?'Pracuji':runtime.mode==='local'?'V zařízení':'Základní';}
+function historyPopover(shown, total, thread){
+  return `<div class="assistant-popover assistant-history" aria-label="Historie konverzací"><label class="assistant-search">Hledat<input data-query value="${esc(runtime.query)}" placeholder="Hledat konverzaci"></label><div class="assistant-thread-list">${shown.map(item=>`<div class="assistant-thread ${item.id===thread?.id?'is-current':''}"><button type="button" data-thread="${esc(item.id)}"><span>${esc(item.title)}</span><small>${esc(dayLabel(item.updatedAt))}</small></button><button type="button" data-rename="${esc(item.id)}" aria-label="Přejmenovat">✎</button><button type="button" data-delete="${esc(item.id)}" aria-label="Smazat konverzaci">×</button></div>`).join('')||'<p class="assistant-empty">Zatím tu žádný chat není.</p>'}${total>shown.length?`<p class="assistant-more">Dalších ${total-shown.length} je v zařízení.</p>`:''}</div></div>`;
+}
+function menuPopover(){
+  return `<div class="assistant-popover assistant-menu" aria-label="Možnosti asistenta"><p>Režim</p><div class="assistant-modes"><button type="button" data-mode="basic" aria-pressed="${runtime.mode!=='local'}">Základní</button><button type="button" data-mode="local" aria-pressed="${runtime.mode==='local'}">V zařízení</button></div>${runtime.mode==='local'?localCard():'<p class="assistant-empty">Základní režim nepotřebuje stažený model.</p>'}</div>`;
 }
 function welcomeTiles(session){
   const role = session?.user?.role;
@@ -232,10 +381,8 @@ function suggestionLabel(text){
   if(text==='Zobraz jeho zakázky') return 'Zobrazit zakázky';
   return text;
 }
-function conceptCard(concept){
-  const days = (concept.terms||[]).map(term=>`<span>${esc(term.date.slice(8))}. ${esc((term.people||[]).join(', ')||'—')}</span>`).join('');
-  const material = (concept.materials||[]).map(item=>`<li>${esc(item.name)} ${esc(item.quantity)} ${esc(item.unit)} · ${item.readiness==='on_hand'?'máme':'k nákupu'}</li>`).join('');
-  return `<article class="assistant-concept"><strong>${esc(concept.title)}</strong><p>${esc(concept.customerName||'Zákazník z evidence')}</p><div class="assistant-days">${days}</div>${material?`<ul>${material}</ul>`:concept.askMaterial?'<p>Materiál: potřebujeme objednat?</p>':''}<p>Úpravu napište větou, třeba „Zdeněk přijede až v úterý.“</p></article>`;
+function conceptCard(){
+  return '<article class="assistant-concept"><p>Koncept je otevřený v panelu Výsledek. Upravte ho tam a uložte až tlačítkem.</p></article>';
 }
 function localCard(){
   const model = localMinistral().snapshot();
@@ -268,7 +415,7 @@ function detailPanel(){
   const kind = detail.card.type==='job'?'Zakázka':detail.card.type==='material'?'Materiál':'Zákazník';
   const body = detail.loading?'<p>Načítám údaje z evidence…</p>':detail.error?`<p>${esc(detail.error)}</p>`:detailBody(detail);
   return `<aside class="assistant-detail" aria-label="Detail záznamu">
-    <header><span class="assistant-card-mark">${spark}</span><div><strong>${esc(detail.card.title||kind)}</strong><p>${kind}</p></div><button type="button" data-close-detail aria-label="Zavřít panel">×</button></header>
+    <header><span class="assistant-card-mark">${spark}</span><div><strong>${esc(detail.card.title||kind)}</strong><p>${kind}</p></div>${current()?.draftConcept?'<button type="button" data-back-result>Zpět ke konceptu</button>':''}<button type="button" data-close-detail aria-label="Zavřít panel">×</button></header>
     ${body}
     <button type="button" class="assistant-profile" data-full-profile>Otevřít celý profil</button>
   </aside>`;
@@ -292,15 +439,16 @@ function detailBody(detail){
     <h3>Aktivní zakázky <span>${jobs.length}</span></h3>${jobs.map(job=>`<button type="button" class="assistant-side-job" ${openAttrs('job', job.id)}><strong>${esc(job.title)}</strong><small>${esc([job.dueDate, job.city].filter(Boolean).join(' · '))}</small><em class="is-${esc(job.status)}">${esc(STATUS[job.status]||job.status||'')}</em></button>`).join('')||'<p>Aktivní zakázku k tomuto zákazníkovi nevidím.</p>'}`;
 }
 function activate(card, full, api, paint){
-  const narrow = window.matchMedia?.('(max-width: 1099px)').matches;
   if(!card?.id||!['customer','job','material'].includes(card.type)) return;
-  if(full||narrow){
+  if(full){
     if(card.type==='customer') api.openCustomer?.(card.id);
     if(card.type==='job') api.openJob?.(card.id);
     if(card.type==='material') api.openMaterial?.(card.id);
-    if(narrow||full) return;
+    return;
   }
   runtime.detail = {card, loading:true, record:null, jobs:[], error:''};
+  runtime.mobileTab = 'result';
+  runtime.resultFresh = true;
   paint();
   loadDetail(card, api, paint);
 }
@@ -346,26 +494,30 @@ function push(session, role, text, extra={}){
   runtime.threads = [thread, ...runtime.threads.filter(item=>item.id!==thread.id)];
   persist(session);
 }
-async function ask(text, api, paint, confirmId, cancelId, file){
+async function ask(text, api, paint, confirmId, cancelId, file, concept){
   const session = api.getSession();
   const clean = String(text||'').trim();
   if((!confirmId&&!cancelId&&!clean&&!file)||runtime.busy) return;
   const thread = ensureThread(session);
   if(!confirmId&&!cancelId) push(session, 'user', file?`Soubor ${file.name}${clean?': '+clean:''}`:clean);
+  const generation = ++runtime.generation;
   runtime.busy = true; paint();
   let commandText = clean;
+  const alive = ()=>generation===runtime.generation;
   try{
-    if(session?.rolePreview?.active&&(confirmId||cancelId)){push(session,'assistant','V náhledu role změny neukládám.');return;}
+    if(session?.rolePreview?.active&&(confirmId||cancelId)){if(alive()) push(session,'assistant','V náhledu role změny neukládám.');return;}
     if(!confirmId&&!cancelId&&!file&&runtime.mode==='local'){
       const model = localMinistral();
-      if(!model.snapshot().installed){push(session,'assistant','Nejdřív stáhněte Ministral 3B. Nic jsem se neptal serveru.');return;}
+      if(!model.snapshot().installed){if(alive()) push(session,'assistant','Nejdřív stáhněte Ministral 3B. Nic jsem se neptal serveru.');return;}
       let answer = '';
-      try{answer = await model.answer(clean);}catch(error){push(session,'assistant', error?.message||'Ministral teď neodpověděl. Základní asistent zůstává k dispozici.');return;}
+      try{answer = await model.answer(clean);}catch(error){if(alive()) push(session,'assistant', error?.message||'Ministral teď neodpověděl. Základní asistent zůstává k dispozici.');return;}
+      if(!alive()) return;
       const command = extractLocalCommand(answer);
       if(!command){push(session,'assistant', `${answer}\n\nTohle není údaj z deníku. Jména, hodiny a ceny beru jen z evidence.`);return;}
       push(session,'assistant', `Rozumím tomu jako: ${command}`);
       commandText = command;
     }
+    if(!alive()) return;
     if(!navigator.onLine && !confirmId && !cancelId){
       if(file){push(session,'assistant','Soubor bez připojení neukládám. Až budete online, vložte ho znovu. Nic se teď nezměnilo.');return;}
       const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -374,17 +526,21 @@ async function ask(text, api, paint, confirmId, cancelId, file){
       try{const cached = await peekCachedJobs(`/api/jobs?state=all&order=schedule&month=${today.slice(0,7)}`);jobs = cached?.jobs ?? null;}catch{jobs = null;}
       const tomorrowDate = new Date(today+'T12:00:00Z');tomorrowDate.setUTCDate(tomorrowDate.getUTCDate()+1);
       const local = answerOffline(command, {jobs, today, tomorrow:tomorrowDate.toISOString().slice(0,10)});
-      push(session,'assistant', local.missing?local.reply+' Údaje jsou z poslední uložené kopie.':local.reply);
+      if(alive()) push(session,'assistant', local.missing?local.reply+' Údaje jsou z poslední uložené kopie.':local.reply);
       return;
     }
-    if(!navigator.onLine){push(session,'assistant','Potvrzení bez připojení neodešlu. Nic se neuložilo.');return;}
-    const data = await api.db.request('/api/assistant',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:commandText, mode:'basic', ...(thread.context?{context:thread.context}:{}), ...(file?{file}:{}), ...(confirmId?{confirmId}:{}), ...(cancelId?{cancelId}:{})})});
+    if(!navigator.onLine){if(alive()) push(session,'assistant','Potvrzení bez připojení neodešlu. Nic se neuložilo.');return;}
+    const data = await api.db.request('/api/assistant',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:commandText, mode:'basic', ...(thread.context?{context:thread.context}:{}), ...(file?{file}:{}), ...(confirmId?{confirmId}:{}), ...(cancelId?{cancelId}:{}), ...(concept?{concept}:{})})});
+    if(!alive()) return;
     push(session,'assistant', data.reply||'Hotovo.', {confirm:data.confirm||null, suggestions:data.suggestions||[], cards:data.cards||[], concept:data.concept||null, context:data.context||thread.context});
-    if(data.mutated) api.onChanged?.(data.mutated);
+    if(data.concept) adoptConcept(current(), data.concept);
+    if(data.cards?.length&&!data.concept){runtime.mobileTab='result';runtime.resultFresh=true;}
+    if(data.mutated){const live=current(); if(live){live.draftConcept=null;live.conceptTouched={};} runtime.detail=null; api.onChanged?.(data.mutated);}
   }catch(error){
+    if(!alive()) return;
     const offline = !navigator.onLine||error?.status===0||/fetch|network|Failed/i.test(error?.message||'');
     push(session,'assistant', offline?'Potřebná data nejsou v zařízení. Připojte se a příkaz zopakujte. Rozpracované změny deníku zůstávají beze změny.':(error?.message||'Asistent teď neodpověděl.'));
-  }finally{runtime.busy=false;paint();}
+  }finally{if(alive()){runtime.busy=false;paint();}}
 }
 function stop(){runtime.recognition?.stop();runtime.listening=false;}
 function toggleVoice(field, api, paint){
@@ -411,6 +567,10 @@ async function readImportFile(file, hint, api, paint){
   ask(hint||'Načti tento soubor.', api, paint, null, null, {name, text});
 }
 function plus(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';}
+function minus(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg>';}
+function clockIcon(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v5l3 2"/></svg>';}
+function panelIcon(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M10 5v14"/></svg>';}
+function moreIcon(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18" cy="12" r="1.2"/></svg>';}
 function clip(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m16 8-6.5 6.5a2 2 0 0 1-3-3L13 5a3.5 3.5 0 0 1 5 5l-7 7a5 5 0 0 1-7-7L12 2"/></svg>';}
 function mic(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4"/></svg>';}
 function send(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-5-7-2z"/></svg>';}
