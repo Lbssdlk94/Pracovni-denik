@@ -18,7 +18,7 @@ test('Bulk operations are individual; stopping one and then the last worker neve
  const f=await setup(),at=Date.now()-60000,workers=[worker('worker',0),worker('admin',0)];
  const input={operationId:'bulk-start',action:'work',at,workers};let r=await f.action('a',people.owner,input);assert.equal(r.status,200,JSON.stringify(r));assert.equal(r.intervals.length,2);
  assert.equal((await f.action('a',people.owner,input)).replayed,true);assert.equal(f.env.sqlite.prepare('SELECT count(*) n FROM job_time_intervals').get().n,2);
- r=await f.action('a',people.worker,{operationId:'own-stop',action:'stop',at:at+1000,workers:[worker('worker',1)]});assert.equal(r.status,200);assert.equal(r.states.find(s=>s.userId===people.admin.id).active.kind,'work');
+ r=await f.action('a',people.worker,{operationId:'own-stop',action:'stop',at:at+1000,workers:[worker('worker',1)]});assert.equal(r.status,200);assert.equal(r.states.find(s=>s.userId===people.admin.id).active,null);assert.equal((await f.call('/api/jobs/a/time',people.owner)).states.find(s=>s.userId===people.admin.id).active.kind,'work');
  r=await f.action('a',people.owner,{operationId:'last-stop',action:'stop',at:at+2000,workers:[worker('admin',1)]});assert.equal(r.job.status,'in_progress');
 });
 test('Switching jobs requires explicit confirmation and closes exactly one previous interval',async()=>{

@@ -19,8 +19,8 @@ async function timeReplay(env,m,jobId,input,fail){const op=await tmOne(env,'SELE
 
 // D1 batch is a transaction. The CHECK fence aborts the entire batch on stale
 // person versions or a live permission change, before any shift/interval changes.
-async function timeFence(env,m,job,input,workers,{manage=false,assign=false,jobVersion=null,managerOnly=false,extra='1=1',extraArgs=[]}={}){
- const gate=`EXISTS(SELECT 1 FROM jobs j JOIN members actor ON actor.user_id=? WHERE j.id=? AND j.deleted=0 AND NOT EXISTS(SELECT 1 FROM workspaces WHERE state<>'active') AND actor.role IN ${timeWriters} AND (?=0 OR actor.role IN ${timeManagers}) AND ${workspaceJobScope()} AND (? IS NULL OR j.version=?) AND (actor.role IN ${timeManagers} OR ?=0 OR EXISTS(SELECT 1 FROM job_time_leads l WHERE l.job_id=j.id AND l.user_id=actor.user_id)))
+async function timeFence(env,m,job,input,workers,{manage=false,assign=false,jobVersion=null,managerOnly=false,extra='1=1',extraArgs=[],actorRoles=timeWriters}={}){
+ const gate=`EXISTS(SELECT 1 FROM jobs j JOIN members actor ON actor.user_id=? WHERE j.id=? AND j.deleted=0 AND NOT EXISTS(SELECT 1 FROM workspaces WHERE state<>'active') AND actor.role IN ${actorRoles} AND (?=0 OR actor.role IN ${timeManagers}) AND ${workspaceJobScope()} AND (? IS NULL OR j.version=?) AND (actor.role IN ${timeManagers} OR ?=0 OR EXISTS(SELECT 1 FROM job_time_leads l WHERE l.job_id=j.id AND l.user_id=actor.user_id)))
  AND (${extra}) AND NOT EXISTS(SELECT 1 FROM json_each(?) item LEFT JOIN members target ON target.user_id=json_extract(item.value,'$.userId') LEFT JOIN job_time_states state ON state.user_id=target.user_id WHERE target.user_id IS NULL OR target.role NOT IN ${timeWriters} OR COALESCE(state.version,0)<>json_extract(item.value,'$.version') OR (SELECT COUNT(*) FROM jobs selected WHERE selected.id=? AND (?=1 OR selected.assigned_to=target.user_id OR EXISTS(SELECT 1 FROM json_each(selected.assigned_users) ids WHERE ids.value=target.user_id)) AND (NOT EXISTS(SELECT 1 FROM workspaces WHERE state IN ('active','read_only')) OR target.role IN ${timeManagers} OR EXISTS(SELECT 1 FROM member_disciplines d WHERE d.user_id=target.user_id AND d.discipline=selected.discipline)))=0)`;
  return env.DB.prepare(`INSERT INTO job_time_operations(id,job_id,actor_id,hash,action,payload,created_at,valid) VALUES(?,?,?,?,?,?,?,CASE WHEN ${gate} THEN 1 ELSE 0 END)`).bind(input.operationId,job.id,m.user_id,await timeHash(input),input.action,JSON.stringify(input),Date.now(),m.user_id,job.id,managerOnly?1:0,m.user_id,jobVersion,jobVersion,manage?1:0,...extraArgs,JSON.stringify(workers),job.id,assign?1:0);
 }
@@ -98,11 +98,17 @@ export async function timeDetail(env,m,job,fail,{compact=false}={}){
  const elsewhere=[...new Set(states.map(s=>s.active?.jobId).filter(id=>id&&id!==job.id))];
  const allowed=elsewhere.length?new Set((await tmAll(env,`SELECT j.id FROM jobs j WHERE j.id IN(SELECT value FROM json_each(?)) AND j.deleted=0 AND ${workspaceJobScope()}`,JSON.stringify(elsewhere),m.user_id)).map(j=>j.id)):new Set();
  for(const state of states)if(state.active&&state.active.jobId!==job.id&&!allowed.has(state.active.jobId))state.active={jobId:'unavailable',kind:'other'};
- const intervals=rows.map(r=>timeIntervalDTO(r,manager));
+ const seeCrew=manager||canManage;
+ if(!seeCrew)for(const state of states)if(state.userId!==m.user_id){state.active=null;state.timeVisible=false;}
+ const intervals=(seeCrew?rows:rows.filter(r=>r.user_id===m.user_id)).map(r=>timeIntervalDTO(r,manager));
  const candidates=!compact&&canManage?await tmAll(env,`SELECT p.user_id AS id,p.name,p.role FROM members p WHERE p.role IN ${timeWriters} AND (p.role IN ${timeManagers} OR NOT EXISTS(SELECT 1 FROM workspaces WHERE state IN ('active','read_only')) OR EXISTS(SELECT 1 FROM member_disciplines d WHERE d.user_id=p.user_id AND d.discipline=?)) ORDER BY p.name`,job.discipline):[];
- const result={job:{id:job.id,status:job.status,version:job.version,myTime:await timeState(env,m.user_id),assignedTos:jobAssignedIds(job)},intervals,states,serverNow:now,canManage,canManageCosts:manager,canWrite:['owner','administrator','admin','worker'].includes(m.role)};
+ const result={job:{id:job.id,status:job.status,version:job.version,myTime:await timeState(env,m.user_id),assignedTos:jobAssignedIds(job)},intervals,states,serverNow:now,canManage,canManageCosts:manager,canSeeCrew:seeCrew,canRequest:['owner','administrator','admin','worker','reader'].includes(m.role),canWrite:['owner','administrator','admin','worker'].includes(m.role)};
  if(compact){result.projection='dashboard';}else{
-  Object.assign(result,{summary:timeSummary(intervals,now,manager),candidates,lead:(await tmOne(env,'SELECT * FROM job_time_leads WHERE job_id=?',job.id))||null,reviews:await tmAll(env,'SELECT r.*,p.name AS author_name FROM job_time_reviews r LEFT JOIN members p ON p.user_id=r.created_by WHERE r.job_id=? ORDER BY r.created_at DESC',job.id)});
+  let reviews=await tmAll(env,'SELECT r.*,p.name AS author_name FROM job_time_reviews r LEFT JOIN members p ON p.user_id=r.created_by WHERE r.job_id=? ORDER BY r.created_at DESC',job.id);
+  if(!seeCrew)reviews=reviews.filter(r=>r.user_id===m.user_id||r.created_by===m.user_id);
+  const versionsByInterval=new Map(rows.map(r=>[r.id,r.version]));
+  reviews=reviews.map(r=>({...r,conflict:r.status==='pending'&&versionsByInterval.get(r.interval_id)!==r.base_version?1:0}));
+  Object.assign(result,{summary:timeSummary(intervals,now,manager),candidates,lead:(await tmOne(env,'SELECT * FROM job_time_leads WHERE job_id=?',job.id))||null,reviews});
   if(manager){result.rates=await tmAll(env,'SELECT * FROM job_time_rates WHERE user_id IN (SELECT value FROM json_each(?))',JSON.stringify(ids));result.history=await tmAll(env,'SELECT e.*,p.name AS actor_name FROM job_time_events e LEFT JOIN members p ON p.user_id=e.actor_id WHERE e.job_id=? ORDER BY e.at DESC,e.id DESC',job.id);}
  }
  // Recheck the live grant after reading private rates/history. A role reduction
@@ -110,6 +116,48 @@ export async function timeDetail(env,m,job,fail,{compact=false}={}){
  const live=await tmOne(env,'SELECT role FROM members WHERE user_id=?',m.user_id);
  if(!live||live.role!==m.role)fail(403,'Oprávnění se změnila. Ověřte znovu svůj přístup.');
  await timeJob(env,m,job.id,fail);return result;
+}
+
+const timeOwnRoles="('owner','administrator','admin','worker','reader')";
+const timeHas=(body,key)=>Object.prototype.hasOwnProperty.call(body,key);
+function timeInstant(value,fail,label){
+ if(value===undefined)return undefined;
+ if(value===null||value==='')fail(400,label+' se neposílá prázdný. Chybějící pole znamená, že se tato část nemění.');
+ if(!Number.isSafeInteger(value))fail(400,'Zadejte platný čas: '+label+'.');
+ return value;
+}
+async function timeCoveringShift(env,userId,startAt,endAt){
+ return tmOne(env,'SELECT * FROM attendance_shifts WHERE user_id=? AND deleted_at IS NULL AND start_at<=? AND (end_at IS NULL OR ? IS NOT NULL AND end_at>=?) ORDER BY start_at DESC LIMIT 1',userId,startAt,endAt,endAt);
+}
+async function timeOverlaps(env,userId,intervalId,startAt,endAt){
+ return tmOne(env,'SELECT id FROM job_time_intervals WHERE user_id=? AND id<>? AND (end_at IS NULL OR end_at>?) AND (? IS NULL OR start_at<?)',userId,intervalId||'',startAt,endAt,endAt);
+}
+function timeCheckRange(startAt,endAt,now,fail){
+ if(startAt<Date.UTC(2000,0,1)||startAt>now||endAt!==null&&(!Number.isSafeInteger(endAt)||endAt<=startAt||endAt>now||endAt-startAt>7*86400000))fail(400,'Zadejte skutečný interval v minulosti. Konec musí být později než začátek a směna může trvat nejvýše sedm dní.');
+}
+async function timeMergedProposal(env,old,b,fail,now){
+ const removing=b.remove===true;
+ if(removing){if(!old||old.end_at===null)fail(409,'Smazat lze jen ukončený interval. Otevřenou práci nejdříve ukončete.');return {remove:true,kind:old.kind,startAt:old.start_at,endAt:old.end_at,shiftId:old.shift_id};}
+ const keys=['operationId','intervalId','userId','version','kind','startAt','endAt','reason','remove'];
+ if(Object.keys(b).some(k=>!keys.includes(k)))fail(400,'Neplatné údaje návrhu.');
+ if(b.remove!==undefined)fail(400,'Neplatný návrh smazání.');
+ const startSent=timeHas(b,'startAt'),endSent=timeHas(b,'endAt'),kindSent=timeHas(b,'kind');
+ const startAt=startSent?timeInstant(b.startAt,fail,'Začátek'):undefined,endAt=endSent?timeInstant(b.endAt,fail,'Konec'):undefined;
+ if(kindSent&&!['work','travel','break','other'].includes(b.kind))fail(400,'Vyberte druh činnosti.');
+ if(!old){
+  if(!startSent||!endSent||!kindSent)fail(400,'Nový interval potřebuje začátek, konec i druh činnosti.');
+  timeCheckRange(startAt,endAt,now,fail);
+  if(await timeOverlaps(env,b.userId,b.intervalId,startAt,endAt))fail(409,'Interval se překrývá s jinou vaší pracovní dobou.',{code:'job_time_overlap'});
+  const shift=await timeCoveringShift(env,b.userId,startAt,endAt);if(!shift)fail(409,'Nejdříve doplňte nebo opravte tuto směnu v existující docházce.',{code:'job_time_attendance'});
+  return {kind:b.kind,startAt,endAt,shiftId:shift.id};
+ }
+ if(old.end_at===null&&endSent)fail(400,'Ukončení probíhajícího intervalu proveďte akcí Ukončit práci, ne žádostí o opravu.');
+ if(!startSent&&!endSent&&!kindSent)fail(400,'Vyberte, zda se mění začátek, konec, nebo obojí.');
+ const mergedStart=startSent?startAt:old.start_at,mergedEnd=endSent?endAt:old.end_at,mergedKind=kindSent?b.kind:old.kind;
+ timeCheckRange(mergedStart,mergedEnd,now,fail);
+ if(await timeOverlaps(env,old.user_id,old.id,mergedStart,mergedEnd))fail(409,'Interval se překrývá s jinou vaší pracovní dobou.',{code:'job_time_overlap'});
+ const shift=await timeCoveringShift(env,old.user_id,mergedStart,mergedEnd);if(!shift)fail(409,'Nejdříve doplňte nebo opravte tuto směnu v existující docházce.',{code:'job_time_attendance'});
+ const proposed={shiftId:shift.id};if(kindSent)proposed.kind=mergedKind;if(startSent)proposed.startAt=mergedStart;if(endSent)proposed.endAt=mergedEnd;return proposed;
 }
 
 export async function handleJobTime(request,env,m,h){
@@ -146,28 +194,49 @@ export async function handleJobTime(request,env,m,h){
   await timeBatch(env,[op,env.DB.prepare('INSERT INTO job_time_rates(user_id,work_minor,travel_minor,version,updated_by,updated_at) VALUES(?,?,?,1,?,?) ON CONFLICT(user_id) DO UPDATE SET work_minor=excluded.work_minor,travel_minor=excluded.travel_minor,version=version+1,updated_by=excluded.updated_by,updated_at=excluded.updated_at').bind(b.userId,b.workMinor,b.travelMinor,m.user_id,Date.now()),env.DB.prepare('INSERT INTO job_time_events(id,job_id,actor_id,at,operation_id,before_value,after_value,reason) VALUES(?,?,?,?,?,?,?,?)').bind(b.operationId+'_rate',job.id,m.user_id,Date.now(),b.operationId,JSON.stringify(old),JSON.stringify(b),'Změna nákladové sazby pro budoucí intervaly')],fail);return json(await timeDetail(env,m,job,fail));
  }
  if(tail[0]==='proposals'&&method==='POST'){
-  validId(b.intervalId);validId(b.userId);const old=await tmOne(env,'SELECT * FROM job_time_intervals WHERE id=?',b.intervalId),manage=await timeMayManage(env,m,job),historical=old?.job_id===job.id&&old.user_id===b.userId;if((!jobAssignedIds(job).includes(b.userId)&&!(historical&&manage))||b.userId!==m.user_id&&!manage||!['owner','administrator','admin','worker'].includes(m.role))fail(403,'Opravu navrhuje pracovník za sebe nebo vedoucí za svůj tým.');
-  if(old&&(old.job_id!==job.id||old.user_id!==b.userId||old.end_at===null)||b.version!==(old?.version||0))fail(409,'Záznam se změnil nebo ještě běží. Nejdříve ho ukončete.');
+  const keys=['operationId','intervalId','userId','version','kind','startAt','endAt','reason','remove'];
+  if(Object.keys(b).some(k=>!keys.includes(k)))fail(400,'Neplatné údaje návrhu.');
+  validId(b.intervalId);validId(b.userId);const old=await tmOne(env,'SELECT * FROM job_time_intervals WHERE id=?',b.intervalId),manage=await timeMayManage(env,m,job),own=b.userId===m.user_id,historical=old?.job_id===job.id&&old.user_id===b.userId;
+  const roleOk=['owner','administrator','admin','worker'].includes(m.role)||m.role==='reader'&&own;
+  if(!roleOk||(!jobAssignedIds(job).includes(b.userId)&&!(historical&&manage))||!own&&!manage)fail(403,'Opravu navrhuje pracovník nebo čtenář za sebe, vedoucí za svůj tým.');
+  if(old&&(old.job_id!==job.id||old.user_id!==b.userId)||b.version!==(old?.version||0))fail(409,'Záznam se změnil. Obnovte pracovní dobu a podejte novou žádost.',{code:'job_time_conflict'});
   if(b.remove!==undefined&&b.remove!==true)fail(400,'Neplatný návrh smazání.');
-  const removing=b.remove===true;if(removing&&!old)fail(409,'Smazat lze jen ukončený interval, který už existuje.');
-  let proposed;if(removing)proposed={remove:true,kind:old.kind,startAt:old.start_at,endAt:old.end_at,shiftId:old.shift_id};
-  else{if(!['work','travel','break','other'].includes(b.kind)||!Number.isSafeInteger(b.startAt)||!Number.isSafeInteger(b.endAt)||b.startAt<Date.UTC(2000,0,1)||b.endAt<=b.startAt||b.endAt>Date.now()||b.endAt-b.startAt>7*86400000)fail(400,'Zadejte skutečný interval v minulosti, nejvýše sedm dní.');
-  const shift=await tmOne(env,'SELECT * FROM attendance_shifts WHERE user_id=? AND deleted_at IS NULL AND start_at<=? AND (end_at IS NULL OR end_at>=?) ORDER BY start_at DESC LIMIT 1',b.userId,b.startAt,b.endAt);if(!shift)fail(409,'Nejdříve doplňte nebo opravte tuto směnu v existující docházce.',{code:'job_time_attendance'});
-  proposed={kind:b.kind,startAt:b.startAt,endAt:b.endAt,shiftId:shift.id};}
-  const reason=cleanText(b.reason,1000,true),op=await timeFence(env,m,job,{...b,action:'proposal'},[],{manage:b.userId!==m.user_id,jobVersion:job.version});
-  await timeBatch(env,[op,env.DB.prepare("INSERT INTO job_time_reviews(id,job_id,interval_id,user_id,base_version,old_value,proposed,reason,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(b.operationId,job.id,b.intervalId,b.userId,b.version,old?JSON.stringify(timeIntervalDTO(old)):null,JSON.stringify(proposed),reason,m.user_id,Date.now())],fail);return json(await timeDetail(env,m,job,fail));
+  if(await tmOne(env,"SELECT id FROM job_time_reviews WHERE interval_id=? AND status='pending'",b.intervalId))fail(409,'U tohoto intervalu už čeká žádost. Nejdříve ji stáhněte nebo nechte vyřídit.');
+  const now=Date.now(),proposed=await timeMergedProposal(env,old,b,fail,now),reason=cleanText(b.reason,1000,true);
+  const op=await timeFence(env,m,job,{...b,action:'proposal'},[],{manage:!own,jobVersion:job.version,actorRoles:m.role==='reader'?timeOwnRoles:timeWriters});
+  await timeBatch(env,[op,env.DB.prepare("INSERT INTO job_time_reviews(id,job_id,interval_id,user_id,base_version,old_value,proposed,reason,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(b.operationId,job.id,b.intervalId,b.userId,b.version,old?JSON.stringify(timeIntervalDTO(old)):null,JSON.stringify(proposed),reason,m.user_id,now)],fail);return json(await timeDetail(env,m,job,fail));
  }
  if(tail[0]==='reviews'&&tail[1]&&method==='POST'){
-  if(!tmManager(m))fail(403,'Hodiny schvaluje pouze správce.');const review=await tmOne(env,'SELECT * FROM job_time_reviews WHERE id=? AND job_id=?',validId(tail[1]),job.id);if(!review||review.status!=='pending')fail(409,'Návrh už byl vyřízen.');
-  if(!['approve','reject'].includes(b.decision))fail(400,'Vyberte schválení nebo zamítnutí.');const note=cleanText(b.note||'',1000),op=await timeFence(env,m,job,{...b,action:'review'},[],{manage:true,managerOnly:true,extra:"EXISTS(SELECT 1 FROM job_time_reviews r WHERE r.id=? AND r.status='pending' AND COALESCE((SELECT version FROM job_time_intervals i WHERE i.id=r.interval_id),0)=r.base_version)",extraArgs:[review.id]}),statements=[op],now=Date.now();
+  const review=await tmOne(env,'SELECT * FROM job_time_reviews WHERE id=? AND job_id=?',validId(tail[1]),job.id);if(!review)fail(409,'Návrh už byl vyřízen.');
+  if(!['approve','reject','withdraw'].includes(b.decision))fail(400,'Vyberte schválení, zamítnutí nebo stažení.');
+  const note=cleanText(b.note||'',1000),now=Date.now();
+  if(b.decision==='withdraw'){
+   if(review.created_by!==m.user_id&&review.user_id!==m.user_id)fail(403,'Stažení žádosti je jen pro jejího autora.');
+   if(review.status!=='pending')fail(409,'Návrh už byl vyřízen.');
+   const withdrawn=await timeBatch(env,[env.DB.prepare("UPDATE job_time_reviews SET status='withdrawn',reviewed_by=?,reviewed_at=?,review_note=? WHERE id=? AND status='pending'").bind(m.user_id,now,note||'Staženo autorem',review.id)],fail);
+   if(!withdrawn[0].meta.changes)fail(409,'Návrh už byl vyřízen.');
+   return json(await timeDetail(env,m,job,fail));
+  }
+  if(!tmManager(m))fail(403,'Hodiny schvaluje pouze správce.');if(review.status!=='pending')fail(409,'Návrh už byl vyřízen.');
+  const op=await timeFence(env,m,job,{...b,action:'review'},[],{manage:true,managerOnly:true,extra:"EXISTS(SELECT 1 FROM job_time_reviews r WHERE r.id=? AND r.status='pending' AND COALESCE((SELECT version FROM job_time_intervals i WHERE i.id=r.interval_id),0)=r.base_version)",extraArgs:[review.id]}),statements=[op];
   if(b.decision==='approve'){
-   const old=await tmOne(env,'SELECT * FROM job_time_intervals WHERE id=?',review.interval_id),value=JSON.parse(review.proposed);if((old?.version||0)!==review.base_version)fail(409,'Interval se od návrhu změnil. Připravte nový návrh.');
-   if(value.remove===true){if(!old||old.end_at===null)fail(409,'Smazat lze jen ukončený interval. Otevřenou práci nejdříve ukončete.');statements.push(env.DB.prepare('DELETE FROM job_time_intervals WHERE id=? AND version=? AND end_at IS NOT NULL').bind(old.id,old.version));}
+   const old=await tmOne(env,'SELECT * FROM job_time_intervals WHERE id=?',review.interval_id),value=JSON.parse(review.proposed);if((old?.version||0)!==review.base_version)fail(409,'Interval se od návrhu změnil. Žádost ho nepřepisuje. Připravte nové posouzení.',{code:'job_time_conflict'});
+   if(value.remove===true){if(!old||old.end_at===null)fail(409,'Smazat lze jen ukončený interval. Otevřenou práci nejdříve ukončete.');statements.push(env.DB.prepare('DELETE FROM job_time_intervals WHERE id=? AND version=? AND user_id=? AND end_at IS NOT NULL').bind(old.id,old.version,review.user_id));statements.push(env.DB.prepare('INSERT INTO job_time_events(id,job_id,interval_id,actor_id,at,operation_id,before_value,after_value,reason) VALUES(?,?,?,?,?,?,?,?,?)').bind(b.operationId+'_review',job.id,review.interval_id,m.user_id,now,b.operationId,review.old_value,JSON.stringify(value),review.reason));}
    else{const rate=await tmOne(env,'SELECT * FROM job_time_rates WHERE user_id=?',review.user_id),person=await tmOne(env,'SELECT * FROM members WHERE user_id=?',review.user_id);
-   if(old)statements.push(env.DB.prepare("UPDATE job_time_intervals SET hourly_minor=CASE WHEN kind=? THEN hourly_minor ELSE NULL END,kind=?,start_at=?,end_at=?,shift_id=?,approval='approved',version=version+1,updated_by=?,updated_at=? WHERE id=? AND version=?").bind(value.kind,value.kind,value.startAt,value.endAt,value.shiftId,m.user_id,now,old.id,old.version));
-   else statements.push(env.DB.prepare("INSERT INTO job_time_intervals(id,job_id,user_id,user_name,kind,start_at,end_at,shift_id,hourly_minor,approval,created_by,created_at,updated_by,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'approved',?,?,?,?)").bind(review.interval_id,job.id,review.user_id,person?.name||review.user_id,value.kind,value.startAt,value.endAt,value.shiftId,value.kind==='work'?rate?.work_minor??null:value.kind==='travel'?rate?.travel_minor??null:null,m.user_id,now,m.user_id,now));}
+   const startAt=timeHas(value,'startAt')?value.startAt:old?.start_at,endAt=timeHas(value,'endAt')?value.endAt:old?.end_at??null,kind=value.kind||old?.kind;
+   if(!old&&(!timeHas(value,'startAt')||!timeHas(value,'endAt')||!value.kind))fail(409,'Nový interval v žádosti není úplný.');
+   timeCheckRange(startAt,endAt,now,fail);
+   if(old?.end_at===null&&endAt!==null)fail(409,'Probíhající interval se žádostí neukončuje.');
+   if(await timeOverlaps(env,review.user_id,old?.id||review.interval_id,startAt,endAt))fail(409,'Interval se překrývá s jinou pracovní dobou tohoto pracovníka.',{code:'job_time_overlap'});
+   let shift=value.shiftId?await tmOne(env,'SELECT * FROM attendance_shifts WHERE id=? AND user_id=? AND deleted_at IS NULL',value.shiftId,review.user_id):null;
+   if(!shift||shift.start_at>startAt||shift.end_at!==null&&(endAt===null||endAt>shift.end_at))shift=await timeCoveringShift(env,review.user_id,startAt,endAt);
+   if(!shift)fail(409,'Nejdříve doplňte nebo opravte tuto směnu v existující docházce.',{code:'job_time_attendance'});
+   const applied={kind,startAt,endAt,shiftId:shift.id,remove:false};
+   if(old)statements.push(env.DB.prepare("UPDATE job_time_intervals SET hourly_minor=CASE WHEN kind=? THEN hourly_minor ELSE NULL END,kind=?,start_at=?,end_at=?,shift_id=?,approval='approved',version=version+1,updated_by=?,updated_at=? WHERE id=? AND version=? AND user_id=?").bind(kind,kind,startAt,endAt,shift.id,m.user_id,now,old.id,old.version,review.user_id));
+   else statements.push(env.DB.prepare("INSERT INTO job_time_intervals(id,job_id,user_id,user_name,kind,start_at,end_at,shift_id,hourly_minor,approval,created_by,created_at,updated_by,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'approved',?,?,?,?)").bind(review.interval_id,job.id,review.user_id,person?.name||review.user_id,kind,startAt,endAt,shift.id,kind==='work'?rate?.work_minor??null:kind==='travel'?rate?.travel_minor??null:null,m.user_id,now,m.user_id,now));
+   statements.push(env.DB.prepare('INSERT INTO job_time_events(id,job_id,interval_id,actor_id,at,operation_id,before_value,after_value,reason) VALUES(?,?,?,?,?,?,?,?,?)').bind(b.operationId+'_review',job.id,review.interval_id,m.user_id,now,b.operationId,review.old_value,JSON.stringify(applied),review.reason));
+   }
    statements.push(env.DB.prepare('INSERT INTO job_time_states(user_id,version) VALUES(?,1) ON CONFLICT(user_id) DO UPDATE SET version=version+1').bind(review.user_id));
-   statements.push(env.DB.prepare('INSERT INTO job_time_events(id,job_id,interval_id,actor_id,at,operation_id,before_value,after_value,reason) VALUES(?,?,?,?,?,?,?,?,?)').bind(b.operationId+'_review',job.id,review.interval_id,m.user_id,now,b.operationId,review.old_value,JSON.stringify(value),review.reason));
   }
   statements.push(env.DB.prepare("UPDATE job_time_reviews SET status=?,reviewed_by=?,reviewed_at=?,review_note=? WHERE id=? AND status='pending'").bind(b.decision==='approve'?'approved':'rejected',m.user_id,now,note,review.id));
   await timeBatch(env,statements,fail);return json(await timeDetail(env,m,job,fail));

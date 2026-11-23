@@ -37,6 +37,8 @@ enum APIAttendanceWorkflow {
 }
 enum APIAttendanceActions {
     static func correction(_ shift:APIValue,remove:Bool)->APIDomainAction{APIDomainAction(title:remove ? "Žádost o smazání" : "Oprava docházky",path:"/api/attendance/corrections",fields:[.field("reason","Důvod",.notes,true)],value:.object(["id":.s(UUID().uuidString),"kind":.s(remove ? "delete" : "edit"),"shiftId":.s(shift.id),"version":shift["version"],"userId":shift["userId"],"startAt":shift["startAt"].isNull ? .number(Date().timeIntervalSince1970*1000) : shift["startAt"],"endAt":shift["endAt"],"reason":.s("")]))}
+    static func managerDelete(_ shift:APIValue)->APIDomainAction{APIDomainAction(title:"Smazat záznam docházky",path:"/api/attendance/shifts/"+shift.id+"/delete",fields:[.field("reason","Důvod",.notes,true)],value:.object(["id":.s(UUID().uuidString),"version":shift["version"],"reason":.s("")]),confirmation:"Záznam se smaže hned. Navázaná práce se nemaže. Pokud vazba existuje, server smazání odmítne a časovač zůstane.")}
+    static func withdraw(_ c:APIValue)->APIDomainAction{APIDomainAction(title:"Stáhnout žádost",path:"/api/attendance/corrections/"+c.id+"/review",value:.object(["decision":.s("withdraw")]),confirmation:"Žádost se stáhne a záznam zůstane beze změny.")}
     static func review(_ c:APIValue,approve:Bool)->APIDomainAction{APIDomainAction(title:approve ? "Schválit opravu" : "Zamítnout opravu",path:"/api/attendance/corrections/"+c.id+"/review",fields:[.field("note","Poznámka správce",.notes)],value:.object(["decision":.s(approve ? "approve" : "reject"),"kind":c["kind"],"note":.s("")]),confirmation:c["userName"].string+"\n"+c["reason"].string)}
 }
 struct APIAttendanceAction:View {

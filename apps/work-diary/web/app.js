@@ -1,5 +1,5 @@
 import {rolePreviewMarkup} from './role-preview-model.js?v=role-preview-v1';
-import {mountWorkAssistant, openWorkAssistant} from './assistant-ui.js?v=assistant-scroll-v1';
+import {mountWorkAssistant, openWorkAssistant} from './assistant-ui.js?v=time-rights-v1';
 import {createAccountUI} from './local-auth-ui.js?v=session-startup-v1';
 import {installNativeClient} from './native-client.js?v=job-three-month-v1';
 import {transientConnectionError} from './io.js?v=connection-recovery-v1';
@@ -29,9 +29,9 @@ import {createServiceWorkUI} from './service-work-ui.js?v=detail-actions-v1';
 import {createCustomersUI} from './customers-ui.js?v=offline-directory-v1';
 import {createNotificationsUI} from './notifications-ui.js?v=native-push-v1';
 import {createDriveUI} from './drive-ui.js?v=workspace-controls-v1';
-import {createJobsUI} from './jobs-ui.js?v=field-mobile-v2';
+import {createJobsUI} from './jobs-ui.js?v=time-rights-v1';
 import {createBlowoutUI} from './blowout-ui.js?v=workspace-controls-v1';
-import {createAttendanceUI} from './attendance-ui.js?v=person-hours-v1';
+import {createAttendanceUI} from './attendance-ui.js?v=time-rights-v1';
 import {createAccessUI} from './access-ui.js?v=session-startup-v1';
 import {createPlanUI} from './plan-ui.js?v=workspace-roles-v1';
 import {openPositionMap} from './position-map-ui.js?v=workspace-roles-v1';
@@ -42,7 +42,7 @@ import {gardenTabsMarkup,gardenPanel} from './garden-ui.js?v=workspace-roles-v1'
 import {FEATURE_OPTIONS,featureEnabled} from './features.js?v=fleet-photo-v1';
 import {settingsPage,bindSettings} from './settings-ui.js?v=workspace-controls-v1';
 import {COLORS,DEFAULT_ZONES,clamp,createMarker,normalizedPoint,validateBackup} from './model.js?v=workspace-roles-v1';
-import * as db from './cloud.js?v=completion-v1';
+import * as db from './cloud.js?v=time-rights-v1';
 import * as legacyDb from './storage.js?v=workspace-roles-v1';
 import {preparePhoto,annotatedPhoto,download,blobToDataURL} from './export.js?v=workspace-roles-v1';
 
