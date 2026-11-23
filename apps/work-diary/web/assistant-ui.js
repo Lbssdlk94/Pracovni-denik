@@ -50,7 +50,7 @@ localMinistral().subscribe(()=>repaint());
 export function mountWorkAssistant({db, getSession, onChanged, openCustomer, openJob, openMaterial}={}){
   const session = getSession?.();
   const existingRoot = document.querySelector('#assistant-root');
-  if(!session?.user){existingRoot?.remove(); document.body.classList.remove('assistant-open'); runtime.scope=''; return;}
+  if(!session?.user){existingRoot?.remove(); document.body.classList.remove('assistant-open'); lockAssistantPage(false); runtime.scope=''; return;}
   const embedded = [...document.querySelectorAll('#assistant-page')].find(node=>!node.closest('#assistant-root'));
   let bubble = existingRoot;
   let host = embedded;
@@ -85,10 +85,64 @@ export function mountWorkAssistant({db, getSession, onChanged, openCustomer, ope
   }
   if(bubble) applyBubble(bubble);
 }
+function mobileAssistant(){
+  return window.matchMedia('(max-width:760px)').matches;
+}
+function lockAssistantPage(open){
+  const body = document.body;
+  const html = document.documentElement;
+  if(open && mobileAssistant()){
+    if(body.dataset.scrollLock==null){
+      const y = window.scrollY || html.scrollTop || 0;
+      body.dataset.scrollLock = String(y);
+      body.style.position = 'fixed';
+      body.style.top = `-${y}px`;
+      body.style.left = '0';
+      body.style.right = '0';
+      body.style.width = '100%';
+      html.style.overflow = 'hidden';
+      body.style.overflow = 'hidden';
+    }
+    return;
+  }
+  if(body.dataset.scrollLock==null) return;
+  const y = Number(body.dataset.scrollLock)||0;
+  delete body.dataset.scrollLock;
+  body.style.position = '';
+  body.style.top = '';
+  body.style.left = '';
+  body.style.right = '';
+  body.style.width = '';
+  body.style.overflow = '';
+  html.style.overflow = '';
+  window.scrollTo(0, y);
+}
+let assistantGuard = false;
+let assistantTouchY = 0;
+function ensureAssistantScrollGuard(){
+  if(assistantGuard) return;
+  assistantGuard = true;
+  window.matchMedia('(max-width:760px)').addEventListener('change', ()=>{
+    const root = document.querySelector('#assistant-root');
+    if(root) applyBubble(root);
+  });
+  document.addEventListener('touchstart', event=>{assistantTouchY = event.touches?.[0]?.clientY||0;}, {passive:true});
+  document.addEventListener('touchmove', event=>{
+    if(!document.body.classList.contains('assistant-open')||!mobileAssistant()) return;
+    const scroller = event.target.closest?.('.assistant-log, .assistant-stage, .assistant-popover');
+    if(!scroller){event.preventDefault(); return;}
+    const dy = (event.touches?.[0]?.clientY||0) - assistantTouchY;
+    const atTop = scroller.scrollTop<=0;
+    const atBottom = scroller.scrollTop+scroller.clientHeight>=scroller.scrollHeight-1;
+    if(scroller.scrollHeight<=scroller.clientHeight+1||(dy>0&&atTop)||(dy<0&&atBottom)) event.preventDefault();
+  }, {passive:false});
+}
 function applyBubble(root){
   root.classList.toggle('is-open', !!runtime.open);
   root.querySelector('.assistant-launch')?.setAttribute('aria-expanded', runtime.open?'true':'false');
   document.body.classList.toggle('assistant-open', !!runtime.open);
+  lockAssistantPage(!!runtime.open);
+  ensureAssistantScrollGuard();
 }
 export function openWorkAssistant(context={}){
   if(context.jobId) runtime.pendingJobId=String(context.jobId);
