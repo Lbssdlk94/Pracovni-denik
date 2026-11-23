@@ -1,7 +1,7 @@
-import {parseAssistantCommand, contextualCommand} from './assistant-commands.js?v=assistant-work-v1';
-import {answerOffline} from './assistant-offline.js?v=assistant-work-v1';
+import {parseAssistantCommand, contextualCommand} from './assistant-commands.js?v=assistant-work-v2';
+import {answerOffline, queueOfflineWrite} from './assistant-offline.js?v=assistant-work-v2';
 import {peekCachedJobs} from './cloud.js?v=completion-v1';
-import {extractLocalCommand, localMinistral} from './assistant-local.js?v=assistant-work-v1';
+import {extractLocalCommand, localMinistral} from './assistant-local.js?v=assistant-work-v2';
 import {durationPickerMarkup, refreshDurationTotals} from './planning-fields.js?v=workspace-roles-v1';
 
 function esc(value){
@@ -135,6 +135,7 @@ function render(host, session, paint, api){
   const items = thread?.items||[];
   host.dataset.theme = resolvedTheme();
   bindKeyboard(host);
+  bindOnline(api, paint);
   const scroll = runtime.keepScroll;
   host.innerHTML = page(session, thread, items);
   const log = host.querySelector('.assistant-log');
@@ -215,6 +216,10 @@ function render(host, session, paint, api){
       const file = event.target.files?.[0];event.target.value='';
       if(file) readImportFile(file, field.value, api, paint);
     });
+    host.querySelector('[data-capture]')?.addEventListener('change', event=>{
+      const file = event.target.files?.[0];event.target.value='';
+      if(file) readImportFile(file, '', api, paint);
+    });
     host.querySelector('[data-voice]')?.addEventListener('click', ()=>toggleVoice(field, api, paint));
   }
   host.addEventListener('keydown', event=>{
@@ -253,7 +258,7 @@ function page(session, thread, items){
       <section class="assistant-chat" aria-label="Pracovní asistent">
         <div class="assistant-log">${welcome?welcomeBlock(name, tiles):messages}</div>
         <form class="assistant-composer">
-          <label class="assistant-clip" aria-label="Přidat přílohu">${clip()}<input data-file type="file" accept=".csv,.txt,.tsv,text/csv,text/plain"></label>
+          <label class="assistant-clip" aria-label="Přidat přílohu">${clip()}<input data-file type="file" accept=".csv,.txt,.tsv,text/csv,text/plain,image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.png,.heic,.heif"></label>
           <textarea rows="1" maxlength="500" aria-label="Příkaz" placeholder="Napište příkaz..."></textarea>
           <button type="button" data-voice aria-label="Hlasové zadání" aria-pressed="${runtime.listening}">${mic()}</button>
           ${runtime.busy?`<button type="button" data-stop aria-label="Zastavit">■</button>`:`<button type="submit" aria-label="Odeslat">${send()}</button>`}
@@ -309,6 +314,7 @@ function noteStage(thread){
     <header class="assistant-sheet-title"><h2>${esc(concept.title||'Návrh')}</h2><span class="assistant-pill is-concept">Koncept</span></header>
     <p>${esc(concept.summary||'')}</p>
     ${lines?`<ul>${lines}</ul>`:''}
+    ${concept.capture?`<label class="assistant-clip">Fotoaparát nebo galerie<input data-capture type="file" accept="image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.png,.heic,.heif"></label><p>Snímek se nahraje k zakázce. Co je na něm, neposuzuji. K protokolu se připojí až po dalším potvrzení.</p>`:''}
     <div class="assistant-concept-actions"><button type="button" data-cancel="${esc(confirm?.id||'')}" ${confirm?'':'disabled'}>Zrušit</button><button type="button" class="yes" data-confirm="${esc(confirm?.id||'')}" ${confirm?'':'disabled'}>Uložit návrh</button></div>
   </div>`;
 }
@@ -533,7 +539,14 @@ function mergeConcept(local, incoming, touched){
   if((local.terms||[]).length>(incoming.terms||[]).length) next.terms.push(...local.terms.slice(incoming.terms.length));
   return next;
 }
-function statusLabel(){return runtime.busy?'Pracuji':'Připraven k práci';}
+function pendingCount(){return (current()?.pending||[]).length;}
+function statusLabel(){
+  const waiting = pendingCount();
+  const offline = typeof navigator!=='undefined' && navigator.onLine===false;
+  if(runtime.busy) return 'Pracuji';
+  if(offline) return waiting?`Offline · ${waiting} čeká`:'Offline';
+  return waiting?`Připraven k práci · ${waiting} čeká`:'Připraven k práci';
+}
 function historyPopover(shown, total, thread){
   return `<div class="assistant-popover assistant-history" aria-label="Historie konverzací"><label class="assistant-search">Hledat<input data-query value="${esc(runtime.query)}" placeholder="Hledat konverzaci"></label><div class="assistant-thread-list">${shown.map(item=>`<div class="assistant-thread ${item.id===thread?.id?'is-current':''}"><button type="button" data-thread="${esc(item.id)}"><span>${esc(item.title)}</span><small>${esc(dayLabel(item.updatedAt))}</small></button><button type="button" data-rename="${esc(item.id)}" aria-label="Přejmenovat">✎</button><button type="button" data-delete="${esc(item.id)}" aria-label="Smazat konverzaci">×</button></div>`).join('')||'<p class="assistant-empty">Zatím tu žádný chat není.</p>'}${total>shown.length?`<p class="assistant-more">Dalších ${total-shown.length} je v zařízení.</p>`:''}</div></div>`;
 }
@@ -686,7 +699,7 @@ function push(session, role, text, extra={}){
 async function ask(text, api, paint, confirmId, cancelId, file, concept){
   const session = api.getSession();
   const clean = String(text||'').trim();
-  if((!confirmId&&!cancelId&&!clean&&!file)||runtime.busy) return;
+  if((!confirmId&&!cancelId&&!clean&&!file)||runtime.busy) return false;
   const thread = ensureThread(session);
   if(!confirmId&&!cancelId) push(session, 'user', file?`Soubor ${file.name}${clean?': '+clean:''}`:clean);
   const generation = ++runtime.generation;
@@ -694,44 +707,77 @@ async function ask(text, api, paint, confirmId, cancelId, file, concept){
   let commandText = clean;
   const alive = ()=>generation===runtime.generation;
   try{
-    if(session?.rolePreview?.active&&(confirmId||cancelId)){if(alive()) push(session,'assistant','V náhledu role změny neukládám.');return;}
+    if(session?.rolePreview?.active&&(confirmId||cancelId)){if(alive()) push(session,'assistant','V náhledu role změny neukládám.');return false;}
     if(!confirmId&&!cancelId&&!file&&runtime.mode==='local'){
       const model = localMinistral();
       if(!model.snapshot().installed){if(alive()) push(session,'assistant','Ministral 3B v prohlížeči není. Používám základní režim, který bere jen data z evidence.');}
       else{
         let answer = '';
         try{answer = await model.answer(clean);}catch(error){if(alive()) push(session,'assistant', (error?.message||'Ministral teď neodpověděl.')+' Pokračuji základním režimem.');answer='';}
-        if(!alive()) return;
+        if(!alive()) return false;
         const command = answer?extractLocalCommand(answer):'';
-        if(answer&&!command){push(session,'assistant', `${answer}\n\nTohle není údaj z deníku. Jména, hodiny a ceny beru jen z evidence.`);return;}
+        if(answer&&!command){push(session,'assistant', `${answer}\n\nTohle není údaj z deníku. Jména, hodiny a ceny beru jen z evidence.`);return false;}
         if(command){push(session,'assistant', `Rozumím tomu jako: ${command}`);commandText = command;}
       }
     }
-    if(!alive()) return;
+    if(!alive()) return false;
     if(!navigator.onLine && !confirmId && !cancelId){
-      if(file){push(session,'assistant','Soubor bez připojení neukládám. Až budete online, vložte ho znovu. Nic se teď nezměnilo.');return;}
+      if(file){push(session,'assistant','Soubor bez připojení neukládám. Až budete online, vložte ho znovu. Nic se teď nezměnilo.');return false;}
       const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
       const command = contextualCommand(parseAssistantCommand(commandText, today), thread.context);
+      const queued = queueOfflineWrite(thread.pending||[], {...command, text:commandText});
+      if(queued.queued||queued.duplicate){
+        thread.pending = queued.queue;
+        if(alive()) push(session,'assistant', queued.reply);
+        return false;
+      }
       let jobs = null;
       try{const cached = await peekCachedJobs(`/api/jobs?state=all&order=schedule&month=${today.slice(0,7)}`);jobs = cached?.jobs ?? null;}catch{jobs = null;}
       const tomorrowDate = new Date(today+'T12:00:00Z');tomorrowDate.setUTCDate(tomorrowDate.getUTCDate()+1);
       const local = answerOffline(command, {jobs, today, tomorrow:tomorrowDate.toISOString().slice(0,10)});
       if(alive()) push(session,'assistant', local.missing?local.reply+' Údaje jsou z poslední uložené kopie.':local.reply);
-      return;
+      return false;
     }
-    if(!navigator.onLine){if(alive()) push(session,'assistant','Potvrzení bez připojení neodešlu. Nic se neuložilo.');return;}
+    if(!navigator.onLine){if(alive()) push(session,'assistant','Potvrzení bez připojení neodešlu. Nic se neuložilo.');return false;}
     const data = await api.db.request('/api/assistant',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:commandText, mode:'basic', ...(thread.context?{context:thread.context}:{}), ...(file?{file}:{}), ...(confirmId?{confirmId}:{}), ...(cancelId?{cancelId}:{}), ...(concept?{concept}:{})})});
-    if(!alive()) return;
+    if(!alive()) return false;
     push(session,'assistant', data.reply||'Hotovo.', {confirm:data.confirm||null, suggestions:data.suggestions||[], cards:data.cards||[], concept:data.concept||null, context:data.context||thread.context});
     if(data.concept) adoptConcept(current(), data.concept);
     if(data.cards?.length&&!data.concept){runtime.mobileTab='result';runtime.resultFresh=true;}
     if(data.mutated){const live=current(); if(live){live.draftConcept=null;live.conceptTouched={};} runtime.detail=null; api.onChanged?.(data.mutated);}
+    return true;
   }catch(error){
-    if(!alive()) return;
+    if(!alive()) return false;
     const offline = !navigator.onLine||error?.status===0||/fetch|network|Failed/i.test(error?.message||'');
     const kept = current()?.draftConcept?' Rozpracovaný koncept zůstává v zařízení. Až se připojení vrátí, můžete ho upravit nebo uložit znovu.':'';
     push(session,'assistant', (offline?'Potřebná data nejsou v zařízení. Připojte se a příkaz zopakujte. Rozpracované změny deníku zůstávají beze změny.':(error?.message||'Asistent teď neodpověděl.'))+kept);
+    return false;
   }finally{if(alive()){runtime.busy=false;paint();}}
+}
+function bindOnline(api, paint){
+  runtime.api = api;
+  runtime.paint = paint;
+  if(runtime.onlineBound || typeof window==='undefined') return;
+  runtime.onlineBound = true;
+  window.addEventListener('online', ()=>{flushPending();});
+}
+async function flushPending(){
+  if(runtime.flushing || runtime.busy || typeof navigator==='undefined' || !navigator.onLine) return;
+  const thread = current();
+  const next = thread?.pending?.[0];
+  if(!next || !runtime.api || !runtime.paint) return;
+  runtime.flushing = true;
+  thread.pending = thread.pending.slice(1);
+  persist(runtime.api.getSession());
+  let ok = false;
+  try{ok = await ask(next.text, runtime.api, runtime.paint);}
+  finally{
+    runtime.flushing = false;
+    if(!ok){
+      const live = current();
+      if(live){live.pending = queueOfflineWrite(live.pending||[], next, {front:true}).queue; persist(runtime.api.getSession());}
+    }else if(navigator.onLine && current()?.pending?.length) flushPending();
+  }
 }
 function stop(){runtime.recognition?.stop();runtime.listening=false;}
 function toggleVoice(field, api, paint){
@@ -751,11 +797,32 @@ function toggleVoice(field, api, paint){
 }
 async function readImportFile(file, hint, api, paint){
   const name = file.name||'soubor';
-  if(/\.(pdf|xlsx|xls|doc|docx|png|jpe?g)$/i.test(name)){push(api.getSession(),'assistant','PDF, Excel a fotky zatím nečtu. Uložte tabulku jako CSV. Nic jsem neuložil.');paint();return;}
+  if(/^image\//.test(file.type)||/\.(png|jpe?g|heic|heif)$/i.test(name)) return uploadAssistantPhoto(file, api, paint);
+  if(/\.(pdf|xlsx|xls|doc|docx)$/i.test(name)){push(api.getSession(),'assistant','PDF a Excel nečtu. Uložte tabulku jako CSV. Fotografii vyberte jako obrázek, obsah snímku neposuzuji. Nic jsem neuložil.');paint();return;}
   if(file.size>100000){push(api.getSession(),'assistant','Soubor je větší než 100 kB. Rozdělte tabulku. Nic jsem neuložil.');paint();return;}
   let text = '';
   try{text = await file.text();}catch{push(api.getSession(),'assistant','Soubor se nepodařilo přečíst.');paint();return;}
   ask(hint||'Načti tento soubor.', api, paint, null, null, {name, text});
+}
+async function uploadAssistantPhoto(file, api, paint){
+  const session = api.getSession();
+  const live = current();
+  const jobId = live?.context?.jobId || live?.draftConcept?.jobId || '';
+  if(!jobId){push(session,'assistant','Nemám vybranou zakázku. Fotografii nikam neukládám a nepopisuji, co je na ní.');paint();return;}
+  if(typeof navigator!=='undefined' && navigator.onLine===false){push(session,'assistant','Fotografii bez připojení nenahrávám. Nic jsem nepřipojil a obsah snímku neposuzuji.');paint();return;}
+  const id = 'photo-'+crypto.randomUUID().replace(/-/g,'').slice(0,20);
+  const type = file.type==='image/png'?'image/png':file.type==='image/heic'||file.type==='image/heif'?file.type:'image/jpeg';
+  const capture = live?.draftConcept?.capture;
+  try{
+    await api.db.request('/api/jobs/'+encodeURIComponent(jobId)+'/service/photos/'+encodeURIComponent(id), {method:'PUT', headers:{'content-type':type, 'x-file-name':encodeURIComponent(file.name||'fotografie.jpg')}, body:file});
+    if(capture==='before'||capture==='after'){
+      try{await api.db.request('/api/jobs/'+encodeURIComponent(jobId)+'/photos/'+encodeURIComponent(id), {method:'PATCH', headers:{'content-type':'application/json'}, body:JSON.stringify({category:capture, note:'', version:1})});}catch{/* protokol se připojí i bez galerijní fáze */}
+    }
+    await ask('Připoj poslední fotografii k protokolu.', api, paint);
+  }catch(error){
+    push(session,'assistant', (error?.message||'Fotografii se nepodařilo nahrát.')+' Nic jsem nepřipojil a obsah snímku neposuzuji.');
+    paint();
+  }
 }
 function plus(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';}
 function chatIcon(){return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H10l-4 3v-3H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/></svg>';}

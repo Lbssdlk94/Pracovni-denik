@@ -275,6 +275,7 @@ async function run(env, ctx, m, h, command, today, options){
   if(!options.propose&&intent==='protocol.photo'&&params.jobId&&params.photoId) return commitPhoto(env, ctx, m, h, params);
   if(!options.propose&&intent==='diary.day'&&params.jobId&&Array.isArray(params.days)) return commitDiary(env, ctx, m, h, params);
   if(!options.propose&&intent==='dictionary.add'&&params.phrase) return commitDictionary(env, m, params);
+  if(intent==='dictionary.list') return listDictionary(env);
   if(!options.propose&&intent==='import.customers') return applyCustomerImport(env, m, h, params);
   if(!options.propose&&intent==='import.materials') return applyMaterialImport(env, m, h, params);
   if(intent==='unknown') return {reply:'Tomuhle příkazu nerozumím. Můžete zkusit některou z dostupných akcí.', suggestions:assistantSuggestions()};
@@ -797,6 +798,19 @@ async function commitProtocolReport(env, ctx, m, h, params){
   const service = await serviceGet(env, ctx, m, h, params.jobId);
   if(!service.ok) return {reply:blocked(service)||'Zakázku se nepodařilo otevřít. Nic jsem neuložil.'};
   const current = service.data;
+  const currentWork = String(current.report?.work||'').trim();
+  const nextWork = String(params.work||'').slice(0,4000).trim();
+  let workToSave = nextWork;
+  if(currentWork && nextWork && currentWork !== nextWork){
+    const extendsCurrent = nextWork.includes(currentWork);
+    if(currentWork.includes(nextWork) && !extendsCurrent) workToSave = currentWork;
+    else if(!extendsCurrent){
+      const author = await env.DB.prepare('SELECT updated_by FROM service_reports WHERE job_id=?').bind(params.jobId).first();
+      if(author?.updated_by && author.updated_by !== m.user_id){
+        return {reply:'Protokol mezitím obsahuje jiný text. Nic jsem nepřepsal. Otevřete aktuální zápis a diktujte znovu.', context:{jobId:params.jobId, customerName:current.job.customerName||'', protocol:{jobId:params.jobId, work:currentWork, materials:current.report?.materialItems||[], asked:[], history:[]}}};
+      }
+    }
+  }
   const merged = new Map((current.report?.materialItems||[]).map(line=>[line.itemId, {itemId:line.itemId, itemVersion:line.itemVersion, quantity:line.quantity}]));
   for(const line of params.materials||[]){
     if(!line?.itemId||!Number.isSafeInteger(line.itemVersion)||line.itemVersion<1) continue;
@@ -804,7 +818,7 @@ async function commitProtocolReport(env, ctx, m, h, params){
     if(Number(line.quantity)<=0){merged.delete(line.itemId); continue;}
     merged.set(line.itemId, {itemId:line.itemId, itemVersion:line.itemVersion, quantity:line.quantity});
   }
-  const result = await callJson(()=>handleServiceWork(write('/api/jobs/'+encodeURIComponent(params.jobId)+'/service','PUT', protocolBody(current, keptReport(current, {work:String(params.work||'').slice(0,4000), materialItems:[...merged.values()]})), h._headers), env, ctx, m, h));
+  const result = await callJson(()=>handleServiceWork(write('/api/jobs/'+encodeURIComponent(params.jobId)+'/service','PUT', protocolBody(current, keptReport(current, {work:workToSave, materialItems:[...merged.values()]})), h._headers), env, ctx, m, h));
   if(!result.ok) return {reply:result.data.error||'Protokol se nepodařilo uložit. Nic dalšího jsem nezměnil.'};
   const saved = result.data.report?.materialItems||[];
   return {reply:`Servisní protokol „${current.job.title}“ je uložený ke kontrole. Katalogové položky: ${saved.length}. Stejné množství není zapsané ještě jednou v textu materiálu.`, mutated:'jobs', context:{jobId:params.jobId, customerName:current.job.customerName||'', protocol:{jobId:params.jobId, work:params.work, materials:params.materials, asked:[], history:[]}}};
@@ -836,6 +850,12 @@ async function commitDictionary(env, m, params){
   const next = [...current.filter(entry=>entry.phrase.toLocaleLowerCase('cs')!==params.phrase.toLocaleLowerCase('cs')), {phrase:params.phrase, replacement:params.replacement}].slice(-80);
   await env.DB.prepare("INSERT INTO settings(key,value,version) VALUES('assistant-dictionary',?,1) ON CONFLICT(key) DO UPDATE SET value=excluded.value, version=settings.version+1").bind(JSON.stringify(next)).run();
   return {reply:`Slovník teď zná „${params.phrase}“ jako „${params.replacement}“. Další příkaz se přeloží až na serveru, do katalogu se nic nezaložilo.`, mutated:'settings'};
+}
+async function listDictionary(env){
+  const entries = await dictionaryEntries(env);
+  const rows = entries.map(entry=>`• ${entry.phrase} → ${entry.replacement}`);
+  const body = rows.length?rows.join('\n'):'Ve firemním slovníku zatím nic není.';
+  return {reply:`Firemní slovník:\n${body}\nVestavěné výrazy třicet dvojka, PE 25 a T-kus platí pořád. Model se nepřeučuje. Novou položku katalogu jsem nezaložil.`};
 }
 async function crewOnRealization(env, m, h, today){
   const listed = await jobsGet(env,m,h,'/api/jobs?state=in_progress&type=installation&assignee='+encodeURIComponent(m.user_id));
@@ -948,7 +968,17 @@ async function commitDiary(env, ctx, m, h, params){
 async function proposePhoto(env, ctx, m, h, params, options){
   if(!writer(m)) return {reply:'Fotografii k protokolu může připojit pracovník nebo správce. Nic jsem nepřipojil.'};
   if(options.preview) return {reply:'V náhledu role fotografii nepřipojuji.'};
-  if(params.when!=='latest') return {reply:'Novou fotku z věty nevyfotím a nepopisuji, co je na ní. Přidejte ji z fotoaparátu nebo galerie. Nic jsem nepřipojil.'};
+  if(params.when!=='latest'){
+    const capture = params.when==='before'||params.when==='after'?params.when:'gallery';
+    const refusal = 'Novou fotku z věty nevyfotím a nepopisuji, co je na ní. Vyberte ji z fotoaparátu nebo galerie. Nic jsem nepřipojil.';
+    const concept = workConcept('photo','Fotografie', refusal, capture==='before'?['Stav před opravou']:capture==='after'?['Stav po opravě']:['Fotoaparát nebo galerie']);
+    concept.capture = capture;
+    const picked = await resolveProtocolJob(env, m, h, params, options, {jobId:params.jobId||''});
+    if(picked.choices) return {reply:`${refusal}\nNení jednoznačně aktivní zakázka. Fotografii nepřipojuji.\n${lines(picked.choices, jobLine, '')}`, confirm:null, concept};
+    if(picked.error||!picked.job) return {reply:refusal, confirm:null, concept};
+    concept.jobId = picked.job.id;
+    return {reply:refusal, confirm:null, concept, context:{jobId:picked.job.id, customerName:picked.job.customerName||'', photoCapture:capture}};
+  }
   const picked = await resolveProtocolJob(env, m, h, params, options, {jobId:params.jobId||''});
   if(picked.choices) return {reply:`Není jednoznačně aktivní zakázka. Fotografii nepřipojuji.\n${lines(picked.choices, jobLine, '')}`};
   if(picked.error||!picked.job) return {reply:picked.error||'Zakázku jsem nenašel. Fotografii jsem nepřipojil.'};

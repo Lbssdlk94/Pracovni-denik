@@ -685,6 +685,10 @@ test('A confirmed defect, visit, photo and realization stay on one job and do no
     const invented = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Přidej fotku opraveného ventilu.'}));
     assert.equal(invented.body.confirm, null);
     assert.match(invented.body.reply, /nevyfotím|nepopisuji/);
+    assert.equal(invented.body.concept.kind, 'photo');
+    assert.equal(invented.body.concept.capture, 'after');
+    assert.equal(invented.body.context.jobId, 'job-live');
+    assert.equal(env.sqlite.prepare("SELECT count(*) n FROM service_photos").get().n, 0);
     env.sqlite.prepare("INSERT INTO service_photos(id,job_id,object_key,mime_type,size,name,sha256,status,created_at,created_by) VALUES('photo-live','job-live','private/photo-live','image/jpeg',6,'ventil.jpg','hash','ready',1,'owner-id')").run();
     const proposedPhoto = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Připoj poslední fotografii k protokolu.'}));
     assert.ok(proposedPhoto.body.confirm?.id);
@@ -738,6 +742,11 @@ test('A confirmed defect, visit, photo and realization stay on one job and do no
     assert.match(workerWord.body.reply, /správce|vlastník/);
     assert.equal(workerWord.body.confirm, null);
     assert.equal(env.sqlite.prepare("SELECT count(*) n FROM settings WHERE key='assistant-dictionary'").get().n, 0);
+    const emptyList = await json(await call(env, '/api/assistant', people.worker, 'POST', {text:'Ukaž slovník.'}));
+    assert.equal(emptyList.status, 200, JSON.stringify(emptyList.body));
+    assert.equal(emptyList.body.confirm ?? null, null);
+    assert.match(emptyList.body.reply, /zatím nic není/);
+    assert.match(emptyList.body.reply, /nepřeučuje/);
     const proposedWord = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Do slovníku přidej výraz kohouty jako ventily.'}));
     assert.equal(proposedWord.body.concept.kind, 'dictionary');
     assert.equal(env.sqlite.prepare("SELECT count(*) n FROM settings WHERE key='assistant-dictionary'").get().n, 0);
@@ -752,6 +761,11 @@ test('A confirmed defect, visit, photo and realization stay on one job and do no
     assert.equal(slang.body.concept.materials[0].quantity, '4');
     assert.equal(env.sqlite.prepare('SELECT count(*) n FROM material_items').get().n, materialsAtStart);
     assert.doesNotMatch(env.sqlite.prepare('SELECT work FROM service_reports WHERE job_id=?').get('job-live').work, /kohout|bylo použito/);
+    const listed = await json(await call(env, '/api/assistant', people.worker, 'POST', {text:'Ukaž slovník.'}));
+    assert.equal(listed.body.confirm ?? null, null);
+    assert.match(listed.body.reply, /kohouty → ventily/);
+    assert.match(listed.body.reply, /nepřeučuje/);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM material_items').get().n, materialsAtStart);
     assert.equal(mailCount(env), 0);
   }finally{env.sqlite.close();}
 });
@@ -778,6 +792,49 @@ test('Completion confirms only a protocol without open defects and never sends a
     assert.equal(mailCount(env), 0);
   }finally{env.sqlite.close();}
 });
+
+test('A second worker does not overwrite a different protocol and a chosen photo uses the existing upload', async()=>{
+  const env = environment();
+  try{
+    await ready(env);
+    await call(env, '/api/invitations', people.owner, 'POST', {email:people.worker.email, role:'worker'});
+    await call(env, '/api/me', people.worker);
+    const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    const created = await call(env, '/api/jobs/job-shared', people.owner, 'PUT', {version:0, title:'Společný servis', status:'in_progress', jobType:'service', dueDate:today, customerName:'Novák', address:'Zahradní 1', city:'Brno', incompleteReason:'', assignedTo:people.worker.id, assignedTos:[people.worker.id]});
+    assert.equal(created.status, 200, await created.clone().text());
+    const spoken = 'Na zakázce jsme vyměnili 4 ventily, 2 postřikovače, opravili prasklé potrubí a nastavili třetí sekci.';
+    const proposed = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:spoken, context:{jobId:'job-shared'}}));
+    assert.equal(proposed.status, 200, JSON.stringify(proposed.body));
+    const first = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:proposed.body.confirm.id, concept:proposed.body.concept}));
+    assert.equal(first.status, 200, JSON.stringify(first.body));
+    const kept = env.sqlite.prepare('SELECT work FROM service_reports WHERE job_id=?').get('job-shared').work;
+    const other = await json(await call(env, '/api/assistant', people.worker, 'POST', {text:'Použili jsme 2 ventily.', context:{jobId:'job-shared'}}));
+    assert.ok(other.body.confirm?.id);
+    const blocked = await json(await call(env, '/api/assistant', people.worker, 'POST', {confirmId:other.body.confirm.id, concept:other.body.concept}));
+    assert.equal(blocked.status, 200, JSON.stringify(blocked.body));
+    assert.match(blocked.body.reply, /nepřepsal|jiný text/);
+    assert.equal(env.sqlite.prepare('SELECT work FROM service_reports WHERE job_id=?').get('job-shared').work, kept);
+    const before = await json(await call(env, '/api/assistant', people.worker, 'POST', {text:'Ulož tuto fotku jako stav před opravou.', context:{jobId:'job-shared'}}));
+    assert.equal(before.body.confirm ?? null, null);
+    assert.equal(before.body.concept.capture, 'before');
+    assert.match(before.body.reply, /nevyfotím|nepopisuji/);
+    const bytes = new Uint8Array([255,216,255,219,0,1,2,3]);
+    const uploaded = await api(new Request('https://zavlahy.test/api/jobs/job-shared/service/photos/photo-shot', {method:'PUT', headers:{'x-zavlahy-request':'1','x-workspace-client-version':'shared-directory-v1','oai-authenticated-user-id':people.worker.id,'oai-authenticated-user-email':people.worker.email,'content-type':'image/jpeg','x-file-name':'pred.jpg'}, body:bytes}), env, ctx);
+    assert.equal(uploaded.status, 200, await uploaded.clone().text());
+    const phased = await call(env, '/api/jobs/job-shared/photos/photo-shot', people.worker, 'PATCH', {category:'before', note:'', version:1});
+    assert.equal(phased.status, 200, await phased.clone().text());
+    assert.equal(env.sqlite.prepare('SELECT gallery_category FROM service_photos WHERE id=?').get('photo-shot').gallery_category, 'before');
+    const attach = await json(await call(env, '/api/assistant', people.worker, 'POST', {text:'Připoj poslední fotografii k protokolu.', context:{jobId:'job-shared'}}));
+    assert.ok(attach.body.confirm?.id);
+    assert.match(attach.body.reply, /neposuzuji/);
+    assert.equal(env.sqlite.prepare('SELECT photo_ids FROM service_reports WHERE job_id=?').get('job-shared').photo_ids, '[]');
+    const saved = await json(await call(env, '/api/assistant', people.worker, 'POST', {confirmId:attach.body.confirm.id}));
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    assert.equal(env.sqlite.prepare('SELECT photo_ids FROM service_reports WHERE job_id=?').get('job-shared').photo_ids, '["photo-shot"]');
+    assert.equal(env.sqlite.prepare('SELECT work FROM service_reports WHERE job_id=?').get('job-shared').work, kept);
+  }finally{env.sqlite.close();}
+});
+
 
 
 

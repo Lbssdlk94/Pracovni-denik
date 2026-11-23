@@ -4,6 +4,7 @@ import {attendanceHours} from './attendance-model.js?v=workspace-roles-v1';
 const STATUS = {planned:'plánovaná', on_way:'na cestě', in_progress:'probíhá', done:'hotová', incomplete:'nedokončená'};
 const missing = 'Tento přehled v zařízení nemám. Připojte se. Nic jsem si nevymyslel.';
 const noWrite = 'Zápis bez připojení neukládám. Až budete online, příkaz zopakujte. Nic se teď nezměnilo.';
+const writeIntents = ['jobs.create','jobs.plan','jobs.followup','jobs.complete','diary.day','defects.track','dictionary.add','protocol.draft','protocol.report','protocol.note','protocol.photo','jobs.reschedule','jobs.assign','jobs.depart','jobs.status','attendance.arrive','attendance.leave','materials.add'];
 
 function lines(items, render, empty){
   if(!items.length) return empty;
@@ -14,10 +15,20 @@ function jobLine(job){
   return `• ${when?when+' · ':''}${job.title}${job.customerName?' · '+job.customerName:''} (${STATUS[job.status]||job.status||'stav'})`;
 }
 
+export function queueOfflineWrite(queue, command, options = {}){
+  const list = (Array.isArray(queue)?queue:[]).map(item=>({text:String(item?.text||'').trim(), intent:item?.intent||''})).filter(item=>item.text);
+  const text = String(command?.text||'').trim().slice(0,500);
+  if(!text || !writeIntents.includes(command?.intent)) return {queued:false, duplicate:false, queue:list};
+  if(list.some(item=>item.text===text)) return {queued:false, duplicate:true, queue:list, reply:'Ten příkaz už ve frontě je. Zápis bez připojení neukládám. Až budete online, navrhnu ho znovu. Nic se teď nezměnilo.'};
+  const item = {text, intent:command.intent};
+  const next = options.front ? [item, ...list].slice(0,20) : [...list, item].slice(-20);
+  return {queued:true, duplicate:false, queue:next, reply:'Příkaz jsem si schoval do fronty. Zápis bez připojení neukládám. Až budete online, navrhnu ho znovu a počkám na potvrzení. Nic se teď nezměnilo.'};
+}
 export function answerOffline(command, snapshot = {}){
   const intent = command?.intent;
   const jobs = Array.isArray(snapshot.jobs) ? snapshot.jobs : null;
-  if(['jobs.create','jobs.plan','jobs.followup','jobs.complete','diary.day','defects.track','dictionary.add','protocol.draft','protocol.report','protocol.note','protocol.photo','jobs.reschedule','jobs.assign','jobs.depart','jobs.status','attendance.arrive','attendance.leave','materials.add'].includes(intent)) return {reply:noWrite, missing:true};
+  if(intent==='dictionary.list') return {reply:'Firemní slovník v zařízení nemám. Připojte se. Vestavěné výrazy třicet dvojka, PE 25 a T-kus platí pořád. Nic jsem si nevymyslel.', missing:true};
+  if(writeIntents.includes(intent)) return {reply:noWrite, missing:true};
   if(intent==='refused.destructive') return {reply:'Smazání nebo zrušení tady nespouštím, aby se nic omylem neztratilo. Použijte stávající obrazovku záznamu.'};
   if(intent==='unknown'||intent==='help') return {reply:'Offline umím jen to, co je v telefonu uložené: dnešní a zítřejší zakázky, nedokončené a čekající servis. Hodiny zakázky a docházku bez uloženého přehledu nepočítám.'};
   if(intent==='jobs.hours'||intent==='jobs.realizationHours'||intent==='attendance.hours'||intent==='attendance.report'||intent==='materials.search'){

@@ -220,6 +220,7 @@ export function parseAssistantCommand(input, today){
   if(!text) return unknown;
   const dictionary = parseDictionaryCommand(original);
   if(dictionary) return {intent:'dictionary.add', params:dictionary, text:original};
+  if(parseDictionaryList(original)) return {intent:'dictionary.list', params:{}, text:original};
   if(/\b(smaz|odstran|vymaz|zrus zakaz|zrus protokol)\b/.test(text)) return {intent:'refused.destructive', params:{}, text:original};
   if(/^(napoveda|pomoc|co umis|co umite|jak fungujes)\b/.test(text)) return {intent:'help', params:{}, text:original};
   if(/jsem na ceste/.test(text)) return {intent:'jobs.depart', params:{query:softenName(capture(original, [/k\s+(.+)/iu])), current:/\bteto\b|\bzakaznikovi\b/.test(text)}, text:original};
@@ -689,6 +690,11 @@ export function parseDictionaryCommand(original){
   const replacement = match[2].trim().slice(0,80);
   if(phrase.length<2||replacement.length<2) return null;
   return {phrase, replacement};
+}
+export function parseDictionaryList(original){
+  const folded = foldCzech(original);
+  if(!/slovnik/.test(folded)) return false;
+  return /\b(ukaz|vypis|seznam|jake|co je)\b/.test(folded);
 }
 export function applyAssistantDictionary(text, entries){
   let out = String(text||'');

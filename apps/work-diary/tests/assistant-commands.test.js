@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseAssistantCommand, contextualCommand, assistantModeInfo, ASSISTANT_MODES, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, foldCzech, nextWeekday, parseMaterialAddition, planMaterialLines, weekdayDate, weekSpan, parseServiceDictation, reviseServiceDraft, matchProtocolQuery, annotateProtocolMaterials, serviceDraftQuestions, applyAssistantDictionary, followUpDate, mentionedWorkDate} from '../web/assistant-commands.js';
-import {answerOffline} from '../web/assistant-offline.js';
+import {answerOffline, queueOfflineWrite} from '../web/assistant-offline.js';
 
 const today = '2026-11-21';
 const intent = text => parseAssistantCommand(text, today).intent;
@@ -287,6 +287,13 @@ test('Defects, visits, realization days, photos and the garden dictionary stay c
   const dictionary = parseAssistantCommand('Do slovníku přidej výraz kohouty jako ventily.', today);
   assert.equal(dictionary.intent, 'dictionary.add');
   assert.deepEqual(dictionary.params, {phrase:'kohouty', replacement:'ventily'});
+  assert.equal(intent('Ukaž slovník.'), 'dictionary.list');
+  assert.equal(intent('Vypiš slovník.'), 'dictionary.list');
+  assert.equal(intent('Jaké výrazy jsou ve slovníku?'), 'dictionary.list');
+  const listed = answerOffline(parseAssistantCommand('Ukaž slovník.', today), {jobs:[], today});
+  assert.equal(listed.missing, true);
+  assert.match(listed.reply, /třicet dvojka/);
+  assert.doesNotMatch(listed.reply, /neukládám/);
   assert.equal(applyAssistantDictionary('Použili jsme 4 kohouty.', [{phrase:'kohouty', replacement:'ventily'}]), 'Použili jsme 4 ventily.');
   assert.equal(intent('Kolik hodin jsme dnes strávili na zakázce?'), 'jobs.hours');
   assert.equal(parseAssistantCommand('Kolik hodin jsme dnes strávili na zakázce?', today).params.current, true);
@@ -301,4 +308,13 @@ test('Defects, visits, realization days, photos and the garden dictionary stay c
   assert.equal(crew.missing, true);
   assert.match(crew.reply, /nemám/);
   assert.doesNotMatch(crew.reply, /neukládám/);
+  const queued = queueOfflineWrite([], parseAssistantCommand(SPOKEN_WORK, today));
+  assert.equal(queued.queued, true);
+  assert.equal(queued.queue.length, 1);
+  assert.match(queued.reply, /neukládám/);
+  assert.match(queued.reply, /potvrzení/);
+  const again = queueOfflineWrite(queued.queue, parseAssistantCommand(SPOKEN_WORK, today));
+  assert.equal(again.duplicate, true);
+  assert.equal(again.queue.length, 1);
+  assert.equal(queueOfflineWrite([], parseAssistantCommand('Co máme dnes za práci?', today)).queued, false);
 });

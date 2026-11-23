@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import PhotosUI
 
 final class APIAssistantMemory: ObservableObject {
     struct Item: Codable, Identifiable, Equatable {
@@ -21,9 +22,11 @@ final class APIAssistantMemory: ObservableObject {
     }
     private struct Saved: Codable { var threads: [Thread]; var activeID: String; var tab: String }
     private static let key = "pd.assistant.memory.v1"
+    private static let pendingKey = "pd.assistant.pending.v1"
     @Published var threads: [Thread] = []
     @Published var activeID = ""
     @Published var tab = "chat"
+    @Published var pendingCount = 0
     var active: Thread { threads.first { $0.id == activeID } ?? threads[0] }
     init() {
         if let data = UserDefaults.standard.data(forKey: Self.key), let saved = try? JSONDecoder().decode(Saved.self, from: data), !saved.threads.isEmpty {
@@ -31,6 +34,7 @@ final class APIAssistantMemory: ObservableObject {
             activeID = saved.threads.contains { $0.id == saved.activeID } ? saved.activeID : saved.threads[0].id
             tab = saved.tab == "result" ? "result" : "chat"
         } else { openFresh() }
+        pendingCount = Self.loadPending().count
     }
     func update(_ body: (inout Thread) -> Void) {
         guard let index = threads.firstIndex(where: { $0.id == activeID }) else { return }
@@ -87,6 +91,24 @@ final class APIAssistantMemory: ObservableObject {
         setContext(context)
     }
     private func openFresh() { let thread = Thread(); threads = [thread]; activeID = thread.id }
+    func enqueuePending(_ text: String) {
+        let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        var list = Self.loadPending()
+        if !list.contains(clean) { list.append(clean) }
+        if list.count > 20 { list = Array(list.suffix(20)) }
+        UserDefaults.standard.set(list, forKey: Self.pendingKey)
+        pendingCount = list.count
+    }
+    func takePending() -> String? {
+        var list = Self.loadPending()
+        guard !list.isEmpty else { pendingCount = 0; return nil }
+        let first = list.removeFirst()
+        UserDefaults.standard.set(list, forKey: Self.pendingKey)
+        pendingCount = list.count
+        return first
+    }
+    private static func loadPending() -> [String] { UserDefaults.standard.stringArray(forKey: pendingKey) ?? [] }
     private func persist() {
         let saved = Saved(threads: threads, activeID: activeID, tab: tab)
         if let data = try? JSONEncoder().encode(saved) { UserDefaults.standard.set(data, forKey: Self.key) }
@@ -101,6 +123,8 @@ struct APIAssistantWorkspace: View {
     @FocusState private var focused: Bool
     @State private var busy = false
     @State private var history = false
+    @State private var pickedPhoto: PhotosPickerItem?
+    @State private var showCamera = false
     private var wide: Bool { size == .regular }
     private var concept: APIValue {
         get { memory.active.concept }
@@ -125,13 +149,30 @@ struct APIAssistantWorkspace: View {
         .background(DiaryStyle.background)
         .safeAreaInset(edge: .bottom, spacing: 0) { if !wide { composer } }
         .sheet(isPresented: $history) { historySheet }
+        .onChange(of: store.online) { _, online in if online { Task { await flushPending() } } }
+        .task { if store.online { await flushPending() } }
+        .onChange(of: pickedPhoto) { _, item in
+            guard let item else { return }
+            Task {
+                if let bytes = try? await item.loadTransferable(type: Data.self) { await uploadCaptured(bytes) }
+                pickedPhoto = nil
+            }
+        }
+        .sheet(isPresented: $showCamera) { APICamera { bytes in Task { await uploadCaptured(bytes) } } }
+    }
+    private var statusLine: String {
+        let place = memory.active.context["customerName"].string
+        let job = place.isEmpty ? "Bez vybrané zakázky" : place
+        let mode = store.online ? "Základní režim" : "Offline"
+        let commands = memory.pendingCount > 0 ? " · příkazy \(memory.pendingCount)" : ""
+        return "\(job) · \(mode) · fronta \(store.outbox.count)\(commands)"
     }
     private var bar: some View {
         HStack(spacing: 0) {
             Button { dismiss() } label: { Image(systemName: "xmark") }.frame(width: 44, height: 44).accessibilityLabel("Zavřít")
             Text("Asistent").font(.headline).lineLimit(1)
             Spacer(minLength: 4)
-            Text(store.online ? "Základní režim" : "Offline").font(.caption2.weight(.semibold)).foregroundStyle(DiaryStyle.accent)
+            Text(statusLine).font(.caption2).foregroundStyle(DiaryStyle.accent).lineLimit(2).minimumScaleFactor(0.7)
             Button { history = true } label: { Image(systemName: "clock") }.frame(width: 44, height: 44).accessibilityLabel("Historie")
             Button { memory.startNew() } label: { Image(systemName: "square.and.pencil") }.frame(width: 44, height: 44).accessibilityLabel("Nový chat")
             Button { dismiss() } label: { Image(systemName: "chevron.down") }.frame(width: 44, height: 44).accessibilityLabel("Minimalizovat")
@@ -224,6 +265,13 @@ struct APIAssistantWorkspace: View {
                 Text("Koncept").font(.caption.weight(.bold)).padding(.horizontal, 8).padding(.vertical, 4).background(DiaryStyle.soft, in: Capsule())
             }
             Text(concept["summary"].string).font(.subheadline)
+            if ["before", "after", "gallery"].contains(concept["capture"].string) {
+                PhotosPicker(selection: $pickedPhoto, matching: .images) { Label("Vybrat z galerie", systemImage: "photo") }.frame(minHeight: 44)
+                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                    Button { showCamera = true } label: { Label("Vyfotit", systemImage: "camera") }.frame(minHeight: 44)
+                }
+                Text("Snímek se nahraje k zakázce a k protokolu se připojí až po potvrzení. Co je na něm, neposuzuji.").font(.caption).foregroundStyle(.secondary)
+            }
             ForEach(Array(concept["lines"].array.enumerated()), id: \.offset) { _, line in
                 Text(line.string).font(.subheadline)
             }
@@ -324,13 +372,23 @@ struct APIAssistantWorkspace: View {
     private func send() async {
         let text = memory.active.draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !busy else { return }
+        busy = true
+        defer { busy = false }
+        await deliver(text)
+    }
+    private func deliver(_ text: String) async {
         let notes = memory.active.concept["notes"].string
         memory.syncPlanFromConcept()
         memory.append(text, mine: true)
         memory.setDraft("")
         memory.setNotice("")
-        busy = true
-        defer { busy = false }
+        if !store.online {
+            memory.enqueuePending(text)
+            let message = "Příkaz jsem si schoval. Zápis bez připojení neukládám. Až budete online, navrhnu ho znovu a počkám na potvrzení. Nic se teď neuložilo."
+            memory.append(message, mine: false)
+            memory.setNotice(message)
+            return
+        }
         do {
             var body: APIValue = .object(["text": .s(text), "mode": .s("basic")])
             if !memory.active.context.isNull { body["context"] = memory.active.context }
@@ -346,10 +404,46 @@ struct APIAssistantWorkspace: View {
             }
             memory.setConfirm(response["confirm"]["id"].string)
         } catch {
+            if !store.online { memory.enqueuePending(text) }
             let shown = ((error as? LocalizedError)?.errorDescription ?? error.localizedDescription).trimmingCharacters(in: .whitespacesAndNewlines)
             let message = (shown.isEmpty ? "Server neposlal podrobnost." : shown) + (memory.active.concept.isNull ? "" : " Rozpracovaný koncept zůstává v iPhonu.")
             memory.append(message, mine: false)
             memory.setNotice(message)
+        }
+    }
+    private func flushPending() async {
+        guard store.online, !busy, let text = memory.takePending() else { return }
+        memory.setDraft(text)
+        await send()
+        if store.online, memory.pendingCount > 0 { await flushPending() }
+    }
+    private func uploadCaptured(_ bytes: Data) async {
+        let jobId = concept["jobId"].string.isEmpty ? memory.active.context["jobId"].string : concept["jobId"].string
+        guard !jobId.isEmpty else {
+            memory.append("Nemám vybranou zakázku. Fotografii nikam neukládám a nepopisuji, co je na ní.", mine: false)
+            return
+        }
+        guard store.online else {
+            memory.append("Fotografii bez připojení nenahrávám. Nic jsem nepřipojil a obsah snímku neposuzuji.", mine: false)
+            return
+        }
+        guard !busy else { return }
+        busy = true
+        defer { busy = false }
+        do {
+            let type = bytes.count > 3 && bytes[0] == 137 && bytes[1] == 80 && bytes[2] == 78 && bytes[3] == 71 ? "image/png" : "image/jpeg"
+            let prepared = try APIImage.prepared(bytes, type: type)
+            let id = UUID().uuidString
+            let file = "fotografie." + prepared.extensionName
+            try await store.upload("/api/jobs/\(jobId)/service/photos/\(id)", bytes: prepared.data, type: prepared.type, headers: ["x-file-name": file])
+            let capture = concept["capture"].string
+            if capture == "before" || capture == "after" {
+                _ = try? await store.write("/api/jobs/\(jobId)/photos/\(id)", method: "PATCH", body: .object(["category": .s(capture), "note": .s(""), "version": .n(1)]))
+            }
+            await deliver("Připoj poslední fotografii k protokolu.")
+        } catch {
+            let shown = ((error as? LocalizedError)?.errorDescription ?? error.localizedDescription).trimmingCharacters(in: .whitespacesAndNewlines)
+            memory.append((shown.isEmpty ? "Fotografii se nepodařilo nahrát." : shown) + " Nic jsem nepřipojil a obsah snímku neposuzuji.", mine: false)
         }
     }
     private func confirm() async {
