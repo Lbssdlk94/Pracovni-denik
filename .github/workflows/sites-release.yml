@@ -1,0 +1,95 @@
+name: Verify and prepare both Sites releases
+
+# This workflow prepares immutable, separate artifacts. It deliberately does
+# not claim to publish: ChatGPT Sites has no configured GitHub Actions deploy API.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/work-diary/**'
+      - 'packages/platform/**'
+      - '.github/workflows/sites-release.yml'
+  pull_request:
+    paths:
+      - 'apps/work-diary/**'
+      - 'packages/platform/**'
+      - '.github/workflows/sites-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sites-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-and-package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/work-diary/package-lock.json
+      - name: Install exact dependencies
+        run: npm ci --prefix apps/work-diary
+      - name: Verify application, regression tests, compiled Worker and isolated DB
+        working-directory: apps/work-diary
+        run: npm run verify:release
+      - name: Verify standalone unbound Worker artifact
+        working-directory: apps/work-diary
+        run: node scripts/validate-artifact.mjs --allow-unbound
+      - name: Prepare separate packages with provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release/zavlaha release/garden
+          # Závlaha: complete compiled bundle, still unbound to an existing Site.
+          cp -R apps/work-diary/dist/. release/zavlaha/
+          # Garden: SOURCE frontend only. Do not copy the Závlaha Worker,
+          # .openai directory, DB migrations, credentials or installation IDs.
+          cp -R apps/work-diary/web release/garden/
+          cat > release/zavlaha/RELEASE-INFO.txt <<EOF
+          GitHub commit: ${GITHUB_SHA}
+          Target: Dr. Zavlaha
+          Contents: compiled frontend + Worker + migration sources
+          Status: BUILD ONLY, NOT DEPLOYED
+          Before deployment: preserve the existing Site project ID,
+          installation identity, production D1/R2 bindings and secrets.
+          Verify backup and migration compatibility. Do not create fresh DB.
+          EOF
+          cat > release/garden/RELEASE-INFO.txt <<EOF
+          GitHub commit: ${GITHUB_SHA}
+          Target: Dr. Garden
+          Contents: web frontend source only
+          Status: BUILD ONLY, NOT DEPLOYED
+          Merge into existing Garden distribution and rebuild with Garden's
+          own Worker, Site project ID, installation identity, D1/R2 and secrets.
+          Do not copy Závlaha Worker/migrations/hosting settings into Garden.
+          EOF
+          tar -czf zavlaha-sites-release.tar.gz -C release/zavlaha .
+          tar -czf garden-frontend-only.tar.gz -C release/garden .
+          sha256sum zavlaha-sites-release.tar.gz garden-frontend-only.tar.gz > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sites-zavlaha-${{ github.sha }}
+          path: zavlaha-sites-release.tar.gz
+          retention-days: 14
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sites-garden-frontend-${{ github.sha }}
+          path: garden-frontend-only.tar.gz
+          retention-days: 14
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sites-release-checksums-${{ github.sha }}
+          path: SHA256SUMS.txt
+          retention-days: 14
+          if-no-files-found: error
