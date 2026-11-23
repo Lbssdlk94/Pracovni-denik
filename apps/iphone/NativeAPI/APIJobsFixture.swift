@@ -20,7 +20,8 @@ enum APIJobsFixture {
     static func filter(_ source:[APIValue],query:[String:String],userID:String,manager:Bool)->[APIValue]{
         source.filter{job in
             if !manager,job["assignedTo"].string != userID,!job["assignedTos"].array.contains(.s(userID)){return false}
-            if let state=query["state"],state != "all",state != "active",job["status"].string != state{return false}
+            if let phase=query["phase"],!phase.isEmpty,!APIJobsPresentation.phaseMatches(job,phase){return false}
+            if let state=query["state"],state != "all",state != "active",!state.hasPrefix("phase-"),job["status"].string != state{return false}
             if query["state"]=="active",job["status"].string=="done"{return false}
             if let kind=query["type"],job["jobType"].string != kind{return false}
             if let person=query["assignee"],job["assignedTo"].string != person,!job["assignedTos"].array.contains(.s(person)){return false}

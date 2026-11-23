@@ -2,9 +2,11 @@ import SwiftUI
 
 struct APIJobStatusBadge:View {
     let status:String
+    var label:String? = nil
+    private var text:String{label ?? APIFormat.status(status)}
     private var tint:Color{switch status{case "done":return DiaryStyle.accent;case "on_way":return .blue;case "in_progress":return DiaryStyle.accent;default:return DiaryStyle.warning}}
     private var symbol:String{switch status{case "done":return "checkmark.circle";case "on_way":return "location";case "in_progress":return "play.circle";default:return "clock"}}
-    var body:some View{Label(APIFormat.status(status),systemImage:symbol).font(.caption.weight(.semibold)).padding(.horizontal,10).padding(.vertical,6).foregroundStyle(tint).background(tint.opacity(0.12),in:Capsule()).accessibilityLabel("Stav zakázky: "+APIFormat.status(status))}
+    var body:some View{Label(text,systemImage:symbol).font(.caption.weight(.semibold)).padding(.horizontal,10).padding(.vertical,6).foregroundStyle(tint).background(tint.opacity(0.12),in:Capsule()).accessibilityLabel("Stav zakázky: "+text)}
 }
 struct APIJobAvatarStack:View {
     let people:[APIValue]
@@ -32,7 +34,7 @@ struct APIJobCompactHeader:View {
         }.frame(maxWidth:.infinity,alignment:.leading)
     }
     @ViewBuilder private var tags:some View {
-        APIJobStatusBadge(status:job["status"].string)
+        APIJobStatusBadge(status:job["status"].string, label:APIJobsPresentation.statusText(job))
         if let type=["service":"Servis","installation":"Realizace","survey":"Zaměření"][job["jobType"].string]{Text(type).font(.caption.weight(.semibold)).padding(.horizontal,10).padding(.vertical,6).background(DiaryStyle.soft,in:Capsule())}
         if let discipline=["irrigation":"Závlaha","garden":"Garden"][job["discipline"].string]{Text(discipline).font(.caption).foregroundStyle(.secondary)}
     }

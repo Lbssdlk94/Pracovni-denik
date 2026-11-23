@@ -26,7 +26,11 @@ test('Czech examples map to safe intents without an AI model', ()=>{
   assert.equal(onJob.params.person, 'Marek');
   assert.equal(onJob.params.current, true);
   assert.equal(intent('Kolik hodin jsme celkem strávili na realizaci?'), 'jobs.realizationHours');
-  assert.equal(intent('Kteří zákazníci čekají na servis?'), 'customers.waitingService');
+  const waiting = parseAssistantCommand('Kteří zákazníci čekají na servis?', today);
+  assert.equal(waiting.intent, 'jobs.selection');
+  assert.equal(waiting.params.kind, 'service');
+  assert.equal(waiting.params.phase, 'open');
+  assert.equal(waiting.params.ask, false);
   assert.equal(intent('Vytvoř pracovní výkaz za tento měsíc.'), 'attendance.report');
   assert.equal(parseAssistantCommand('Vytvoř pracovní výkaz za tento měsíc.', today).params.period, 'month');
   assert.equal(intent('Co máme zítra za práci?'), 'jobs.tomorrow');

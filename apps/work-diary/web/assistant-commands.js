@@ -1,5 +1,6 @@
 // Rule-based Czech commands. No model, no network. The same function is used
 import {planWork, revisePlan} from './job-plan.js';
+import {parseWorkQuestion} from './job-selection.js';
 // by the worker and by tests. Later local or cloud models may only replace
 // this parser; they must still call the existing authorized actions.
 
@@ -212,7 +213,7 @@ export function parseCustomerDraft(original){
   return {name, phone, email, address:parts[0]||'', city:clipField(parts.slice(1).join(', '), 120)};
 }
 
-export function parseAssistantCommand(input, today){
+export function parseAssistantCommand(input, today, kinds){
   const original = String(input||'').trim().slice(0,500);
   const text = foldCzech(original);
   const month = namedMonth(text, today);
@@ -268,7 +269,8 @@ export function parseAssistantCommand(input, today){
   if(/kdo/.test(text) && /pracoval|delal/.test(text)) return {intent:'jobs.crew', params:{period:/\bdnes\b/.test(text)?'today':'open'}, text:original};
   if(planWork(original, today)) return {intent:'jobs.plan', params:{text:original}, text:original};
   if(/realizac/.test(text) && /\b(strav|celkem|odprac|kolik)\b/.test(text) && !/\bod\s+\d/.test(text)) return {intent:'jobs.realizationHours', params:{}, text:original};
-  if(/cekaj/.test(text) && /servis/.test(text) && /zakaz/.test(text)) return {intent:'customers.waitingService', params:{}, text:original};
+  const selection = parseWorkQuestion(original, kinds);
+  if(selection?.matched) return {intent:'jobs.selection', params:selection, text:original};
   if(/\b(hodin|dochaz|smen|vykaz|odprac)/.test(text)){
     if(/zakaz/.test(text)){
       return {intent:'jobs.hours', params:{
@@ -285,7 +287,6 @@ export function parseAssistantCommand(input, today){
   if(/nedokonc/.test(text)) return {intent:'jobs.incomplete', params:{}, text:original};
   if(/histori/.test(text)&&/zakazk/.test(text)) return {intent:'jobs.history', params:{query:softenName(capture(original, [/zakáz(?:ky|ku|ka|ce)\s+(.+)/iu]))}, text:original};
   if(/\b(tarif|predplat)/.test(text)) return {intent:'customers.tariffs', params:{query:softenName(capture(original, [/(?:zákazníka|zákazník)\s+(.+)/iu]))}, text:original};
-  if(/planovan/.test(text)&&/servis/.test(text)) return {intent:'jobs.plannedServices', params:{}, text:original};
   if(/\b(pridej|zaloz|vytvor|novy)\b/.test(text) && /\bzakaznik/.test(text) && !/\bzakazk/.test(text)){
     return {intent:'customers.create', params:parseCustomerDraft(original), text:original};
   }

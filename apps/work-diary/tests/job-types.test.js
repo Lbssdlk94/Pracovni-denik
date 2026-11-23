@@ -6,7 +6,7 @@ async function setup(){const e=environment();await good(await call(e,'/api/me'))
 const job=(type,day=3,extra={})=>({version:0,title:'Test '+type,jobType:type,assignedTo:people.worker.id,assignedTos:[people.worker.id,people.reader.id],dueDate:subAddDays(subToday(),day),status:'planned',...extra});
 test('Kinds persist, survive legacy edits, filter the calendar, and only managers can change them',async()=>{
  const e=await setup();for(const type of ['service','installation','survey']){const {job:created}=await good(await call(e,'/api/jobs/'+type,people.owner,'PUT',job(type)));assert.equal(created.jobType,type);}
- assert.equal((await call(e,'/api/jobs/bad',people.owner,'PUT',job('maintenance'))).status,400);assert.equal((await call(e,'/api/jobs?type=bad')).status,400);
+ assert.equal((await call(e,'/api/jobs/bad',people.owner,'PUT',job('unknown-kind'))).status,400);assert.equal((await call(e,'/api/jobs?type=bad')).status,400);
  const due=subAddDays(subToday(),3),filtered=await good(await call(e,'/api/jobs?type=survey&order=schedule&month='+due.slice(0,7),people.worker));assert.deepEqual(filtered.jobs.map(j=>j.id),['survey']);assert.equal(filtered.calendar.days[0].count,1);
  assert.equal((await call(e,'/api/jobs/survey',people.worker,'PUT',job('installation',3,{version:1}))).status,403);assert.equal((await call(e,'/api/jobs/survey/status',people.worker,'PATCH',{version:1,status:'done',jobType:'installation'})).status,400);
  const legacy=job('survey',3,{version:1});delete legacy.jobType;assert.equal((await good(await call(e,'/api/jobs/survey',people.owner,'PUT',legacy))).job.jobType,'survey');e.sqlite.close();

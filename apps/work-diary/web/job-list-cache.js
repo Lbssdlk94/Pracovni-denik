@@ -1,5 +1,6 @@
 import {pragueToday,moveJobMonth} from './job-schedule.js?v=workspace-roles-v1';
 import {compareWorkJobs} from './job-workflow-model.js?v=workspace-roles-v1';
+import {phaseMatches} from './job-selection.js';
 
 export const JOB_CACHE_KEY='job-list-cache-completion-v1';
 export const jobCacheMonths=(now=new Date())=>{const month=pragueToday(now).slice(0,7);return [month,moveJobMonth(month,-1),moveJobMonth(month,1)];};
@@ -13,20 +14,20 @@ const validDay=day=>/^\d{4}-\d{2}-\d{2}$/.test(day)&&Number.isFinite(Date.parse(
 function query(path,now){
  const url=new URL(path,'https://cache.invalid');if(url.pathname!=='/api/jobs')return null;
  const p=url.searchParams,months=jobCacheMonths(now);
- if([...p.keys()].some(k=>!['month','day','from','to','state','type','q','assignee','order','protocol','discipline','cursor'].includes(k))||p.get('order')!=='schedule')return null;
+ if([...p.keys()].some(k=>!['month','day','from','to','state','type','q','assignee','order','protocol','discipline','cursor','phase'].includes(k))||p.get('order')!=='schedule')return null;
  const month=p.get('month'),from=p.get('from'),to=p.get('to');
  if(month&&!months.includes(month)||!month&&!(from&&to&&months.includes(from.slice(0,7))&&months.includes(to.slice(0,7))&&validDay(from)&&validDay(to)&&to>=from&&Date.parse(to)-Date.parse(from)<=6*86400000))return null;
  if(month&&(from||to)||!month&&p.get('day'))return null;
- const state=p.get('state')||'active',type=p.get('type')||'',protocol=p.get('protocol')||'',day=p.get('day')||'';
- if(!['active','all','planned','on_way','in_progress','done','incomplete'].includes(state)||type&&!['service','installation','survey'].includes(type)||protocol&&!['missing','draft','ready','unfinished'].includes(protocol)||day&&day!=='undated'&&(!validDay(day)||!day.startsWith(month+'-'))||p.get('q')?.length>100)return null;
- return {url,key:sortedPath(url),months:month?[month]:[...new Set([from.slice(0,7),to.slice(0,7)])],state,type,protocol,day,from,to};
+ const state=p.get('state')||'active',type=p.get('type')||'',protocol=p.get('protocol')||'',day=p.get('day')||'',phase=p.get('phase')||'';
+ if(!['active','all','planned','on_way','in_progress','done','incomplete'].includes(state)||type&&!/^[a-z][a-z0-9-]{0,40}$/.test(type)||phase&&!['open','waiting','scheduled','active','done','open_done','cancelled','archived','open_cancelled','open_archived'].includes(phase)||protocol&&!['missing','draft','ready','unfinished'].includes(protocol)||day&&day!=='undated'&&(!validDay(day)||!day.startsWith(month+'-'))||p.get('q')?.length>100)return null;
+ return {url,key:sortedPath(url),months:month?[month]:[...new Set([from.slice(0,7),to.slice(0,7)])],state,type,protocol,day,from,to,phase};
 }
 export function deriveCachedJobs(info,snapshots){
  if(info.url.searchParams.has('cursor')||snapshots.length!==info.months.length)return null;
  const selected=snapshots[0]?.discipline,requested=info.url.searchParams.get('discipline');if(requested&&selected&&selected!=='all'&&requested!==selected)return null;
  const p=info.url.searchParams,search=ascii((p.get('q')||'').trim()),assignee=p.get('assignee'),discipline=p.get('discipline');
  let rows=[...new Map(snapshots.flatMap(s=>s.jobs).map(job=>[job.id,job])).values()].filter(job=>
-  (info.state==='all'||info.state==='active'&&job.status!=='done'||job.status===info.state)&&(!info.type||job.jobType===info.type)&&
+  (info.phase?phaseMatches(job,info.phase):(info.state==='all'||info.state==='active'&&job.status!=='done'||job.status===info.state))&&(!info.type||job.jobType===info.type)&&
   (!info.protocol||job.status==='done'&&(info.protocol==='unfinished'?['missing','draft'].includes(job.protocolStatus||'missing'):(job.protocolStatus||'missing')===info.protocol))&&
   (!assignee||job.assignedTo===assignee||(job.assignedTos||[]).includes(assignee))&&(!discipline||discipline==='all'||!job.discipline||job.discipline===discipline)&&
   (!search||[job.title,job.description,job.address,job.customerName].some(v=>ascii(v).includes(search)))&&(!info.from||job.dueDate>=info.from&&job.dueDate<=info.to));

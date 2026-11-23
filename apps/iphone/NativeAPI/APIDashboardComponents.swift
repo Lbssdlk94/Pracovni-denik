@@ -86,7 +86,7 @@ struct APIDashboardVisitRow:View {
         HStack(alignment:.top,spacing:12){
             VStack(spacing:5){Image(systemName:active ? "circle.inset.filled" : job["status"].string=="done" ? "checkmark.circle" : "circle").foregroundStyle(active ? DiaryStyle.accent : .secondary);Rectangle().fill(DiaryStyle.soft).frame(width:2).frame(minHeight:34)}.frame(width:20).accessibilityHidden(true)
             VStack(alignment:.leading,spacing:5){
-                HStack{Text(job["arrivalWindowStart"].string.isEmpty ? job["plannedStart"].string.isEmpty ? "Čas neurčen" : job["plannedStart"].string : job["arrivalWindowStart"].string+"–"+job["arrivalWindowEnd"].string).font(.subheadline.weight(.bold));Spacer();Text(APIFormat.status(job["status"].string)).font(.caption).foregroundStyle(.secondary)}
+                HStack{Text(job["arrivalWindowStart"].string.isEmpty ? job["plannedStart"].string.isEmpty ? "Čas neurčen" : job["plannedStart"].string : job["arrivalWindowStart"].string+"–"+job["arrivalWindowEnd"].string).font(.subheadline.weight(.bold));Spacer();Text(APIJobsPresentation.statusText(job)).font(.caption).foregroundStyle(.secondary)}
                 Text(job["customerName"].string.isEmpty ? job.title : job["customerName"].string).font(.headline)
                 if !job["customerName"].string.isEmpty,job.title != job["customerName"].string{Text(job.title).font(.subheadline)}
                 if !job["address"].string.isEmpty{Text(job["address"].string).font(.caption).foregroundStyle(.secondary)}

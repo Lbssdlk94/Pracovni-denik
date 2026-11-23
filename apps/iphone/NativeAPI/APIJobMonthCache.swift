@@ -23,14 +23,15 @@ enum APIJobMonthCache {
     static func parameters(_ path:String,today:String)->[String:String]?{
         guard let url=URLComponents(string:path),url.path=="/api/jobs" else{return nil}
         let p=Dictionary((url.queryItems ?? []).map{($0.name,$0.value ?? "")},uniquingKeysWith:{$1})
-        let allowed:Set<String>=["state","order","month","day","type","protocol","q","assignee","discipline"]
+        let allowed:Set<String>=["state","order","month","day","type","protocol","q","assignee","discipline","phase"]
         guard Set(p.keys).isSubset(of:allowed),p["order"]=="schedule",let month=p["month"],months(containing:today).contains(month),["all","active","planned","on_way","in_progress","done","incomplete"].contains(p["state"] ?? "active") else{return nil}
         if let day=p["day"],day != "undated"{
             let f=DateFormatter();f.locale=Locale(identifier:"en_US_POSIX");f.calendar=Calendar(identifier:.gregorian);f.timeZone=TimeZone(identifier:"Europe/Prague");f.dateFormat="yyyy-MM-dd";f.isLenient=false
             guard day.hasPrefix(month+"-"),day.count==10,let date=f.date(from:day),f.string(from:date)==day else{return nil}
         }
         if (p["q"] ?? "").count>100{return nil}
-        if let type=p["type"],!type.isEmpty,!["service","installation","survey"].contains(type){return nil}
+        if let phase=p["phase"],!phase.isEmpty,!["open","waiting","scheduled","active","done","open_done","cancelled","archived","open_cancelled","open_archived"].contains(phase){return nil}
+        if let type=p["type"],!type.isEmpty,type.range(of:#"^[a-z][a-z0-9-]{0,40}$"#,options:.regularExpression)==nil{return nil}
         if let proto=p["protocol"],!proto.isEmpty,!["missing","draft","ready","unfinished"].contains(proto){return nil}
         return p
     }
@@ -48,7 +49,8 @@ enum APIJobMonthCache {
             let discipline=p["discipline"] ?? ""
             if !discipline.isEmpty && discipline != "all" && !job["discipline"].string.isEmpty && job["discipline"].string != discipline{return false}
             let status=job["status"].string,protocolState=job["protocolStatus"].string.isEmpty ? "missing" : job["protocolStatus"].string
-            guard requested=="all" || requested=="active" && status != "done" || status==requested else{return false}
+            if let phase=p["phase"],!phase.isEmpty{guard APIJobsPresentation.phaseMatches(job,phase) else{return false}}
+            else{guard requested=="all" || requested=="active" && status != "done" || status==requested else{return false}}
             guard kind.isEmpty || job["jobType"].string==kind else{return false}
             guard assignee.isEmpty || job["assignedTo"].string==assignee || job["assignedTos"].array.contains(.s(assignee)) else{return false}
             if !proto.isEmpty{

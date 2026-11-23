@@ -1,5 +1,6 @@
 // Offline answers use only the snapshot the caller already has. Missing data stays missing.
 import {attendanceHours} from './attendance-model.js?v=workspace-roles-v1';
+import {filterJobs, formatSelectionReply} from './job-selection.js';
 
 const STATUS = {planned:'plánovaná', on_way:'na cestě', in_progress:'probíhá', done:'hotová', incomplete:'nedokončená'};
 const missing = 'Tento přehled v zařízení nemám. Připojte se. Nic jsem si nevymyslel.';
@@ -49,10 +50,13 @@ export function answerOffline(command, snapshot = {}){
   if(intent==='jobs.incomplete'){
     return {reply:'Nedokončené z uloženého přehledu:\n'+lines(jobs.filter(job=>job.status==='incomplete'), jobLine, 'V uloženém přehledu žádná nedokončená zakázka není.')};
   }
-  if(intent==='customers.waitingService'||intent==='jobs.plannedServices'){
-    const rows = jobs.filter(job=>(job.jobType==='service'||intent==='jobs.plannedServices') && job.status!=='done');
-    const waiting = intent==='customers.waitingService' ? rows.filter(job=>job.jobType==='service'&&job.status!=='done') : rows;
-    return {reply:'Z uloženého přehledu:\n'+lines(waiting, job=>`• ${job.customerName||'Zákazník bez jména'} · ${job.title}`, 'V uloženém přehledu nikdo na servis nečeká.')};
+  if(intent==='jobs.selection'||intent==='customers.waitingService'||intent==='jobs.plannedServices'){
+    const params = intent==='customers.waitingService'?{kind:'service', phase:'open'}
+      : intent==='jobs.plannedServices'?{kind:'service', phase:'scheduled'}
+      : command.params||{};
+    if(params.ask) return {reply:'Z uložených dat v zařízení druh práce nepoznám. Upřesněte ho. Nic jsem si nevymyslel.', missing:true};
+    const selected = filterJobs(jobs, {kind:params.kind, phase:params.phase||'open'});
+    return {reply:'Odpověď vychází jen z uložených dat v zařízení a používá stejná pravidla jako server.\n'+formatSelectionReply(selected.jobs, {...selected, phase:params.phase||'open', kindLabel:selected.kindLabel})};
   }
   if(intent==='jobs.materials'){
     return {reply:missing, missing:true};
