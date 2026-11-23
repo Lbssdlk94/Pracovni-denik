@@ -1,4 +1,4 @@
-import {parseAssistantCommand, contextualCommand, assistantModeInfo, assistantSuggestions, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, planMaterialLines, parseServiceDictation, reviseServiceDraft, annotateProtocolMaterials, serviceDraftQuestions} from '../web/assistant-commands.js';
+import {parseAssistantCommand, contextualCommand, assistantModeInfo, assistantSuggestions, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, planMaterialLines, parseServiceDictation, reviseServiceDraft, annotateProtocolMaterials, serviceDraftQuestions, parseDictionaryCommand, applyAssistantDictionary} from '../web/assistant-commands.js';
 import {planWork, revisePlan, matchPeople, planCollisions, planSummary, nameStem, customerHit} from '../web/job-plan.js';
 import {featureEnabled} from '../web/features.js';
 import {attendanceHours, attendanceInstant} from '../web/attendance-model.js';
@@ -11,6 +11,7 @@ import {handleCustomers} from './customers.js';
 import {handleMaterials} from './materials.js';
 import {handleServiceWork} from './service-work.js';
 import {handleJobDiary} from './job-diary.js';
+import {handleGardenHistory} from './garden-history.js';
 import {handleSubscriptions} from './subscriptions.js';
 
 const MANAGERS = ['owner','administrator','admin'];
@@ -161,7 +162,10 @@ export async function handleAssistant(request, env, ctx, m, h){
   }
   const today = pragueDate(new Date());
   const context = body.context&&typeof body.context==='object'&&!Array.isArray(body.context)?body.context:null;
-  const command = contextualCommand(parseAssistantCommand(typeof body.text==='string'?body.text:'', today), context);
+  const rawText = typeof body.text==='string'?body.text:'';
+  const entries = await dictionaryEntries(env);
+  const text = parseDictionaryCommand(rawText)?rawText:applyAssistantDictionary(rawText, entries);
+  const command = contextualCommand(parseAssistantCommand(text, today), context);
   const answer = await run(env, ctx, m, h, command, today, {propose:true, preview, context:body.context&&typeof body.context==='object'?body.context:null});
   return h.json(reply(mode, answer.reply, answer));
 }
@@ -265,6 +269,12 @@ async function run(env, ctx, m, h, command, today, options){
   if(!options.propose&&intent==='materials.add'&&params.jobId) return applyMaterialLines(env, ctx, m, h, params);
   if(!options.propose&&intent==='protocol.note'&&params.jobId) return applyProtocolNote(env, ctx, m, h, params);
   if(!options.propose&&intent==='protocol.report'&&params.jobId&&typeof params.work==='string') return commitProtocolReport(env, ctx, m, h, params);
+  if(!options.propose&&intent==='defects.track'&&params.jobId) return commitDefect(env, ctx, m, h, params);
+  if(!options.propose&&intent==='jobs.followup'&&params.sourceJobId) return commitFollowUp(env, m, h, params);
+  if(!options.propose&&intent==='jobs.complete'&&params.jobId) return commitComplete(env, m, h, params);
+  if(!options.propose&&intent==='protocol.photo'&&params.jobId&&params.photoId) return commitPhoto(env, ctx, m, h, params);
+  if(!options.propose&&intent==='diary.day'&&params.jobId&&Array.isArray(params.days)) return commitDiary(env, ctx, m, h, params);
+  if(!options.propose&&intent==='dictionary.add'&&params.phrase) return commitDictionary(env, m, params);
   if(!options.propose&&intent==='import.customers') return applyCustomerImport(env, m, h, params);
   if(!options.propose&&intent==='import.materials') return applyMaterialImport(env, m, h, params);
   if(intent==='unknown') return {reply:'Tomuhle příkazu nerozumím. Můžete zkusit některou z dostupných akcí.', suggestions:assistantSuggestions()};
@@ -311,6 +321,13 @@ async function run(env, ctx, m, h, command, today, options){
     return {reply:'Zákazníci, kteří čekají na servis:\n'+lines(result.data.jobs||[], job=>`• ${job.customerName||'Zákazník bez jména'} · ${job.title} (${STATUS[job.status]||job.status})`, 'Žádný otevřený servis v zakázkách nevidím.')};
   }
   if(intent==='jobs.realizationHours') return realizationHours(env, m, h);
+  if(intent==='jobs.crew') return crewOnRealization(env, m, h, today);
+  if(intent==='defects.track') return proposeDefect(env, ctx, m, h, params, options);
+  if(intent==='jobs.followup') return proposeFollowUp(env, m, h, params, today, options);
+  if(intent==='jobs.complete') return proposeComplete(env, ctx, m, h, params, options);
+  if(intent==='protocol.photo') return proposePhoto(env, ctx, m, h, params, options);
+  if(intent==='diary.day') return proposeDiary(env, m, h, params, options);
+  if(intent==='dictionary.add') return proposeDictionary(env, m, params, options);
   if(intent==='jobs.reschedule'||intent==='jobs.assign'||intent==='jobs.depart'||intent==='jobs.status') return prepareJobCommand(env, m, h, intent, params, today, tomorrow, options);
   if(intent==='attendance.active'||intent==='attendance.arrive'||intent==='attendance.leave') return attendanceCommand(env, m, h, intent, params, today, options);
   if(intent==='jobs.search'||intent==='jobs.history'||intent==='jobs.hours'||intent==='jobs.materials'||intent==='protocol.draft'){
@@ -471,12 +488,17 @@ async function jobIntent(env, ctx, m, h, intent, params, today, tomorrow, option
     return materialForJobs(env, ctx, m, h, result.data.jobs||[], day);
   }
   if(intent==='jobs.hours'&&params.current&&!params.query){
-    const id = options.context?.jobId;
-    if(typeof id!=='string'||!/^[-a-zA-Z0-9_]{1,80}$/.test(id)) return {reply:'Napište název zakázky. Otevřenou zakázku v tomto příkazu nevidím a čas z rozvrhu neodhaduji.'};
-    const one = await jobsGet(env,m,h,'/api/jobs/'+encodeURIComponent(id));
-    const error = blocked(one, 'Zakázku se nepodařilo načíst.');
-    if(error) return {reply:error};
-    return recordedJobHours(env, m, h, one.data.job, params.person);
+    const hinted = options.context?.jobId;
+    if(typeof hinted==='string'&&/^[-a-zA-Z0-9_]{1,80}$/.test(hinted)){
+      const one = await jobsGet(env,m,h,'/api/jobs/'+encodeURIComponent(hinted));
+      const error = blocked(one, 'Zakázku se nepodařilo načíst.');
+      if(error) return {reply:error};
+      return recordedJobHours(env, m, h, one.data.job, params.person);
+    }
+    const picked = await resolveProtocolJob(env, m, h, params, options, {jobId:''});
+    if(picked.choices) return {reply:'Není jednoznačně aktivní zakázka. Hodiny z rozvrhu nepoužívám.\n'+lines(picked.choices, jobLine, '')};
+    if(!picked.job) return {reply:'Napište název zakázky. Otevřenou zakázku v tomto příkazu nevidím a čas z rozvrhu neodhaduji.'};
+    return recordedJobHours(env, m, h, picked.job, params.person);
   }
   if(intent==='jobs.search'&&(params.dueDate||params.from||params.person||params.mine)) return scopedJobSearch(env, m, h, params, today);
   const found = await findJobs(env, m, h, params.query||'');
@@ -786,6 +808,195 @@ async function commitProtocolReport(env, ctx, m, h, params){
   if(!result.ok) return {reply:result.data.error||'Protokol se nepodařilo uložit. Nic dalšího jsem nezměnil.'};
   const saved = result.data.report?.materialItems||[];
   return {reply:`Servisní protokol „${current.job.title}“ je uložený ke kontrole. Katalogové položky: ${saved.length}. Stejné množství není zapsané ještě jednou v textu materiálu.`, mutated:'jobs', context:{jobId:params.jobId, customerName:current.job.customerName||'', protocol:{jobId:params.jobId, work:params.work, materials:params.materials, asked:[], history:[]}}};
+}
+
+async function dictionaryEntries(env){
+  try{
+    const row = await env.DB.prepare("SELECT value FROM settings WHERE key='assistant-dictionary'").first();
+    const parsed = JSON.parse(row?.value||'[]');
+    return Array.isArray(parsed)?parsed.filter(entry=>entry&&entry.phrase&&entry.replacement).slice(0,80):[];
+  }catch{return [];}
+}
+function workConcept(kind, title, summary, lines){
+  return {kind, title, summary, lines:(lines||[]).filter(Boolean)};
+}
+async function proposeDictionary(env, m, params, options){
+  if(!manager(m)) return {reply:'Slovník rozšiřuje vlastník nebo správce. Nic jsem neuložil.'};
+  if(options.preview) return {reply:'V náhledu role slovník neměním.'};
+  const phrase = String(params.phrase||'').trim().slice(0,40);
+  const replacement = String(params.replacement||'').trim().slice(0,80);
+  if(phrase.length<2||replacement.length<2) return {reply:'Výraz i význam musí mít aspoň dva znaky. Nic jsem neuložil.'};
+  const summary = `Do oborového slovníku přidat „${phrase}“ ve významu „${replacement}“? Platí pro další příkazy až po potvrzení. Model se tím nepřeučuje.`;
+  if(options.propose) return {reply:summary, confirm:await propose(env, m, {intent:'dictionary.add', params:{phrase, replacement}}, summary), concept:workConcept('dictionary','Slovník',summary,[phrase+' → '+replacement])};
+  return commitDictionary(env, m, {phrase, replacement});
+}
+async function commitDictionary(env, m, params){
+  if(!manager(m)) return {reply:'Slovník rozšiřuje vlastník nebo správce. Nic jsem neuložil.'};
+  const current = await dictionaryEntries(env);
+  const next = [...current.filter(entry=>entry.phrase.toLocaleLowerCase('cs')!==params.phrase.toLocaleLowerCase('cs')), {phrase:params.phrase, replacement:params.replacement}].slice(-80);
+  await env.DB.prepare("INSERT INTO settings(key,value,version) VALUES('assistant-dictionary',?,1) ON CONFLICT(key) DO UPDATE SET value=excluded.value, version=settings.version+1").bind(JSON.stringify(next)).run();
+  return {reply:`Slovník teď zná „${params.phrase}“ jako „${params.replacement}“. Další příkaz se přeloží až na serveru, do katalogu se nic nezaložilo.`, mutated:'settings'};
+}
+async function crewOnRealization(env, m, h, today){
+  const listed = await jobsGet(env,m,h,'/api/jobs?state=in_progress&type=installation&assignee='+encodeURIComponent(m.user_id));
+  if(!listed.ok) return {reply:blocked(listed)||'Realizace se nepodařilo načíst. Nikoho jsem nedoplnil.'};
+  const jobs = listed.data.jobs||[];
+  if(!jobs.length) return {reply:'Nevidím probíhající realizaci, která je vám přiřazená. Nikoho jsem nedoplnil.'};
+  const names = new Set();
+  try{
+    for(const job of jobs.slice(0,12)){
+      const rows = await env.DB.prepare("SELECT user_name, start_at FROM job_time_intervals WHERE job_id=? AND kind='work' AND end_at IS NOT NULL").bind(job.id).all();
+      for(const row of rows.results||[]) if(pragueDate(new Date(row.start_at))===today && row.user_name) names.add(row.user_name);
+    }
+  }catch{
+    return {reply:'Evidenci odpracované doby se nepodařilo načíst. Nikoho jsem nedoplnil.'};
+  }
+  if(!names.size) return {reply:'V evidenci nevidím, kdo dnes na realizaci pracoval. Nikoho jsem nedoplnil.'};
+  return {reply:'Dnes na realizaci podle evidence:\n'+[...names].map(name=>'• '+name).join('\n')};
+}
+async function proposeDefect(env, ctx, m, h, params, options){
+  if(!writer(m)) return {reply:'Závadu může připravit pracovník nebo správce. Nic jsem neuložil.'};
+  if(options.preview) return {reply:'V náhledu role závadu neukládám.'};
+  const note = params.note;
+  if(!note?.title||!note.description) return {reply:'Tomuhle popisu závady nerozumím. Nic jsem neuložil.'};
+  const picked = await resolveProtocolJob(env, m, h, params, options, {jobId:params.jobId||''});
+  const concept = workConcept('defect','Závada',note.description,[note.title, note.nextStep]);
+  if(picked.choices) return {reply:`Není jednoznačně aktivní zakázka. Závadu nikam neukládám.\n${lines(picked.choices, jobLine, '')}`, concept};
+  if(picked.error||!picked.job) return {reply:`${picked.error||'Zakázku jsem nenašel. Závadu jsem neuložil.'}`, concept};
+  const job = picked.job;
+  const garden = job.gardenId?` Sledovaná závada se založí u zahrady${job.gardenName?' '+job.gardenName:''}.`:' Zahrada u zakázky není, sledovanou závadu nezaložím a zapíšu jen text do protokolu.';
+  const summary = `Závada u „${job.title}“${job.customerName?' · '+job.customerName:''}${job.address?' · '+job.address:''}.\n${note.title}\n${note.description}${note.nextStep?'\nDalší krok: '+note.nextStep:''}${garden} Uloží se až po potvrzení. Zákazníkovi nic neodešlu.`;
+  const stored = {jobId:job.id, gardenId:job.gardenId||'', title:note.title, description:note.description, nextStep:note.nextStep||''};
+  const confirm = await propose(env, m, {intent:'defects.track', params:stored}, summary);
+  return {reply:summary, confirm, concept, context:{jobId:job.id, customerName:job.customerName||'', defectDraft:stored}};
+}
+async function commitDefect(env, ctx, m, h, params){
+  if(!writer(m)) return {reply:'Závadu může připravit pracovník nebo správce. Nic jsem neuložil.'};
+  const service = await serviceGet(env, ctx, m, h, params.jobId);
+  if(!service.ok) return {reply:blocked(service)||'Zakázku se nepodařilo otevřít. Závadu jsem neuložil.'};
+  const current = service.data;
+  const previous = current.report?.defects||'';
+  const defects = previous.includes(params.description)?previous:[previous, params.description].filter(Boolean).join('\n');
+  const written = await callJson(()=>handleServiceWork(write('/api/jobs/'+encodeURIComponent(params.jobId)+'/service','PUT', protocolBody(current, keptReport(current, {defects})), h._headers), env, ctx, m, h));
+  if(!written.ok) return {reply:written.data.error||'Text závady se nepodařilo uložit. Sledovanou závadu jsem nezaložil.'};
+  if(!params.gardenId||!on(h.features,'gardens')) return {reply:`Text závady je v protokolu „${current.job.title}“. Sledovanou závadu nezakládám, protože zakázka nemá zahradu nebo jsou zahrady vypnuté.`, mutated:'jobs', context:{jobId:params.jobId, customerName:current.job.customerName||''}};
+  const id = 'defect-'+crypto.randomUUID().replace(/-/g,'').slice(0,20);
+  const created = await callJson(()=>handleGardenHistory(write('/api/defects/'+id,'PUT',{
+    gardenId:params.gardenId, version:0, mutationId:crypto.randomUUID(), title:params.title, description:params.description, location:'', priority:'normal', status:'new', discoveredOn:pragueDate(new Date()), assignedTo:null, nextStep:params.nextStep||'', resolution:'', photos:[], sourceJobId:params.jobId, fromProtocol:true
+  }, h._headers), env, m, h));
+  if(!created.ok) return {reply:`Text závady je v protokolu. Sledovanou závadu se nepodařilo založit: ${created.data.error||'zkuste to znovu.'}`, mutated:'jobs', context:{jobId:params.jobId}};
+  return {reply:`Sledovaná závada „${params.title}“ je u zahrady zakázky „${current.job.title}“. Stejný popis je v protokolu. Zákazníkovi jsem nic neodeslal.`, mutated:'jobs', context:{jobId:params.jobId, defectId:created.data.defect?.id||id, customerName:current.job.customerName||''}};
+}
+async function proposeFollowUp(env, m, h, params, today, options){
+  if(!manager(m)) return {reply:'Navazující zakázku zakládá vlastník nebo správce. Nic jsem nezaložil.'};
+  if(options.preview) return {reply:'V náhledu role zakázku nezakládám.'};
+  const visit = params.visit;
+  if(!visit?.dueDate) return {reply:'Nenapsali jste den další návštěvy. Zakázku jsem nezaložil.'};
+  const picked = await resolveProtocolJob(env, m, h, params, options, {jobId:params.jobId||options.context?.jobId||''});
+  if(picked.choices) return {reply:`Není jednoznačně aktivní zakázka. Novou návštěvu nezakládám.\n${lines(picked.choices, jobLine, '')}`};
+  if(picked.error||!picked.job) return {reply:picked.error||'Původní zakázku jsem nenašel. Návštěvu jsem nezaložil.'};
+  const job = picked.job;
+  const defectId = String(params.defectId||options.context?.defectId||'');
+  const material = (visit.materials||[]).map(item=>`${item.quantity} ${item.unit} ${item.name}`).join(', ');
+  const summary = `Připravit jednu navazující zakázku „${visit.title}“ na ${visit.dueDate}${job.customerName?' u '+job.customerName:''}${job.address?' na adrese '+job.address:''}? ${material?'Potřeba '+material+'. ':''}${defectId?'Propojení s otevřenou závadou. ':'Otevřená závada k propojení není, vazbu nevymýšlím. '}Čas ani člověka nepřiřazuji, kolizi směny proto nepočítám. Uloží se až po potvrzení.`;
+  const stored = {sourceJobId:job.id, dueDate:visit.dueDate, title:visit.title, customerId:job.customerId||null, customerName:job.customerName||'', address:job.address||'', city:job.city||'', gardenId:job.gardenId||null, jobType:job.jobType||'service', defectId, materials:visit.materials||[]};
+  const confirm = await propose(env, m, {intent:'jobs.followup', params:stored}, summary);
+  return {reply:summary, confirm, concept:workConcept('followup','Další návštěva',summary,[visit.dueDate, job.customerName, job.address, material]), context:{jobId:job.id, defectId, customerName:job.customerName||''}};
+}
+async function commitFollowUp(env, m, h, params){
+  if(!manager(m)) return {reply:'Navazující zakázku zakládá vlastník nebo správce. Nic jsem nezaložil.'};
+  const id = 'visit-'+crypto.randomUUID().replace(/-/g,'').slice(0,24);
+  const material = (params.materials||[]).map(item=>`${item.quantity} ${item.unit} ${item.name}`).join(', ');
+  const result = await callJson(()=>handleJobs(write('/api/jobs/'+id,'PUT',{
+    version:0, title:params.title||'Další návštěva', jobType:params.jobType||'service', status:'planned', incompleteReason:'',
+    description:['Navazuje na původní zakázku.', material?'Potřeba: '+material+'. Katalogovou položku jsem nezaložil.':''].filter(Boolean).join(' '),
+    dueDate:params.dueDate, address:params.address||'', city:params.city||'', customerId:params.customerId||null, customerName:params.customerName||'',
+    gardenId:params.gardenId||null, assignedTo:'', assignedTos:[], defectIds:params.defectId?[params.defectId]:[],
+    startTime:'', endTime:'', plannedStart:'', estimatedMinutes:null, arrivalWindowStart:'', arrivalWindowEnd:'', legacyTimeMeaning:'unknown', allowOverlaps:false, previewRevision:0, terms:[]
+  }, h._headers), env, m, h));
+  if(!result.ok) return {reply:result.data.error||'Navazující zakázku se nepodařilo založit. Původní záznam jsem nezměnil.'};
+  return {reply:`Navazující zakázka „${params.title}“ je jedna, na ${params.dueDate}. Původní zakázka zůstává. Dokument zákazníkovi neodešel.`, mutated:'jobs', context:{jobId:id, customerName:params.customerName||''}};
+}
+async function proposeDiary(env, m, h, params, options){
+  if(!writer(m)) return {reply:'Deník realizace může připravit pracovník nebo správce. Nic jsem neuložil.'};
+  if(options.preview) return {reply:'V náhledu role deník neukládám.'};
+  const day = params.day;
+  if(!day?.date||!day.work) return {reply:'Tomuhle dni realizace nerozumím. Nic jsem neuložil.'};
+  const previous = Array.isArray(params.base?.days)?params.base.days:[];
+  const days = [...previous.filter(item=>item.date!==day.date), {date:day.date, work:day.work}].sort((a,b)=>a.date.localeCompare(b.date));
+  const picked = await resolveProtocolJob(env, m, h, params, options, {jobId:params.jobId||params.base?.jobId||''});
+  const lines = days.map(item=>`${item.date}: ${item.work}`);
+  const concept = workConcept('diary','Deník realizace',lines.join('\n'),lines);
+  if(picked.choices) return {reply:`Není jednoznačně aktivní zakázka. Denní zápis nikam neukládám.\n${lines(picked.choices, jobLine, '')}`, concept};
+  if(picked.error||!picked.job) return {reply:picked.error||'Zakázku jsem nenašel. Deník jsem neuložil.', concept};
+  const summary = `Ke stejné zakázce „${picked.job.title}“ přidat ${days.length===1?'denní':'vícedenní'} souhrn?\n${lines.join('\n')}\nFotografie k deníku nemám, denní fotodeník se bez snímku nezaloží. Souhrn prací se zapíše do protokolu této jedné zakázky až po potvrzení.`;
+  const confirm = await propose(env, m, {intent:'diary.day', params:{jobId:picked.job.id, days}}, summary);
+  return {reply:summary, confirm, concept, context:{jobId:picked.job.id, diary:{jobId:picked.job.id, days}, customerName:picked.job.customerName||''}};
+}
+async function commitDiary(env, ctx, m, h, params){
+  if(!writer(m)) return {reply:'Deník realizace může připravit pracovník nebo správce. Nic jsem neuložil.'};
+  const service = await serviceGet(env, ctx, m, h, params.jobId);
+  if(!service.ok) return {reply:blocked(service)||'Zakázku se nepodařilo otevřít. Souhrn jsem neuložil.'};
+  const current = service.data;
+  const addition = (params.days||[]).map(day=>day.work).filter(Boolean).join('\n');
+  const previous = current.report?.work||'';
+  const work = !previous?addition:previous.includes(addition)?previous:`${previous}\n${addition}`;
+  const written = await callJson(()=>handleServiceWork(write('/api/jobs/'+encodeURIComponent(params.jobId)+'/service','PUT', protocolBody(current, keptReport(current, {work})), h._headers), env, ctx, m, h));
+  if(!written.ok) return {reply:written.data.error||'Souhrn realizace se nepodařilo uložit. Novou zakázku jsem nezaložil.'};
+  return {reply:`Souhrn ${params.days.length} ${params.days.length===1?'dne':'dnů'} je v protokolu jedné zakázky „${current.job.title}“. Denní fotodeník jsem nezaložil, fotografie chybí. Materiál bez jednoznačné katalogové položky jsem neúčtoval.`, mutated:'jobs', context:{jobId:params.jobId, diary:{jobId:params.jobId, days:params.days}, customerName:current.job.customerName||''}};
+}
+async function proposePhoto(env, ctx, m, h, params, options){
+  if(!writer(m)) return {reply:'Fotografii k protokolu může připojit pracovník nebo správce. Nic jsem nepřipojil.'};
+  if(options.preview) return {reply:'V náhledu role fotografii nepřipojuji.'};
+  if(params.when!=='latest') return {reply:'Novou fotku z věty nevyfotím a nepopisuji, co je na ní. Přidejte ji z fotoaparátu nebo galerie. Nic jsem nepřipojil.'};
+  const picked = await resolveProtocolJob(env, m, h, params, options, {jobId:params.jobId||''});
+  if(picked.choices) return {reply:`Není jednoznačně aktivní zakázka. Fotografii nepřipojuji.\n${lines(picked.choices, jobLine, '')}`};
+  if(picked.error||!picked.job) return {reply:picked.error||'Zakázku jsem nenašel. Fotografii jsem nepřipojil.'};
+  const photo = await env.DB.prepare("SELECT id, name FROM service_photos WHERE job_id=? AND status='ready' ORDER BY created_at DESC, id DESC LIMIT 1").bind(picked.job.id).first();
+  if(!photo) return {reply:'U zakázky není nahraná fotografie. Nic jsem nepřipojil a obsah snímku neodhaduji.'};
+  const summary = `Připojit poslední nahranou fotografii „${photo.name||photo.id}“ k protokolu „${picked.job.title}“? Co je na snímku, neposuzuji. Uloží se až po potvrzení.`;
+  const confirm = await propose(env, m, {intent:'protocol.photo', params:{jobId:picked.job.id, photoId:photo.id}}, summary);
+  return {reply:summary, confirm, concept:workConcept('photo','Fotografie',summary,[photo.name||photo.id]), context:{jobId:picked.job.id}};
+}
+async function commitPhoto(env, ctx, m, h, params){
+  const service = await serviceGet(env, ctx, m, h, params.jobId);
+  if(!service.ok) return {reply:blocked(service)||'Zakázku se nepodařilo otevřít. Fotografii jsem nepřipojil.'};
+  const current = service.data;
+  const photoIds = [...new Set([...(current.report?.photoIds||[]), params.photoId])];
+  const written = await callJson(()=>handleServiceWork(write('/api/jobs/'+encodeURIComponent(params.jobId)+'/service','PUT', protocolBody(current, keptReport(current, {photoIds})), h._headers), env, ctx, m, h));
+  if(!written.ok) return {reply:written.data.error||'Fotografii se nepodařilo připojit.'};
+  return {reply:`Poslední nahraná fotografie je u protokolu „${current.job.title}“. Co je na snímku, neposuzuji.`, mutated:'jobs', context:{jobId:params.jobId}};
+}
+async function proposeComplete(env, ctx, m, h, params, options){
+  if(!writer(m)) return {reply:'Dokončení může připravit pracovník nebo správce. Stav jsem nezměnil.'};
+  if(options.preview) return {reply:'V náhledu role zakázku neuzavírám.'};
+  const picked = await resolveProtocolJob(env, m, h, params, options, {jobId:params.jobId||''});
+  if(picked.choices) return {reply:`Není jednoznačně aktivní zakázka. Dokončení nikam nezapisuji.\n${lines(picked.choices, jobLine, '')}`};
+  if(picked.error||!picked.job) return {reply:picked.error||'Zakázku jsem nenašel. Stav jsem nezměnil.'};
+  const job = picked.job;
+  const service = await serviceGet(env, ctx, m, h, job.id);
+  if(!service.ok) return {reply:blocked(service)||'Protokol se nepodařilo načíst. Stav jsem nezměnil.'};
+  const report = service.data.report;
+  const hours = await recordedJobHours(env, m, h, job, '');
+  let photos = 0, openDefects = 0;
+  try{photos = (await env.DB.prepare("SELECT count(*) AS n FROM service_photos WHERE job_id=? AND status='ready'").bind(job.id).first())?.n||0;}catch{photos = 0;}
+  if(job.gardenId){try{openDefects = (await env.DB.prepare("SELECT count(*) AS n FROM garden_defects WHERE garden_id=? AND status<>'resolved'").bind(job.gardenId).first())?.n||0;}catch{openDefects = 0;}}
+  const blockers = [];
+  if(!String(report?.work||'').trim()) blockers.push('V protokolu chybí provedené práce.');
+  if(openDefects>0) blockers.push('Jsou otevřené sledované závady. Dokončení by je samo nezavřelo.');
+  const warnings = [];
+  if(hours.workMs==null||hours.workMs===0) warnings.push('Odpracované hodiny v evidenci nejsou.');
+  if(!photos) warnings.push('Není nahraná fotografie.');
+  if(!(report?.materialItems||[]).length && !String(report?.material||'').trim()) warnings.push('Materiál v protokolu není.');
+  const summary = `Kontrola „${job.title}“ před dokončením:\n${blockers.length?blockers.map(item=>'• '+item).join('\n'):'• Povinné údaje protokolu a otevřené závady nebrání.'}\n${warnings.map(item=>'• '+item).join('\n')}\nDokument zákazníkovi neodešlu.`;
+  const concept = workConcept('complete','Dokončení',summary,[...blockers, ...warnings]);
+  if(blockers.length) return {reply:summary+' Stav jsem nezměnil.', concept, context:{jobId:job.id}};
+  const confirm = await propose(env, m, {intent:'jobs.complete', params:{jobId:job.id, status:'done'}}, summary+' Označit zakázku hotovou až po potvrzení?');
+  return {reply:summary+' Označit zakázku hotovou až po potvrzení?', confirm, concept, context:{jobId:job.id}};
+}
+async function commitComplete(env, m, h, params){
+  const done = await applyStatus(env, m, h, {jobId:params.jobId, status:'done'});
+  return {...done, reply:(done.reply||'Stav je uložený.')+' Dokument zákazníkovi neodešel.'};
 }
 
 async function protocolDraft(env, ctx, m, h, job, options){

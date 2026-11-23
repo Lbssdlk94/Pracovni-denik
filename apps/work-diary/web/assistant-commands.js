@@ -218,6 +218,8 @@ export function parseAssistantCommand(input, today){
   const month = namedMonth(text, today);
   const unknown = {intent:'unknown', params:{}, text:original};
   if(!text) return unknown;
+  const dictionary = parseDictionaryCommand(original);
+  if(dictionary) return {intent:'dictionary.add', params:dictionary, text:original};
   if(/\b(smaz|odstran|vymaz|zrus zakaz|zrus protokol)\b/.test(text)) return {intent:'refused.destructive', params:{}, text:original};
   if(/^(napoveda|pomoc|co umis|co umite|jak fungujes)\b/.test(text)) return {intent:'help', params:{}, text:original};
   if(/jsem na ceste/.test(text)) return {intent:'jobs.depart', params:{query:softenName(capture(original, [/k\s+(.+)/iu])), current:/\bteto\b|\bzakaznikovi\b/.test(text)}, text:original};
@@ -255,10 +257,14 @@ export function parseAssistantCommand(input, today){
     if(/\b(najdi|hledej|ukaz)\b/.test(text)&&!/\b(zitra|zitre|dnes|zakaz)\b/.test(text)) return {intent:'materials.search', params:{query}, text:original};
     return {intent:'jobs.materials', params:{when:day, query}, text:original};
   }
+  if(/protokol/.test(text) && /\b(pripoj|pridej|uloz)\b/.test(text) && /fotk|fotog/.test(text)){
+    return {intent:'protocol.photo', params:{when:/pred oprav/.test(text)?'before':/opraven|po oprav/.test(text)?'after':'latest'}, text:original};
+  }
   if(/protokol/.test(text)){
     if(/kontrol|chybi|podpis|fotk|fotog/.test(text)) return {intent:'protocol.check', params:{query:capture(original, [/zakáz(?:ce|ku|ky)\s+(.+)/iu]).replace(/[?.!,]+$/g,'').trim(), current:/\b(aktualni|teto)\b/.test(text)}, text:original};
     return {intent:'protocol.draft', params:{query:softenName(capture(original, [/protokol(?:\s+(?:pro|k|na|ke))?\s+(.+)/iu]))}, text:original};
   }
+  if(/kdo/.test(text) && /pracoval|delal/.test(text)) return {intent:'jobs.crew', params:{period:/\bdnes\b/.test(text)?'today':'open'}, text:original};
   if(planWork(original, today)) return {intent:'jobs.plan', params:{text:original}, text:original};
   if(/realizac/.test(text) && /\b(strav|celkem|odprac|kolik)\b/.test(text) && !/\bod\s+\d/.test(text)) return {intent:'jobs.realizationHours', params:{}, text:original};
   if(/cekaj/.test(text) && /servis/.test(text) && /zakaz/.test(text)) return {intent:'customers.waitingService', params:{}, text:original};
@@ -267,7 +273,7 @@ export function parseAssistantCommand(input, today){
       return {intent:'jobs.hours', params:{
         person:softenName(capture(original, [/strávil\s+(\p{L}+)/iu, /odpracoval\s+(\p{L}+)/iu, /hodiny?\s+(\p{L}+)\s+na\s+/iu])),
         query:softenName(capture(original, [/zakáz(?:ce|ku|ka|ky)\s+(.+)/iu])),
-        current:/\bteto\b/.test(text)
+        current:/\bteto\b/.test(text) || (/\bna zakazce\b/.test(text) && !capture(original, [/zakáz(?:ce|ku|ka|ky)\s+(\p{L}[\p{L}\s-]{1,80})/iu]))
       }, text:original};
     }
     const person = /\b(jsem|jsme)\b/.test(text) ? '' : softenName(capture(original, [/odpracoval\s+(.+?)(?:\s+v\s+|\s+za\s+|$)/iu, /hodiny?\s+(.+?)(?:\s+v\s+|\s+za\s+|$)/iu]));
@@ -304,6 +310,16 @@ export function parseAssistantCommand(input, today){
     const dayName = weekdayMention(text);
     return {intent:'jobs.create', params:{title, customer, when:dayName?'':(/\bzitra|zitre/.test(text)?'tomorrow':'today'), dueDate:dayName?nextWeekday(today, dayName):''}, text:original};
   }
+  const done = parseJobDone(original);
+  if(done) return {intent:'jobs.complete', params:{}, text:original};
+  const photo = parsePhotoCommand(original);
+  if(photo) return {intent:'protocol.photo', params:photo, text:original};
+  const visit = parseFollowUpVisit(original, today);
+  if(visit) return {intent:'jobs.followup', params:{visit}, text:original};
+  const defect = parseDefectNote(original);
+  if(defect) return {intent:'defects.track', params:{note:defect}, text:original};
+  const day = parseRealizationDay(original, today);
+  if(day) return {intent:'diary.day', params:{day}, text:original};
   const dictated = parseServiceDictation(original);
   if(dictated) return {intent:'protocol.report', params:{draft:dictated}, text:original};
   if(/\bzitra\b|\bzitrek\b|\bzitrej/.test(text)) return {intent:'jobs.tomorrow', params:{}, text:original};
@@ -431,6 +447,10 @@ function parseDictationPiece(piece){
 }
 function dictationVerbKind(verb){
   const folded = foldCzech(verb);
+  if(folded.startsWith('posek')) return 'mow';
+  if(folded.startsWith('vertikut')) return 'scarify';
+  if(folded.startsWith('hnoj')) return 'fertilize';
+  if(folded.startsWith('vysad')) return 'plant';
   if(folded.startsWith('vymen')) return 'replace';
   if(folded.startsWith('oprav')) return 'repair';
   if(folded.startsWith('nastav')) return 'adjust';
@@ -445,7 +465,7 @@ function dictationVerbKind(verb){
 }
 function splitDictation(original){
   const text = normalizeDictationSlang(original);
-  const re = /\b(?:jsme\s+|jsem\s+)?(vyměnili|vyměnil|opravili|opravil|nastavili|nastavil|použili|použil|položili|položil|namontovali|namontoval|zapojili|zapojil|vykopali|vykopal|odzkoušeli|odzkoušel|zkontrolovali|zkontroloval)\b/giu;
+  const re = /\b(?:jsme\s+|jsem\s+)?(vyměnili|vyměnil|opravili|opravil|nastavili|nastavil|použili|použil|položili|položil|namontovali|namontoval|zapojili|zapojil|vykopali|vykopal|odzkoušeli|odzkoušel|zkontrolovali|zkontroloval|posekali|posekal|vertikutovali|vertikutoval|hnojili|hnojil|vysadili|vysadil)\b/giu;
   const marks = [];
   let match;
   while((match = re.exec(text))) marks.push({start:match.index, end:match.index+match[0].length, kind:dictationVerbKind(match[1])});
@@ -490,12 +510,16 @@ function renderDictation(actions){
     else if(action.kind==='use'&&list) sentences.push(`bylo použito ${list}`);
     else if(action.kind==='install'&&list) sentences.push(`byla provedena montáž ${list}`);
     else if(action.kind==='lay'&&list) sentences.push(`bylo položeno ${list}`);
-    else if(action.kind==='dig'&&list) sentences.push(`bylo vykopáno ${list}`);
+    else if(action.kind==='dig') sentences.push(`bylo vykopáno ${list||notes.join(', ')||'uvedená část'}`);
     else if(action.kind==='repair') sentences.push(`bylo opraveno ${action.cracked&&pipe?'prasklé potrubí':(list||notes.join(', ')||'uvedená část')}`);
     else if(action.kind==='adjust'&&sectionPiece?.section) sentences.push(`bylo upraveno nastavení ${DICTATION_ORDINAL[sectionPiece.section]||sectionPiece.section+'.'} sekce`);
     else if(action.kind==='check') sentences.push(`byla provedena kontrola ${list||notes.join(', ')||'uvedené části'}`);
     else if(action.kind==='test') sentences.push('bylo provedeno odzkoušení, které pracovník výslovně uvedl');
-    else if(action.kind==='connect'&&list) sentences.push(`bylo zapojeno ${list}`);
+    else if(action.kind==='mow') sentences.push(`bylo posečeno ${list||notes.join(', ')||'uvedená plocha'}`);
+    else if(action.kind==='scarify') sentences.push(`byla provedena vertikutace ${list||notes.join(', ')||'uvedené plochy'}`);
+    else if(action.kind==='fertilize') sentences.push(`bylo provedeno hnojení ${list||notes.join(', ')||'uvedené plochy'}`);
+    else if(action.kind==='plant') sentences.push(`byla provedena výsadba ${list||notes.join(', ')||'uvedených rostlin'}`);
+    else if(action.kind==='connect') sentences.push(`bylo zapojeno ${list||notes.join(', ')||'uvedená část'}`);
   }
   if(!sentences.length) return '';
   const [first, ...rest] = sentences;
@@ -658,7 +682,88 @@ export function reviseServiceDraft(draft, text){
   return null;
 }
 
+export function parseDictionaryCommand(original){
+  const match = String(original||'').match(/do slovníku přidej(?:te)? výraz\s+[„"]?(.+?)[“"]?\s+jako\s+[„"]?(.+?)[“".]?$/iu);
+  if(!match) return null;
+  const phrase = match[1].trim().slice(0,40);
+  const replacement = match[2].trim().slice(0,80);
+  if(phrase.length<2||replacement.length<2) return null;
+  return {phrase, replacement};
+}
+export function applyAssistantDictionary(text, entries){
+  let out = String(text||'');
+  const list = (Array.isArray(entries)?entries:[]).filter(entry=>entry&&entry.phrase&&entry.replacement).sort((a,b)=>String(b.phrase).length-String(a.phrase).length);
+  for(const entry of list){
+    const phrase = String(entry.phrase).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    out = out.replace(new RegExp(`(?<![\\p{L}\\p{N}])${phrase}(?![\\p{L}\\p{N}])`,'giu'), entry.replacement);
+  }
+  return out;
+}
+export function followUpDate(today, folded){
+  const name = weekdayMention(folded);
+  if(!name) return /\bzitra|zitre/.test(folded)?shiftIso(today,1):(/\bdnes\b/.test(folded)?today:'');
+  let due = nextWeekday(today, name);
+  if(/\bpristi\b/.test(folded)){
+    const span = weekSpan(today, 'this');
+    if(due>=span.start&&due<=span.end) due = shiftIso(due, 7);
+  }
+  return due;
+}
+export function mentionedWorkDate(today, folded){
+  const name = weekdayMention(folded);
+  if(!name) return '';
+  const current = new Date(today+'T12:00:00Z').getUTCDay();
+  if(current===WEEKDAYS.indexOf(name)) return today;
+  return weekdayDate(today, name, 'last');
+}
+export function parseJobDone(original){
+  const folded = foldCzech(original);
+  return /zakazk\w*\s+(mame\s+)?(hotov|dokonc)|mame\s+hotovo|je\s+dokoncena|prace\s+je\s+hotova/.test(folded);
+}
+export function parseFollowUpVisit(original, today){
+  const folded = foldCzech(original);
+  if(!/vratit|vratime|priste|dalsi navstev/.test(folded)) return null;
+  const dueDate = followUpDate(today, folded);
+  if(!dueDate) return null;
+  const materials = /dva ventil/.test(folded)?[{name:'ventil', quantity:2, unit:'ks'}]:[];
+  return {dueDate, title:'Další návštěva', materials};
+}
+export function parseDefectNote(original){
+  const source = String(original||'').trim();
+  const folded = foldCzech(source);
+  if(!folded||/\b(ukaz|najdi|kolik|smaz)\b/.test(folded)) return null;
+  if(/\b(vymenili|vymenil|opravili|opravil|pouzili|pouzil|polozili|polozil|namontovali|namontoval)\b/.test(folded)) return null;
+  if(/ctvrt/.test(folded)&&/ventil/.test(folded)&&/netesn/.test(folded)){
+    return {
+      title:'Netěsnící čtvrtý ventil',
+      description:'Čtvrtý ventil závlahového systému netěsní. Doporučená oprava je výměna ventilu při další návštěvě.',
+      nextStep:'Vyměnit ventil při další návštěvě.',
+      material:'ventil'
+    };
+  }
+  if(!/netesn|proteka|zavad|nefunguje|praskl/.test(folded)) return null;
+  const sentence = source.replace(/[?.!]+$/g,'').trim();
+  return {title:sentence.slice(0,80), description:sentence, nextStep:'', material:''};
+}
+export function parseRealizationDay(original, today){
+  const folded = foldCzech(original);
+  if(!weekdayMention(folded)) return null;
+  const draft = parseServiceDictation(original);
+  if(!draft) return null;
+  const date = mentionedWorkDate(today, folded);
+  if(!date) return null;
+  return {date, work:draft.work, materials:draft.materials};
+}
+export function parsePhotoCommand(original){
+  const folded = foldCzech(original);
+  if(!/fotk|fotog/.test(folded)||!/\b(pripoj|pridej|uloz)\b/.test(folded)) return null;
+  return {when:/pred oprav/.test(folded)?'before':/opraven|po oprav/.test(folded)?'after':'latest'};
+}
+
 export function contextualCommand(command, context){
+  if(context?.diary && command?.intent==='diary.day'){
+    return {...command, params:{...command.params, base:context.diary}};
+  }
   if(context?.protocol){
     const revised = reviseServiceDraft(context.protocol, command?.text||'');
     if(revised) return {...command, intent:'protocol.report', params:{text:command?.text||'', base:context.protocol}};

@@ -1,7 +1,7 @@
-import {parseAssistantCommand, contextualCommand} from './assistant-commands.js?v=assistant-protocol-v1';
-import {answerOffline} from './assistant-offline.js?v=assistant-protocol-v1';
+import {parseAssistantCommand, contextualCommand} from './assistant-commands.js?v=assistant-work-v1';
+import {answerOffline} from './assistant-offline.js?v=assistant-work-v1';
 import {peekCachedJobs} from './cloud.js?v=completion-v1';
-import {extractLocalCommand, localMinistral} from './assistant-local.js?v=assistant-protocol-v1';
+import {extractLocalCommand, localMinistral} from './assistant-local.js?v=assistant-work-v1';
 import {durationPickerMarkup, refreshDurationTotals} from './planning-fields.js?v=workspace-roles-v1';
 
 function esc(value){
@@ -291,13 +291,26 @@ function conceptPayload(thread){
   if(!thread?.draftConcept) return null;
   const concept = thread.draftConcept;
   if(concept.kind==='protocol') return {kind:'protocol', jobId:concept.jobId||'', work:concept.work||'', materials:(concept.materials||[]).map(item=>({key:item.key||'', label:item.label||'', quantity:item.quantity??'', unit:item.unit||'', itemId:item.itemId||'', choiceId:item.choiceId||''}))};
+  if(['defect','diary','followup','complete','photo','dictionary'].includes(concept.kind)) return {kind:concept.kind};
   return {title:concept.title||'', notes:concept.notes||'', customerName:concept.customerName||'', address:concept.address||'', city:concept.city||'', terms:concept.terms||[], materials:concept.materials||[]};
 }
 function stage(thread){
   if(runtime.detail) return detailPanel();
   if(thread?.draftConcept?.kind==='protocol') return protocolStage(thread);
+  if(['defect','diary','followup','complete','photo','dictionary'].includes(thread?.draftConcept?.kind)) return noteStage(thread);
   if(thread?.draftConcept) return conceptStage(thread);
   return '<aside class="assistant-detail" hidden></aside><div class="assistant-empty-stage"><strong>Výsledek</strong><p>Po příkazu se tady otevře zákazník, zakázka, kalendář nebo koncept. Nic se neuloží bez potvrzení.</p></div>';
+}
+function noteStage(thread){
+  const concept = thread.draftConcept;
+  const confirm = [...(thread.items||[])].reverse().find(item=>item.confirm)?.confirm;
+  const lines = (concept.lines||[]).map(item=>`<li>${esc(item)}</li>`).join('');
+  return `<div class="assistant-concept-sheet">
+    <header class="assistant-sheet-title"><h2>${esc(concept.title||'Návrh')}</h2><span class="assistant-pill is-concept">Koncept</span></header>
+    <p>${esc(concept.summary||'')}</p>
+    ${lines?`<ul>${lines}</ul>`:''}
+    <div class="assistant-concept-actions"><button type="button" data-cancel="${esc(confirm?.id||'')}" ${confirm?'':'disabled'}>Zrušit</button><button type="button" class="yes" data-confirm="${esc(confirm?.id||'')}" ${confirm?'':'disabled'}>Uložit návrh</button></div>
+  </div>`;
 }
 function protocolStage(thread){
   const concept = thread.draftConcept;

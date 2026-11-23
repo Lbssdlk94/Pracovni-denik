@@ -182,6 +182,7 @@ struct APIAssistantWorkspace: View {
     private var conceptForm: some View {
         Group {
             if concept["kind"].string == "protocol" { protocolForm }
+            else if ["defect", "diary", "followup", "complete", "photo", "dictionary"].contains(concept["kind"].string) { noteForm }
             else { jobConceptForm }
         }
     }
@@ -213,6 +214,20 @@ struct APIAssistantWorkspace: View {
             }
             ForEach(concept["questions"].array, id: \.string) { question in Text(question.string).font(.caption) }
             Button("Uložit do protokolu") { Task { await confirm() } }.disabled(memory.active.confirmID.isEmpty || busy).buttonStyle(.borderedProminent).frame(minHeight: 44)
+            Button("Zrušit koncept") { Task { await cancelConcept() } }.disabled(memory.active.confirmID.isEmpty || busy).frame(minHeight: 44)
+        }
+    }
+    private var noteForm: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(concept["title"].string.isEmpty ? "Návrh" : concept["title"].string).font(.headline)
+                Text("Koncept").font(.caption.weight(.bold)).padding(.horizontal, 8).padding(.vertical, 4).background(DiaryStyle.soft, in: Capsule())
+            }
+            Text(concept["summary"].string).font(.subheadline)
+            ForEach(Array(concept["lines"].array.enumerated()), id: \.offset) { _, line in
+                Text(line.string).font(.subheadline)
+            }
+            Button("Uložit návrh") { Task { await confirm() } }.disabled(memory.active.confirmID.isEmpty || busy).buttonStyle(.borderedProminent).frame(minHeight: 44)
             Button("Zrušit koncept") { Task { await cancelConcept() } }.disabled(memory.active.confirmID.isEmpty || busy).frame(minHeight: 44)
         }
     }

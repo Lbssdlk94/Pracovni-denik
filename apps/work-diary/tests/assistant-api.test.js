@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {api} from '../worker/api.js';
 import {environment, people, request} from './fixtures.mjs';
-import {nextWeekday} from '../web/assistant-commands.js';
+import {nextWeekday, followUpDate, foldCzech, mentionedWorkDate} from '../web/assistant-commands.js';
 import {describeApiFailure} from '../worker/api.js';
 
 const ctx = {waitUntil:task=>task.catch(()=>{})};
@@ -601,6 +601,184 @@ test('One job due today is used only when nothing is already in progress', async
     assert.equal(env.sqlite.prepare('SELECT count(*) n FROM service_reports').get().n, 0);
   }finally{env.sqlite.close();}
 });
+
+function mailCount(env){
+  const names = env.sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('protocol_emails','service_email_deliveries')").all().map(row=>row.name);
+  return names.reduce((sum, name)=>sum+env.sqlite.prepare(`SELECT count(*) AS n FROM "${name}"`).get().n, 0);
+}
+
+test('A confirmed defect, visit, photo and realization stay on one job and do not invent records', async()=>{
+  const env = environment();
+  try{
+    await ready(env);
+    await call(env, '/api/invitations', people.owner, 'POST', {email:people.worker.email, role:'worker'});
+    await call(env, '/api/me', people.worker);
+    const garden = await call(env, '/api/gardens', people.owner, 'POST', {id:'garden-live', name:'Severní zahrada', address:'Zahradní 4', notes:''});
+    assert.equal(garden.status, 200, await garden.clone().text());
+    const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    const created = await call(env, '/api/jobs/job-live', people.owner, 'PUT', {version:0, title:'Realizace Sever', status:'in_progress', jobType:'installation', dueDate:today, customerName:'Novák', address:'Zahradní 4', city:'Brno', gardenId:'garden-live', incompleteReason:'', assignedTo:people.owner.id, description:''});
+    assert.equal(created.status, 200, await created.clone().text());
+    const materialsAtStart = env.sqlite.prepare('SELECT count(*) n FROM material_items').get().n;
+    const before = ()=>({jobs:env.sqlite.prepare('SELECT count(*) n FROM jobs WHERE deleted=0').get().n, defects:env.sqlite.prepare('SELECT count(*) n FROM garden_defects').get().n, reports:env.sqlite.prepare('SELECT count(*) n FROM service_reports').get().n, photos:env.sqlite.prepare('SELECT count(*) n FROM service_photos').get().n, diary:env.sqlite.prepare('SELECT count(*) n FROM job_diary_entries').get().n, materials:env.sqlite.prepare('SELECT count(*) n FROM material_items').get().n, mail:mailCount(env)});
+    const defectText = 'Čtvrtý ventil netěsní, budeme ho muset příště vyměnit.';
+    const proposedDefect = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:defectText}));
+    assert.equal(proposedDefect.status, 200, JSON.stringify(proposedDefect.body));
+    assert.equal(proposedDefect.body.concept.kind, 'defect');
+    assert.match(proposedDefect.body.reply, /Netěsnící čtvrtý ventil/);
+    assert.match(proposedDefect.body.reply, /neodešlu|neodeslal/);
+    assert.ok(proposedDefect.body.confirm?.id);
+    assert.deepEqual(before(), {jobs:1, defects:0, reports:0, photos:0, diary:0, materials:materialsAtStart, mail:0});
+    const savedDefect = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:proposedDefect.body.confirm.id}));
+    assert.equal(savedDefect.status, 200, JSON.stringify(savedDefect.body));
+    assert.match(savedDefect.body.reply, /neodeslal/);
+    const report = env.sqlite.prepare('SELECT defects, work, photo_ids FROM service_reports WHERE job_id=?').get('job-live');
+    assert.equal(report.defects, 'Čtvrtý ventil závlahového systému netěsní. Doporučená oprava je výměna ventilu při další návštěvě.');
+    const tracked = env.sqlite.prepare('SELECT id, title, description, next_step, garden_id, source_job_id, status FROM garden_defects').all();
+    assert.equal(tracked.length, 1);
+    assert.equal(tracked[0].title, 'Netěsnící čtvrtý ventil');
+    assert.equal(tracked[0].description, report.defects);
+    assert.equal(tracked[0].next_step, 'Vyměnit ventil při další návštěvě.');
+    assert.equal(tracked[0].garden_id, 'garden-live');
+    assert.equal(tracked[0].source_job_id, 'job-live');
+    assert.equal(tracked[0].status, 'new');
+    assert.equal(savedDefect.body.context.defectId, tracked[0].id);
+    assert.equal(mailCount(env), 0);
+    const blockedDone = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Zakázku máme hotovou.'}));
+    assert.equal(blockedDone.body.confirm, null);
+    assert.match(blockedDone.body.reply, /otevřené sledované závady|nezměnil/);
+    assert.equal(env.sqlite.prepare('SELECT status FROM jobs WHERE id=?').get('job-live').status, 'in_progress');
+    const visitText = 'Musíme se sem vrátit příští středu, potřebujeme vyměnit ještě dva ventily.';
+    const workerVisit = await json(await call(env, '/api/assistant', people.worker, 'POST', {text:visitText, context:savedDefect.body.context}));
+    assert.match(workerVisit.body.reply, /správce|vlastník/);
+    assert.equal(workerVisit.body.confirm, null);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM jobs WHERE deleted=0').get().n, 1);
+    const proposedVisit = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:visitText, context:savedDefect.body.context}));
+    assert.equal(proposedVisit.status, 200, JSON.stringify(proposedVisit.body));
+    assert.equal(proposedVisit.body.concept.kind, 'followup');
+    assert.match(proposedVisit.body.reply, new RegExp(followUpDate(today, foldCzech(visitText))));
+    assert.match(proposedVisit.body.reply, /2 ks ventil|Propojení/);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM jobs WHERE deleted=0').get().n, 1);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM material_items').get().n, materialsAtStart);
+    const savedVisit = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:proposedVisit.body.confirm.id}));
+    assert.equal(savedVisit.status, 200, JSON.stringify(savedVisit.body));
+    assert.match(savedVisit.body.reply, /neodešel/);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM jobs WHERE deleted=0').get().n, 2);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM material_items').get().n, materialsAtStart);
+    const extra = env.sqlite.prepare("SELECT id, title, garden_id, address, customer_name, due_date, assigned_to, start_time, end_time, job_type, status FROM jobs WHERE id<>'job-live' AND deleted=0").get();
+    assert.equal(extra.garden_id, 'garden-live');
+    assert.equal(extra.address, 'Zahradní 4');
+    assert.equal(extra.customer_name, 'Novák');
+    assert.equal(extra.due_date, followUpDate(today, foldCzech(visitText)));
+    assert.equal(extra.assigned_to, '');
+    assert.equal(extra.start_time, '');
+    assert.equal(extra.end_time, '');
+    assert.equal(extra.job_type, 'installation');
+    assert.equal(extra.status, 'planned');
+    const link = env.sqlite.prepare('SELECT defect_id, job_id FROM garden_defect_jobs').get();
+    assert.equal(link.defect_id, tracked[0].id);
+    assert.equal(link.job_id, extra.id);
+    assert.equal(mailCount(env), 0);
+    const noPhoto = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Připoj poslední fotografii k protokolu.'}));
+    assert.equal(noPhoto.body.confirm, null);
+    assert.match(noPhoto.body.reply, /není nahraná|neodhaduji/);
+    assert.equal(env.sqlite.prepare('SELECT photo_ids FROM service_reports WHERE job_id=?').get('job-live').photo_ids, '[]');
+    const invented = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Přidej fotku opraveného ventilu.'}));
+    assert.equal(invented.body.confirm, null);
+    assert.match(invented.body.reply, /nevyfotím|nepopisuji/);
+    env.sqlite.prepare("INSERT INTO service_photos(id,job_id,object_key,mime_type,size,name,sha256,status,created_at,created_by) VALUES('photo-live','job-live','private/photo-live','image/jpeg',6,'ventil.jpg','hash','ready',1,'owner-id')").run();
+    const proposedPhoto = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Připoj poslední fotografii k protokolu.'}));
+    assert.ok(proposedPhoto.body.confirm?.id);
+    assert.match(proposedPhoto.body.reply, /neposuzuji/);
+    assert.equal(env.sqlite.prepare('SELECT photo_ids FROM service_reports WHERE job_id=?').get('job-live').photo_ids, '[]');
+    const savedPhoto = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:proposedPhoto.body.confirm.id}));
+    assert.equal(savedPhoto.status, 200, JSON.stringify(savedPhoto.body));
+    assert.equal(env.sqlite.prepare('SELECT photo_ids FROM service_reports WHERE job_id=?').get('job-live').photo_ids, '["photo-live"]');
+    const days = [
+      'V pondělí jsme vykopali 80 metrů rýh a položili potrubí.',
+      'V úterý jsme namontovali 12 postřikovačů a 4 ventily.',
+      'Ve čtvrtek jsme zapojili jednotku a odzkoušeli systém.'
+    ];
+    let context = savedDefect.body.context;
+    let last = null;
+    for(const text of days){
+      last = await json(await call(env, '/api/assistant', people.owner, 'POST', {text, context}));
+      assert.equal(last.status, 200, JSON.stringify(last.body));
+      assert.equal(last.body.concept.kind, 'diary');
+      assert.ok(last.body.confirm?.id);
+      context = last.body.context;
+      assert.equal(env.sqlite.prepare('SELECT count(*) n FROM jobs WHERE deleted=0').get().n, 2);
+      assert.equal(env.sqlite.prepare('SELECT count(*) n FROM job_diary_entries').get().n, 0);
+    }
+    assert.deepEqual(context.diary.days.map(day=>day.date), days.map(text=>mentionedWorkDate(today, foldCzech(text))).sort());
+    const savedDiary = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:last.body.confirm.id}));
+    assert.equal(savedDiary.status, 200, JSON.stringify(savedDiary.body));
+    assert.match(savedDiary.body.reply, /jedné zakázky|fotografie chybí|neúčtoval/);
+    const work = env.sqlite.prepare('SELECT work FROM service_reports WHERE job_id=?').get('job-live').work;
+    assert.match(work, /vykopáno/);
+    assert.match(work, /položeno potrubí/);
+    assert.match(work, /postřikovač/);
+    assert.match(work, /ventil/);
+    assert.match(work, /zapojeno/);
+    assert.match(work, /odzkoušení/);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM jobs WHERE deleted=0').get().n, 2);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM job_diary_entries').get().n, 0);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM material_items').get().n, materialsAtStart);
+    const crew = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Kdo dnes pracoval na realizaci?'}));
+    assert.equal(crew.body.confirm, null);
+    assert.match(crew.body.reply, /nevidím|nedoplnil/);
+    assert.doesNotMatch(crew.body.reply, /Luboš|Novák/);
+    const hours = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Kolik hodin jsme dnes strávili na zakázce?'}));
+    assert.equal(hours.body.confirm, null);
+    assert.match(hours.body.reply, /Realizace Sever|nemám|nepoužívám/);
+    assert.doesNotMatch(hours.body.reply, /plánovaný čas/);
+    const person = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Kolik hodin odpracoval Luboš?'}));
+    assert.equal(person.body.confirm, null);
+    assert.doesNotMatch(person.body.reply, /8 h|vymyslel/);
+    const workerWord = await json(await call(env, '/api/assistant', people.worker, 'POST', {text:'Do slovníku přidej výraz kohouty jako ventily.'}));
+    assert.match(workerWord.body.reply, /správce|vlastník/);
+    assert.equal(workerWord.body.confirm, null);
+    assert.equal(env.sqlite.prepare("SELECT count(*) n FROM settings WHERE key='assistant-dictionary'").get().n, 0);
+    const proposedWord = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Do slovníku přidej výraz kohouty jako ventily.'}));
+    assert.equal(proposedWord.body.concept.kind, 'dictionary');
+    assert.equal(env.sqlite.prepare("SELECT count(*) n FROM settings WHERE key='assistant-dictionary'").get().n, 0);
+    const savedWord = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:proposedWord.body.confirm.id}));
+    assert.equal(savedWord.status, 200, JSON.stringify(savedWord.body));
+    assert.deepEqual(JSON.parse(env.sqlite.prepare("SELECT value FROM settings WHERE key='assistant-dictionary'").get().value), [{phrase:'kohouty', replacement:'ventily'}]);
+    const slang = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Použili jsme 4 kohouty.'}));
+    assert.equal(slang.body.concept.kind, 'protocol');
+    assert.match(slang.body.concept.work, /ventil/);
+    assert.doesNotMatch(slang.body.concept.work, /kohout/);
+    assert.equal(slang.body.concept.materials[0].query, 'ventil');
+    assert.equal(slang.body.concept.materials[0].quantity, '4');
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM material_items').get().n, materialsAtStart);
+    assert.doesNotMatch(env.sqlite.prepare('SELECT work FROM service_reports WHERE job_id=?').get('job-live').work, /kohout|bylo použito/);
+    assert.equal(mailCount(env), 0);
+  }finally{env.sqlite.close();}
+});
+
+test('Completion confirms only a protocol without open defects and never sends a document', async()=>{
+  const env = environment();
+  try{
+    await ready(env);
+    const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    const created = await call(env, '/api/jobs/job-ready', people.owner, 'PUT', {version:0, title:'Servis filtru', status:'in_progress', jobType:'service', dueDate:today, customerName:'Novák', incompleteReason:'', assignedTo:people.owner.id, description:''});
+    assert.equal(created.status, 200, await created.clone().text());
+    const report = await call(env, '/api/jobs/job-ready/service', people.owner, 'PUT', {operationId:'ready-report', version:1, report:{date:today, work:'Vyměněn filtr.', material:'', defects:'', notes:'', recommendations:'', photoIds:[]}});
+    assert.equal(report.status, 200, await report.clone().text());
+    const proposed = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Zakázku máme hotovou.'}));
+    assert.equal(proposed.status, 200, JSON.stringify(proposed.body));
+    assert.equal(proposed.body.concept.kind, 'complete');
+    assert.ok(proposed.body.confirm?.id);
+    assert.match(proposed.body.reply, /neodešlu/);
+    assert.equal(env.sqlite.prepare('SELECT status FROM jobs WHERE id=?').get('job-ready').status, 'in_progress');
+    const done = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:proposed.body.confirm.id}));
+    assert.equal(done.status, 200, JSON.stringify(done.body));
+    assert.match(done.body.reply, /neodešel/);
+    assert.equal(env.sqlite.prepare('SELECT status FROM jobs WHERE id=?').get('job-ready').status, 'done');
+    assert.equal(mailCount(env), 0);
+  }finally{env.sqlite.close();}
+});
+
 
 
 

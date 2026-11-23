@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseAssistantCommand, contextualCommand, assistantModeInfo, ASSISTANT_MODES, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, foldCzech, nextWeekday, parseMaterialAddition, planMaterialLines, weekdayDate, weekSpan, parseServiceDictation, reviseServiceDraft, matchProtocolQuery, annotateProtocolMaterials, serviceDraftQuestions} from '../web/assistant-commands.js';
+import {parseAssistantCommand, contextualCommand, assistantModeInfo, ASSISTANT_MODES, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, foldCzech, nextWeekday, parseMaterialAddition, planMaterialLines, weekdayDate, weekSpan, parseServiceDictation, reviseServiceDraft, matchProtocolQuery, annotateProtocolMaterials, serviceDraftQuestions, applyAssistantDictionary, followUpDate, mentionedWorkDate} from '../web/assistant-commands.js';
 import {answerOffline} from '../web/assistant-offline.js';
 
 const today = '2026-11-21';
@@ -239,4 +239,66 @@ test('Protocol catalogue match bills one exact item and never invents a row', ()
   const asked = serviceDraftQuestions(annotated);
   assert.ok(asked.required.some(item=>/Kolena/.test(item)&&/nezakládám/.test(item)));
   assert.equal(asked.required.some(item=>/Rain Bird/.test(item)), false);
+});
+
+test('Defects, visits, realization days, photos and the garden dictionary stay commands', ()=>{
+  const defect = parseAssistantCommand('Čtvrtý ventil netěsní, budeme ho muset příště vyměnit.', today);
+  assert.equal(defect.intent, 'defects.track');
+  assert.equal(defect.params.note.title, 'Netěsnící čtvrtý ventil');
+  assert.equal(defect.params.note.description, 'Čtvrtý ventil závlahového systému netěsní. Doporučená oprava je výměna ventilu při další návštěvě.');
+  assert.equal(defect.params.note.nextStep, 'Vyměnit ventil při další návštěvě.');
+  assert.equal(intent(SPOKEN_WORK), 'protocol.report');
+  const visit = parseAssistantCommand('Musíme se sem vrátit příští středu, potřebujeme vyměnit ještě dva ventily.', today);
+  assert.equal(visit.intent, 'jobs.followup');
+  assert.equal(visit.params.visit.dueDate, '2026-11-25');
+  assert.equal(visit.params.visit.dueDate, followUpDate(today, foldCzech(visit.text)));
+  assert.deepEqual(visit.params.visit.materials, [{name:'ventil', quantity:2, unit:'ks'}]);
+  assert.equal(intent('Zakázku máme hotovou.'), 'jobs.complete');
+  assert.equal(intent('Připoj poslední fotografii k protokolu.'), 'protocol.photo');
+  assert.equal(parseAssistantCommand('Připoj poslední fotografii k protokolu.', today).params.when, 'latest');
+  assert.equal(parseAssistantCommand('Přidej fotku opraveného ventilu.', today).params.when, 'after');
+  assert.equal(parseAssistantCommand('Ulož tuto fotku jako stav před opravou.', today).params.when, 'before');
+  assert.equal(intent('Zkontroluj protokol u zakázky Beta.'), 'protocol.check');
+  const monday = parseAssistantCommand('V pondělí jsme vykopali 80 metrů rýh a položili potrubí.', today);
+  const tuesday = parseAssistantCommand('V úterý jsme namontovali 12 postřikovačů a 4 ventily.', today);
+  const thursday = parseAssistantCommand('Ve čtvrtek jsme zapojili jednotku a odzkoušeli systém.', today);
+  assert.equal(monday.intent, 'diary.day');
+  assert.equal(tuesday.intent, 'diary.day');
+  assert.equal(thursday.intent, 'diary.day');
+  assert.deepEqual([monday.params.day.date, tuesday.params.day.date, thursday.params.day.date], ['2026-11-16','2026-11-17','2026-11-19']);
+  assert.equal(monday.params.day.date, mentionedWorkDate(today, foldCzech(monday.text)));
+  assert.match(monday.params.day.work, /vykopáno/);
+  assert.match(monday.params.day.work, /položeno potrubí/);
+  assert.match(tuesday.params.day.work, /postřikovač/);
+  assert.match(tuesday.params.day.work, /ventil/);
+  assert.match(thursday.params.day.work, /zapojeno/);
+  assert.match(thursday.params.day.work, /odzkoušení/);
+  const kept = contextualCommand(tuesday, {diary:{jobId:'job-1', days:[monday.params.day]}});
+  assert.equal(kept.intent, 'diary.day');
+  assert.equal(kept.params.base.jobId, 'job-1');
+  const mow = parseAssistantCommand('Posekali jsme trávník.', today);
+  assert.equal(mow.intent, 'protocol.report');
+  assert.match(mow.params.draft.work, /posečeno/);
+  assert.match(mow.params.draft.work, /trávník/);
+  assert.equal(mow.params.draft.materials.length, 0);
+  assert.equal(intent('Vertikutovali jsme trávník.'), 'protocol.report');
+  assert.equal(intent('Hnojili jsme záhon.'), 'protocol.report');
+  assert.equal(intent('Vysadili jsme keře.'), 'protocol.report');
+  const dictionary = parseAssistantCommand('Do slovníku přidej výraz kohouty jako ventily.', today);
+  assert.equal(dictionary.intent, 'dictionary.add');
+  assert.deepEqual(dictionary.params, {phrase:'kohouty', replacement:'ventily'});
+  assert.equal(applyAssistantDictionary('Použili jsme 4 kohouty.', [{phrase:'kohouty', replacement:'ventily'}]), 'Použili jsme 4 ventily.');
+  assert.equal(intent('Kolik hodin jsme dnes strávili na zakázce?'), 'jobs.hours');
+  assert.equal(parseAssistantCommand('Kolik hodin jsme dnes strávili na zakázce?', today).params.current, true);
+  assert.equal(intent('Kdo dnes pracoval na realizaci?'), 'jobs.crew');
+  assert.equal(intent('Kolik hodin odpracoval Luboš?'), 'attendance.hours');
+  for(const text of ['Čtvrtý ventil netěsní, budeme ho muset příště vyměnit.','Musíme se sem vrátit příští středu, potřebujeme vyměnit ještě dva ventily.','Zakázku máme hotovou.','Připoj poslední fotografii k protokolu.','V pondělí jsme vykopali 80 metrů rýh a položili potrubí.','Do slovníku přidej výraz kohouty jako ventily.']){
+    const offline = answerOffline(parseAssistantCommand(text, today), {jobs:[], today});
+    assert.equal(offline.missing, true);
+    assert.match(offline.reply, /neukládám|nezměnilo/);
+  }
+  const crew = answerOffline(parseAssistantCommand('Kdo dnes pracoval na realizaci?', today), {jobs:[], today});
+  assert.equal(crew.missing, true);
+  assert.match(crew.reply, /nemám/);
+  assert.doesNotMatch(crew.reply, /neukládám/);
 });
