@@ -10,6 +10,14 @@ const sortedPath=url=>{url.searchParams.sort();return url.pathname+'?'+url.searc
 const clone=value=>structuredClone(value);
 const summary=job=>{const {gardenNotes,customerContact,...row}=job;return {...row,...customerContact?{customerContact:{id:customerContact.id,name:customerContact.name}}:{}};};
 const validDay=day=>/^\d{4}-\d{2}-\d{2}$/.test(day)&&Number.isFinite(Date.parse(day))&&new Date(day+'T12:00:00Z').toISOString().slice(0,10)===day;
+// One job may be planned on nonconsecutive dates. The calendar expands its
+// occurrences, without duplicating the actual job or its protocol.
+export function jobCalendarDates(job){
+ const dates=Array.isArray(job?.schedule?.dates)?job.schedule.dates:[];
+ return [...new Set([job?.dueDate,...dates].filter(day=>typeof day==='string'&&validDay(day)))].sort();
+}
+export function jobOccursOn(job, day){return jobCalendarDates(job).includes(day);}
+
 function query(path,now){
  const url=new URL(path,'https://cache.invalid');if(url.pathname!=='/api/jobs')return null;
  const p=url.searchParams,months=jobCacheMonths(now);
@@ -29,9 +37,18 @@ export function deriveCachedJobs(info,snapshots){
   (info.state==='all'||info.state==='active'&&job.status!=='done'||job.status===info.state)&&(!info.type||job.jobType===info.type)&&
   (!info.protocol||job.status==='done'&&(info.protocol==='unfinished'?['missing','draft'].includes(job.protocolStatus||'missing'):(job.protocolStatus||'missing')===info.protocol))&&
   (!assignee||job.assignedTo===assignee||(job.assignedTos||[]).includes(assignee))&&(!discipline||discipline==='all'||!job.discipline||job.discipline===discipline)&&
-  (!search||[job.title,job.description,job.address,job.customerName].some(v=>ascii(v).includes(search)))&&(!info.from||job.dueDate>=info.from&&job.dueDate<=info.to));
+  (!search||[job.title,job.description,job.address,job.customerName].some(v=>ascii(v).includes(search)))&&(!info.from||jobCalendarDates(job).some(day=>day>=info.from&&day<=info.to)));
  let calendar;
- if(!info.from){const counts=new Map();for(const j of rows)counts.set(j.dueDate,(counts.get(j.dueDate)||0)+1);calendar={days:[...counts].filter(([day])=>day).sort().map(([date,count])=>({date,count})),undatedCount:counts.get('')||0};if(info.day)rows=rows.filter(j=>j.dueDate===(info.day==='undated'?'':info.day));}
+ if(!info.from){
+  const counts=new Map();let undatedCount=0;
+  for(const job of rows){
+   const dates=jobCalendarDates(job).filter(day=>info.months.includes(day.slice(0,7)));
+   if(!dates.length&&!job.dueDate)undatedCount++;
+   for(const day of dates)counts.set(day,(counts.get(day)||0)+1);
+  }
+  calendar={days:[...counts].sort().map(([date,count])=>({date,count})),undatedCount};
+  if(info.day)rows=rows.filter(job=>info.day==='undated'?!job.dueDate:jobOccursOn(job,info.day));
+ }
  if(rows.length>500)return null; // Large result sets retain real server cursors.
  return {jobs:rows.sort(compareWorkJobs),nextCursor:null,...(calendar?{calendar}:{})};
 }
@@ -51,7 +68,7 @@ export function createJobListCache({read,change,send,getSession,online=()=>true,
   await update(state=>({entries:[],months:state.months.map(entry=>{
    if(entry.scope!==who)return entry;
    const replacements=new Set(rows.map(j=>j.id));let jobs=entry.jobs.filter(j=>j.id!==removed&&!replacements.has(j.id));
-   jobs.push(...rows.filter(j=>(!j.dueDate||j.dueDate.startsWith(entry.month+'-'))&&(!entry.discipline||entry.discipline==='all'||!j.discipline||j.discipline===entry.discipline)).map(summary));
+   jobs.push(...rows.filter(j=>(!j.dueDate||jobCalendarDates(j).some(day=>day.startsWith(entry.month+'-')))&&(!entry.discipline||entry.discipline==='all'||!j.discipline||j.discipline===entry.discipline)).map(summary));
    return {...entry,jobs,dirty:true};
   })}));
  }
