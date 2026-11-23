@@ -90,6 +90,15 @@ function applyBubble(root){
   root.querySelector('.assistant-launch')?.setAttribute('aria-expanded', runtime.open?'true':'false');
   document.body.classList.toggle('assistant-open', !!runtime.open);
 }
+export function openWorkAssistant(context={}){
+  if(context.jobId) runtime.pendingJobId=String(context.jobId);
+  runtime.open=true;
+  runtime.minimized=false;
+  const bubble=document.querySelector('#assistant-root');
+  if(bubble) applyBubble(bubble);
+  repaint();
+  queueMicrotask(()=>document.querySelector('#assistant-page textarea')?.focus());
+}
 
 function bindKeyboard(host){
   const root = host.closest('#assistant-root')||host;
@@ -131,6 +140,13 @@ function resolvedTheme(){
 }
 
 function render(host, session, paint, api){
+  if(runtime.pendingJobId){
+    const pending=ensureThread(session);
+    pending.context={...(pending.context||{}), jobId:runtime.pendingJobId};
+    if(pending.draftConcept&&!pending.draftConcept.jobId) pending.draftConcept.jobId=runtime.pendingJobId;
+    runtime.pendingJobId='';
+    persist(session);
+  }
   const thread = ensureDraft(current());
   const items = thread?.items||[];
   host.dataset.theme = resolvedTheme();
