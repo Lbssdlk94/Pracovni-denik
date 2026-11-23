@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createJobListCache,jobCacheMonths} from '../web/job-list-cache.js';
+import {createJobListCache,jobCacheMonths,deriveCachedJobs,jobCalendarDates} from '../web/job-list-cache.js';
 
 function fixture(){
  let clock=Date.parse('2026-11-12T12:00:00Z'),state,connected=true;
@@ -68,4 +68,28 @@ test('Server access denial removes stored snapshots and produces a denial notifi
 });
 test('Corrupt/unavailable optional storage cannot fail a successful online request',async()=>{
  const session=fixture().session;const c=createJobListCache({read:async()=>{throw Error('Storage');},change:async()=>{throw Error('Quota');},send:async()=>({listRevision:1,jobs:[],nextCursor:null}),getSession:()=>session,now:()=>session.verifiedAt});assert.equal((await c.request(path)).jobs.length,0);
+});
+
+
+test('Multi-day job counts in every planned calendar day without duplicate records',()=>{
+ const job={id:'installation',version:1,title:'Realizace závlahy',dueDate:'2026-11-23',status:'planned',jobType:'installation',schedule:{days:3,dates:['2026-11-23','2026-11-25','2026-11-27']}};
+ const overview=url=>({url:new URL(url,'https://example.test'),months:['2026-11'],state:'all',type:'',protocol:'',day:new URL(url,'https://example.test').searchParams.get('day')||'',from:'',to:''});
+ const snapshots=[{discipline:'irrigation',jobs:[job]}];
+ assert.deepEqual(jobCalendarDates(job),['2026-11-23','2026-11-25','2026-11-27']);
+ const month=deriveCachedJobs(overview('/api/jobs?month=2026-11&order=schedule'),snapshots);
+ assert.equal(month.jobs.length,1);
+ assert.deepEqual(month.calendar.days,[{date:'2026-11-23',count:1},{date:'2026-11-25',count:1},{date:'2026-11-27',count:1}]);
+ for(const day of job.schedule.dates){
+  const result=deriveCachedJobs(overview('/api/jobs?month=2026-11&day='+day+'&order=schedule'),snapshots);
+  assert.deepEqual(result.jobs.map(row=>row.id),['installation']);
+ }
+ assert.equal(deriveCachedJobs(overview('/api/jobs?month=2026-11&day=2026-11-24&order=schedule'),snapshots).jobs.length,0);
+});
+
+test('Overlapping due date and schedule dates count only once and remain month-scoped',()=>{
+ const job={id:'cross',title:'Realizace',dueDate:'2026-11-30',status:'planned',schedule:{dates:['2026-11-30','2026-12-01','2026-12-01']}};
+ const nov={url:new URL('https://example.test/api/jobs?month=2026-11&order=schedule'),months:['2026-11'],state:'all',type:'',protocol:'',day:'',from:'',to:''};
+ const dec={...nov,url:new URL('https://example.test/api/jobs?month=2026-12&order=schedule'),months:['2026-12']};
+ assert.deepEqual(deriveCachedJobs(nov,[{jobs:[job]}]).calendar.days,[{date:'2026-11-30',count:1}]);
+ assert.deepEqual(deriveCachedJobs(dec,[{jobs:[job]}]).calendar.days,[{date:'2026-12-01',count:1}]);
 });
