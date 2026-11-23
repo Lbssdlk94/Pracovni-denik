@@ -1,5 +1,5 @@
 import {jobCompletionMarkup,bindJobCompletion,canEditCompletion} from './job-completion-ui.js?v=completion-v1';
-import {createJobTimeUI} from './job-time-ui.js?v=direct-navigation-v1';
+import {createJobTimeUI} from './job-time-ui.js?v=job-days-v1';
 import {jobCacheScope} from './job-list-cache.js?v=completion-v1';
 import {StatusBadge,AvatarStack,StickyActionBar,OfflineBadge,VisitCard,VisitTime,Accordion,shortVisitDate,distinctWorkLabel} from './field-components.js?v=field-ui-v1';
 import {createJobDiaryUI} from './job-diary-ui.js?v=diary-members-v1';

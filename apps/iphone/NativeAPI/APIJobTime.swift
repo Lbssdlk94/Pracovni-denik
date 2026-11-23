@@ -147,7 +147,7 @@ struct APIJobTimeView:View {
                     DisclosureGroup("Ukončené intervaly"){
                         ForEach(Array(projected["intervals"].array.filter{!$0["endAt"].isNull}.prefix(more ? Int.max : 20)),id:\.id){interval in
                             VStack(alignment:.leading,spacing:8){Text(interval["userName"].string+" · "+(APIWorkTimeLogic.titles[interval["kind"].string] ?? "")).font(.headline);Text(APIFormat.date(interval["startAt"])+" · "+APIWorkTimeLogic.hours(APIWorkTimeLogic.duration(interval))).font(.caption);Text(interval["approval"].string=="approved" ? "Schváleno" : "Čeká na schválení").font(.caption)
-                                if !store.isRolePreview && (mayManage || interval["userId"].string==store.userID){Button("Navrhnout opravu"){proposal=APIWorkTimeProposal(interval:interval)}}
+                                if !store.isRolePreview && (mayManage || interval["userId"].string==store.userID){Button("Navrhnout opravu"){proposal=APIWorkTimeProposal(interval:interval)};Button("Navrhnout smazání",role:.destructive){proposal=APIWorkTimeProposal(interval:interval,remove:true)}}
                                 if financial && interval["approval"].string != "approved"{Button("Schválit zaznamenané hodiny"){Task{await approveInterval(interval)}}}
                             }
                         }
@@ -155,7 +155,7 @@ struct APIJobTimeView:View {
                     }
                     DisclosureGroup("Schvalování a opravy"){
                         ForEach(snapshot["reviews"].array,id:\.id){review in
-                            VStack(alignment:.leading,spacing:8){Text(review["reason"].string).font(.headline);Text(review["author_name"].string+" · "+APIFormat.date(review["created_at"])).font(.caption);Text(review["status"].string=="pending" ? "Čeká na schválení" : review["status"].string=="approved" ? "Schváleno" : "Zamítnuto");if let bytes=review["proposed"].string.data(using:.utf8),let value=try? JSONDecoder().decode(APIValue.self,from:bytes){Text(APIFormat.date(value["startAt"])+" – "+APIFormat.date(value["endAt"])).font(.caption)}
+                            VStack(alignment:.leading,spacing:8){Text(review["reason"].string).font(.headline);Text(review["author_name"].string+" · "+APIFormat.date(review["created_at"])).font(.caption);Text(review["status"].string=="pending" ? "Čeká na schválení" : review["status"].string=="approved" ? "Schváleno" : "Zamítnuto");if let bytes=review["proposed"].string.data(using:.utf8),let value=try? JSONDecoder().decode(APIValue.self,from:bytes){Text(value["remove"].bool ? "Návrh: smazat interval "+APIFormat.date(value["startAt"])+" – "+APIFormat.date(value["endAt"]) : APIFormat.date(value["startAt"])+" – "+APIFormat.date(value["endAt"])).font(.caption)}
                                 if financial && review["status"].string=="pending"{Button("Schválit"){Task{await reviewTime(review.id,decision:"approve")}};Button("Zamítnout",role:.destructive){Task{await reviewTime(review.id,decision:"reject")}}}
                             }
                         }
@@ -182,7 +182,7 @@ struct APIJobTimeView:View {
             .task(id:store.scope+store.revision.uuidString){await load()}.refreshable{await load(refresh:true)}
             .sheet(item:$conflict){op in APIWorkTimeConflictView(store:store,job:job,operation:op)}
             .sheet(item:$action){request in APIWorkTimeActionEditor(store:store,job:job,snapshot:snapshot,kind:request.kind,selected:selection)}
-            .sheet(item:$proposal){request in APIWorkTimeProposalEditor(store:store,job:job,snapshot:snapshot,interval:request.interval)}
+            .sheet(item:$proposal){request in APIWorkTimeProposalEditor(store:store,job:job,snapshot:snapshot,interval:request.interval,remove:request.remove)}
             .sheet(isPresented:$costs){APIWorkTimeAdministration(store:store,job:job,snapshot:snapshot,mode:"rates")}
             .sheet(isPresented:$lead){APIWorkTimeAdministration(store:store,job:job,snapshot:snapshot,mode:"lead")}
             .sheet(isPresented:$add){APIWorkTimeAdministration(store:store,job:job,snapshot:snapshot,mode:"assign")}
@@ -194,7 +194,7 @@ struct APIJobTimeView:View {
     func discard(_ op:APIMutation)async{do{try store.requireLiveRole();store.vault?.state.outbox.removeAll{$0.id==op.id};try store.vault?.persist();store.updateOutbox();await load(refresh:true)}catch{problem=error.localizedDescription}}
 }
 struct APIWorkTimeAction:Identifiable{let id=UUID();let kind:String}
-struct APIWorkTimeProposal:Identifiable{let id=UUID();let interval:APIValue}
+struct APIWorkTimeProposal:Identifiable{let id=UUID();let interval:APIValue;var remove=false}
 
 struct APIWorkTimeConflictView:View {
     @ObservedObject var store:APIStore
@@ -288,11 +288,11 @@ struct APIWorkTimeActionEditor:View {
 }
 
 struct APIWorkTimeProposalEditor:View {
-    @ObservedObject var store:APIStore;let job:APIValue;let snapshot:APIValue;let interval:APIValue
+    @ObservedObject var store:APIStore;let job:APIValue;let snapshot:APIValue;let interval:APIValue;let remove:Bool
     @Environment(\.dismiss) private var dismiss
     @State private var user="";@State private var kind="work";@State private var start=Date().addingTimeInterval(-3600);@State private var end=Date();@State private var reason="";@State private var problem:String?;@State private var busy=false
-    var body:some View{NavigationStack{Form{Picker("Pracovník",selection:$user){ForEach(Array(snapshot["states"].array.filter{snapshot["canManage"].bool || $0["userId"].string==store.userID}.enumerated()),id:\.offset){_,state in Text(state["name"].string).tag(state["userId"].string)}}.disabled(!interval.isNull);Picker("Činnost",selection:$kind){ForEach(["work","travel","break","other"],id:\.self){Text(APIWorkTimeLogic.titles[$0]!).tag($0)}};DatePicker("Od",selection:$start);DatePicker("Do",selection:$end);TextField("Povinný důvod",text:$reason,axis:.vertical);Text("Interval musí patřit do existující docházkové směny. Návrh schvaluje správce.").font(.caption);if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)};Button("Odeslat návrh"){Task{await save()}}.disabled(busy)}.environment(\.timeZone,TimeZone(identifier:"Europe/Prague")!).navigationTitle("Doplnění a oprava času").toolbar{ToolbarItem(placement:.cancellationAction){Button("Zavřít"){dismiss()}.disabled(busy)}}}.editLease(store).onAppear{user=interval["userId"].string.isEmpty ? store.userID : interval["userId"].string;if !interval.isNull{kind=interval["kind"].string;start=Date(timeIntervalSince1970:interval["startAt"].double/1000);end=Date(timeIntervalSince1970:interval["endAt"].double/1000)}}}
-    func save()async{busy=true;defer{busy=false};do{_ = try await store.write("/api/jobs/"+job.id+"/time/proposals",method:"POST",body:.object(["operationId":.s(UUID().uuidString),"intervalId":interval.isNull ? .s(UUID().uuidString) : interval["id"],"userId":.s(user),"version":interval.isNull ? .n(0) : interval["version"],"kind":.s(kind),"startAt":.number((start.timeIntervalSince1970*1000).rounded(.down)),"endAt":.number((end.timeIntervalSince1970*1000).rounded(.down)),"reason":.s(reason)]));dismiss()}catch{problem=error.localizedDescription}}
+    var body:some View{NavigationStack{Form{if remove{Text("Ukončený interval se smaže až po schválení správcem. Docházka a směna zůstanou. Otevřenou práci nejdříve ukončete.").font(.caption)}else{Picker("Pracovník",selection:$user){ForEach(Array(snapshot["states"].array.filter{snapshot["canManage"].bool || $0["userId"].string==store.userID}.enumerated()),id:\.offset){_,state in Text(state["name"].string).tag(state["userId"].string)}}.disabled(!interval.isNull);Picker("Činnost",selection:$kind){ForEach(["work","travel","break","other"],id:\.self){Text(APIWorkTimeLogic.titles[$0]!).tag($0)}};DatePicker("Od",selection:$start);DatePicker("Do",selection:$end)};TextField("Povinný důvod",text:$reason,axis:.vertical);Text(remove ? "Smazání neschvaluje pracovník sám. Původní záznam zůstane v historii změn." : "Interval musí patřit do existující docházkové směny. Návrh schvaluje správce.").font(.caption);if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)};Button(remove ? "Odeslat smazání ke schválení" : "Odeslat návrh"){Task{await save()}}.disabled(busy)}.environment(\.timeZone,TimeZone(identifier:"Europe/Prague")!).navigationTitle(remove ? "Smazat pracovní dobu" : "Doplnění a oprava času").toolbar{ToolbarItem(placement:.cancellationAction){Button("Zavřít"){dismiss()}.disabled(busy)}}}.editLease(store).onAppear{user=interval["userId"].string.isEmpty ? store.userID : interval["userId"].string;if !interval.isNull{kind=interval["kind"].string;start=Date(timeIntervalSince1970:interval["startAt"].double/1000);end=Date(timeIntervalSince1970:interval["endAt"].double/1000)}}}
+    func save()async{busy=true;defer{busy=false};do{var body:APIValue = .object(["operationId":.s(UUID().uuidString),"intervalId":interval.isNull ? .s(UUID().uuidString) : interval["id"],"userId":.s(user),"version":interval.isNull ? .n(0) : interval["version"],"reason":.s(reason)]);if remove{guard !interval.isNull else{throw APIError.local("Smazat lze jen existující interval.")};body["remove"] = .bool(true)}else{body["kind"] = .s(kind);body["startAt"] = .number((start.timeIntervalSince1970*1000).rounded(.down));body["endAt"] = .number((end.timeIntervalSince1970*1000).rounded(.down))};_ = try await store.write("/api/jobs/"+job.id+"/time/proposals",method:"POST",body:body);dismiss()}catch{problem=error.localizedDescription}}
 }
 
 struct APIWorkTimeAdministration:View {

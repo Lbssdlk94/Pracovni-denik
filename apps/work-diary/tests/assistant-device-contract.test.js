@@ -21,7 +21,7 @@ test('Safari keyboard inset and iPhone assistant status are source contracts, no
   assert.match(swift, /PhotosPicker/);
   const thread = swift.slice(swift.indexOf('struct Thread'), swift.indexOf('private struct Saved'));
   assert.doesNotMatch(thread, /pending/);
-  assert.match(project, /CURRENT_PROJECT_VERSION: 18/);
-  assert.match(project, /MARKETING_VERSION: 0\.8\.9/);
+  assert.match(project, /CURRENT_PROJECT_VERSION: 19/);
+  assert.match(project, /MARKETING_VERSION: 0\.8\.10/);
   assert.doesNotMatch(swift, /\]=\./);
 });
