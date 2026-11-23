@@ -1,7 +1,7 @@
-import {parseAssistantCommand, contextualCommand} from './assistant-commands.js?v=assistant-work-v2';
-import {answerOffline, queueOfflineWrite} from './assistant-offline.js?v=assistant-work-v2';
+import {interpretAssistant} from './assistant-commands.js?v=assistant-intent-v1';
+import {answerOffline, queueOfflineWrite} from './assistant-offline.js?v=assistant-intent-v1';
 import {peekCachedJobs} from './cloud.js?v=completion-v1';
-import {extractLocalCommand, localMinistral} from './assistant-local.js?v=assistant-work-v2';
+import {extractLocalCommand, extractLocalUnderstanding, localMinistral} from './assistant-local.js?v=assistant-intent-v1';
 import {durationPickerMarkup, refreshDurationTotals} from './planning-fields.js?v=workspace-roles-v1';
 
 function esc(value){
@@ -139,6 +139,18 @@ function resolvedTheme(){
   return 'light';
 }
 
+function rememberOpenedJob(api, session, id){
+  if(!id||!api?.db?.request) return;
+  api.db.request('/api/jobs/'+encodeURIComponent(id)).then(data=>{
+    const job = data?.job;
+    const thread = current();
+    if(!job||!thread||thread.context?.jobId!==id) return;
+    thread.context = {...thread.context, jobId:id, jobTitle:job.title||'', customerName:thread.context.customerName||job.customerName||'', address:job.address||'', city:job.city||''};
+    persist(session);
+    if(repaint) repaint();
+  }).catch(()=>{});
+}
+
 function render(host, session, paint, api){
   if(runtime.pendingJobId){
     const pending=ensureThread(session);
@@ -146,8 +158,13 @@ function render(host, session, paint, api){
     if(pending.draftConcept&&!pending.draftConcept.jobId) pending.draftConcept.jobId=runtime.pendingJobId;
     runtime.pendingJobId='';
     persist(session);
+    rememberOpenedJob(api, session, pending.context.jobId);
   }
   const thread = ensureDraft(current());
+  if(thread?.context?.jobId && !thread.context.jobTitle && runtime.jobLookup!==thread.context.jobId){
+    runtime.jobLookup = thread.context.jobId;
+    rememberOpenedJob(api, session, thread.context.jobId);
+  }
   const items = thread?.items||[];
   host.dataset.theme = resolvedTheme();
   bindKeyboard(host);
@@ -320,7 +337,8 @@ function stage(thread){
   if(thread?.draftConcept?.kind==='protocol') return protocolStage(thread);
   if(['defect','diary','followup','complete','photo','dictionary'].includes(thread?.draftConcept?.kind)) return noteStage(thread);
   if(thread?.draftConcept) return conceptStage(thread);
-  return '<aside class="assistant-detail" hidden></aside><div class="assistant-empty-stage"><strong>Výsledek</strong><p>Po příkazu se tady otevře zákazník, zakázka, kalendář nebo koncept. Nic se neuloží bez potvrzení.</p></div>';
+  const opened = thread?.context?.jobTitle?`<p>Otevřeno ze zakázky „${esc(thread.context.jobTitle)}“${thread.context.customerName?' · '+esc(thread.context.customerName):''}. Protokol tím ještě nevznikl.</p>`:'<p>Po příkazu se tady otevře zákazník, zakázka, kalendář nebo koncept. Nic se neuloží bez potvrzení.</p>';
+  return `<aside class="assistant-detail" hidden></aside><div class="assistant-empty-stage"><strong>Výsledek</strong>${opened}</div>`;
 }
 function noteStage(thread){
   const concept = thread.draftConcept;
@@ -344,7 +362,11 @@ function protocolStage(thread){
     return `<div class="assistant-material"><label><span>${esc(item.label||'Položka')}</span><span class="assistant-control">${layers()}<input data-concept-field="material:${index}:quantity" inputmode="decimal" value="${esc(item.quantity??'')}" aria-label="Množství ${esc(item.label||'')}"></span></label><span>${esc(item.unit||'')}</span>${select}</div>`;
   }).join('');
   const required = (concept.questions||[]).map(item=>`<li>${esc(item)}</li>`).join('');
-  const optional = (concept.optionalQuestions||[]).map(item=>`<li>${esc(item)}</li>`).join('');
+  const optional = (concept.optionalQuestions||[]).map(item=>{
+    const key = /těsnosti/.test(item)?'kontrolu těsnosti':/funkční/.test(item)?'funkčnost systému':/návštěva/.test(item)?'další návštěvu':/závady/.test(item)?'další závady':'';
+    const buttons = key?`<span class="assistant-next"><button type="button" data-quick="Odpověď na ${key}: ano">Ano</button><button type="button" data-quick="Odpověď na ${key}: ne">Ne</button><button type="button" data-quick="Odpověď na ${key}: přeskočit">Přeskočit</button></span>`:'';
+    return `<li>${esc(item)}${buttons}</li>`;
+  }).join('');
   return `<div class="assistant-concept-sheet">
     <header class="assistant-sheet-title"><h2>Servisní protokol</h2><span class="assistant-pill is-concept">Koncept</span></header>
     <p>${esc(concept.jobTitle||'Zakázka není vybraná')}${place?' · '+esc(place):''}</p>
@@ -621,11 +643,19 @@ function findCard(type, id){
 function openAttrs(type, id){
   return `data-open-type="${esc(type)}" data-open-id="${esc(id)}"`;
 }
+function safeActionHref(value){
+  const href = String(value||'');
+  if(/^https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=/.test(href)) return href;
+  if(/^tel:\+?\d{6,15}$/.test(href)) return href;
+  return '';
+}
 function cardView(card){
   const count = card.countLabel?`<small>${esc(card.countLabel)}</small>`:'';
   const status = card.statusLabel?`<em class="is-${esc(card.status)}">${esc(card.statusLabel)}</em>`:'';
   const action = card.id&&['customer','job','material'].includes(card.type)?`<button type="button" ${openAttrs(card.type, card.id)}>${esc(card.openLabel||'Otevřít')}</button>`:'';
-  return `<article class="assistant-card"><span class="assistant-card-mark">${spark}</span><div><strong>${esc(card.title)}</strong>${card.subtitle?`<p>${esc(card.subtitle)}</p>`:''}${count}</div>${status}${action}</article>`;
+  const href = safeActionHref(card.href);
+  const link = href?`<a href="${esc(href)}" target="_blank" rel="noopener noreferrer">${href.startsWith('tel:')?'Zavolat':'Navigovat'}</a>`:'';
+  return `<article class="assistant-card"><span class="assistant-card-mark">${spark}</span><div><strong>${esc(card.title)}</strong>${card.subtitle?`<p>${esc(card.subtitle)}</p>`:''}${count}</div>${status}${link}${action}</article>`;
 }
 function detailPanel(){
   const detail = runtime.detail;
@@ -731,16 +761,19 @@ async function ask(text, api, paint, confirmId, cancelId, file, concept){
         let answer = '';
         try{answer = await model.answer(clean);}catch(error){if(alive()) push(session,'assistant', (error?.message||'Ministral teď neodpověděl.')+' Pokračuji základním režimem.');answer='';}
         if(!alive()) return false;
-        const command = answer?extractLocalCommand(answer):'';
-        if(answer&&!command){push(session,'assistant', `${answer}\n\nTohle není údaj z deníku. Jména, hodiny a ceny beru jen z evidence.`);return false;}
+        const understood = answer?extractLocalUnderstanding(answer):null;
+        const command = understood?.command || (answer?extractLocalCommand(answer):'');
+        if(understood?.intent==='assistant.clarify' && understood.read?.params?.reply){push(session,'assistant', understood.read.params.reply);return false;}
+        if(answer&&!command&&!understood?.read){push(session,'assistant', `${answer}\n\nTohle není údaj z deníku. Jména, hodiny a ceny beru jen z evidence.`);return false;}
         if(command){push(session,'assistant', `Rozumím tomu jako: ${command}`);commandText = command;}
+        else if(understood?.read) thread.understanding = understood.read;
       }
     }
     if(!alive()) return false;
     if(!navigator.onLine && !confirmId && !cancelId){
       if(file){push(session,'assistant','Soubor bez připojení neukládám. Až budete online, vložte ho znovu. Nic se teď nezměnilo.');return false;}
       const today = new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-      const command = contextualCommand(parseAssistantCommand(commandText, today), thread.context);
+      const command = interpretAssistant(commandText, today, thread.context);
       const queued = queueOfflineWrite(thread.pending||[], {...command, text:commandText});
       if(queued.queued||queued.duplicate){
         thread.pending = queued.queue;
@@ -755,7 +788,9 @@ async function ask(text, api, paint, confirmId, cancelId, file, concept){
       return false;
     }
     if(!navigator.onLine){if(alive()) push(session,'assistant','Potvrzení bez připojení neodešlu. Nic se neuložilo.');return false;}
-    const data = await api.db.request('/api/assistant',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:commandText, mode:'basic', ...(thread.context?{context:thread.context}:{}), ...(file?{file}:{}), ...(confirmId?{confirmId}:{}), ...(cancelId?{cancelId}:{}), ...(concept?{concept}:{})})});
+    const understanding = thread.understanding||null;
+    thread.understanding = null;
+    const data = await api.db.request('/api/assistant',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:commandText, mode:runtime.mode==='local'?'local':'basic', ...(understanding?{understanding}:{}), ...(thread.context?{context:thread.context}:{}), ...(file?{file}:{}), ...(confirmId?{confirmId}:{}), ...(cancelId?{cancelId}:{}), ...(concept?{concept}:{})})});
     if(!alive()) return false;
     push(session,'assistant', data.reply||'Hotovo.', {confirm:data.confirm||null, suggestions:data.suggestions||[], cards:data.cards||[], concept:data.concept||null, context:data.context||thread.context});
     if(data.concept) adoptConcept(current(), data.concept);

@@ -1,5 +1,6 @@
 // Offline answers use only the snapshot the caller already has. Missing data stays missing.
 import {attendanceHours} from './attendance-model.js?v=workspace-roles-v1';
+import {pickNextWork} from './assistant-intent.js';
 
 const STATUS = {planned:'plánovaná', on_way:'na cestě', in_progress:'probíhá', done:'hotová', incomplete:'nedokončená'};
 const missing = 'Tento přehled v zařízení nemám. Připojte se. Nic jsem si nevymyslel.';
@@ -27,6 +28,20 @@ export function queueOfflineWrite(queue, command, options = {}){
 export function answerOffline(command, snapshot = {}){
   const intent = command?.intent;
   const jobs = Array.isArray(snapshot.jobs) ? snapshot.jobs : null;
+  if(intent==='assistant.clarify'||intent==='assistant.explain'||intent==='assistant.refuse'||intent==='assistant.batch'||intent==='materials.plan'){
+    return {reply:(command.params?.reply||'Bez připojení nic neměním. Až budete online, vyhodnotím požadavek znovu.')+' Údaj jsem si nevymyslel.', missing:intent!=='assistant.refuse'};
+  }
+  if(intent==='jobs.next'){
+    if(!jobs) return {reply:'Další práci v zařízení nemám. Připojte se. Pořadí neodhaduji. Nic jsem nezměnil.', missing:true};
+    const picked = pickNextWork(jobs, snapshot.today||'', command.params?.currentJobId||'');
+    const stale = ' Údaje jsou z poslední uložené kopie a nemusí být aktuální. Cestu jsem nezahájil.';
+    if(picked.choices) return {reply:'V uložené kopii je víc zakázek bez jasného pořadí. Po připojení je ukážu znovu.'+stale, missing:true};
+    if(picked.next) return {reply:`Z uložené kopie je další „${picked.next.job.title}“ ${picked.next.date}${picked.next.timed?' '+picked.next.time:', bez času výjezdu'}.${stale}`, missing:true};
+    return {reply:'V uložené kopii další práci nevidím.'+stale, missing:true};
+  }
+  if(intent==='navigation.address'||intent==='materials.stock'||intent==='materials.price'||intent==='customers.contact'){
+    return {reply:'Tohle chci ověřit v aktuální evidenci. Připojte se. Nic jsem nezměnil ani si nevymyslel.', missing:true};
+  }
   if(intent==='dictionary.list') return {reply:'Firemní slovník v zařízení nemám. Připojte se. Vestavěné výrazy třicet dvojka, PE 25 a T-kus platí pořád. Nic jsem si nevymyslel.', missing:true};
   if(writeIntents.includes(intent)) return {reply:noWrite, missing:true};
   if(intent==='refused.destructive') return {reply:'Smazání nebo zrušení tady nespouštím, aby se nic omylem neztratilo. Použijte stávající obrazovku záznamu.'};

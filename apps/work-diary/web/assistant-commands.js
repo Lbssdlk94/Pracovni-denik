@@ -1,5 +1,6 @@
 // Rule-based Czech commands. No model, no network. The same function is used
 import {planWork, revisePlan} from './job-plan.js';
+import {understandUtterance} from './assistant-intent.js';
 // by the worker and by tests. Later local or cloud models may only replace
 // this parser; they must still call the existing authorized actions.
 
@@ -333,7 +334,7 @@ export function parseAssistantCommand(input, today){
 const DICTATION_ONES = {jeden:1,jedna:1,jedno:1,dva:2,dve:2,tri:3,ctyri:4,pet:5,sest:6,sedm:7,osm:8,devet:9};
 const DICTATION_TEENS = {deset:10,jedenact:11,dvanact:12,trinact:13,ctrnact:14,patnact:15,sestnact:16,sedmnact:17,osmnact:18,devatenact:19};
 const DICTATION_TENS = {dvacet:20,tricet:30,ctyricet:40,padesat:50,sedesat:60,sedmdesat:70,osmdesat:80,devadesat:90};
-const DICTATION_UNITS = {ks:'ks',kus:'ks',kusu:'ks',kusy:'ks',metr:'m',metru:'m',metry:'m',m:'m',bm:'m',litr:'l',litru:'l',litry:'l',l:'l',kg:'kg',kilogram:'kg',kilogramu:'kg',bal:'bal',baleni:'bal'};
+const DICTATION_UNITS = {ks:'ks',kus:'ks',kusu:'ks',kusy:'ks',metr:'m',metru:'m',metry:'m',m:'m',bm:'m',litr:'l',litru:'l',litry:'l',l:'l',kg:'kg',kilogram:'kg',kilogramu:'kg',bal:'bal',baleni:'bal',pytel:'pytel',pytle:'pytel',pytlu:'pytel',pytly:'pytel'};
 const DICTATION_LABELS = {ventil:'Ventily', postrkovac:'Postřikovače', potrubi:'Potrubí', koleno:'Kolena', tkus:'T-kusy', tryska:'Trysky'};
 const DICTATION_COUNT = ['','jeden','dva','tři','čtyři','pět','šest','sedm','osm','devět','deset','jedenáct','dvanáct','třináct','čtrnáct','patnáct','šestnáct','sedmnáct','osmnáct','devatenáct','dvacet'];
 const CANONICAL_WORK = 'V rámci servisního zásahu byla provedena výměna čtyř ventilů a dvou postřikovačů závlahového systému. Dále bylo opraveno poškozené potrubí a upraveno nastavení třetí závlahové sekce.';
@@ -431,10 +432,19 @@ function dictationSection(folded){
 function parseDictationPiece(piece){
   const folded = foldCzech(piece);
   if(/\bsekc/.test(folded)&&!/\b(ventil|postrkov|potrub|kolen|trysk)\b/.test(folded)) return {section:dictationSection(folded)||0};
-  const words = folded.split(' ').filter(Boolean);
-  const number = parseDictationNumber(words);
+  let words = folded.split(' ').filter(word=>word && !['tam','tady','jeste'].includes(word));
+  let number = parseDictationNumber(words);
   let index = 0, quantity = null;
   if(number){quantity = number.value; index = number.used;}
+  else {
+    const at = words.findIndex((_, cursor)=>parseDictationNumber(words.slice(cursor)));
+    if(at>0){
+      number = parseDictationNumber(words.slice(at));
+      quantity = number.value;
+      words = words.slice(0, at).concat(words.slice(at+number.used));
+      index = 0;
+    }
+  }
   let unit = '';
   if(DICTATION_UNITS[words[index]]){unit = DICTATION_UNITS[words[index]]; index += 1;}
   const name = words.slice(index).join(' ').trim();
@@ -442,7 +452,10 @@ function parseDictationPiece(piece){
   const key = dictationKey(name);
   if(key==='sekce') return {section:dictationSection(folded)||quantity||0};
   if(key==='ryha') return {note:piece.trim()};
-  if(!key) return {note:piece.trim()};
+  if(!key){
+    if(quantity!=null && name && !/^(sekce|ryha|system|systemu|praskle|praskly)$/.test(name)) return {key:'catalog', label:name, query:name, quantity, unit, generic:true};
+    return {note:piece.trim()};
+  }
   if(!unit) unit = key==='potrubi'?'m':'ks';
   return {key, label:DICTATION_LABELS[key], query:dictationQuery(key, name), quantity, unit, generic:!/\b(rain|\d{2}|pe)\b/.test(name)};
 }
@@ -452,6 +465,8 @@ function dictationVerbKind(verb){
   if(folded.startsWith('vertikut')) return 'scarify';
   if(folded.startsWith('hnoj')) return 'fertilize';
   if(folded.startsWith('vysad')) return 'plant';
+  if(folded.startsWith('spotreb')) return 'use';
+  if(folded.startsWith('dali')||folded==='dal') return 'use';
   if(folded.startsWith('vymen')) return 'replace';
   if(folded.startsWith('oprav')) return 'repair';
   if(folded.startsWith('nastav')) return 'adjust';
@@ -466,7 +481,7 @@ function dictationVerbKind(verb){
 }
 function splitDictation(original){
   const text = normalizeDictationSlang(original);
-  const re = /\b(?:jsme\s+|jsem\s+)?(vyměnili|vyměnil|opravili|opravil|nastavili|nastavil|použili|použil|položili|položil|namontovali|namontoval|zapojili|zapojil|vykopali|vykopal|odzkoušeli|odzkoušel|zkontrolovali|zkontroloval|posekali|posekal|vertikutovali|vertikutoval|hnojili|hnojil|vysadili|vysadil)\b/giu;
+  const re = /\b(?:jsme\s+|jsem\s+)?(vyměnili|vyměnil|opravili|opravil|nastavili|nastavil|použili|použil|spotřebovali|spotřeboval|dali|dal|položili|položil|namontovali|namontoval|zapojili|zapojil|vykopali|vykopal|odzkoušeli|odzkoušel|zkontrolovali|zkontroloval|posekali|posekal|vertikutovali|vertikutoval|hnojili|hnojil|vysadili|vysadil)\b/giu;
   const marks = [];
   let match;
   while((match = re.exec(text))) marks.push({start:match.index, end:match.index+match[0].length, kind:dictationVerbKind(match[1])});
@@ -478,6 +493,11 @@ function splitDictation(original){
   });
 }
 function dictationPhrase(item){
+  if(item.key==='catalog'){
+    const count = item.quantity==null?'':dictationCountWord(item.quantity);
+    const unit = item.unit==='m'?' metrů':item.unit==='pytel'?' pytlů':item.unit?` ${item.unit}`:'';
+    return `${count}${unit} ${item.label}`.replace(/\s+/g,' ').trim();
+  }
   if(item.quantity==null) return item.key==='potrubi'?'potrubí':'';
   const word = dictationCountWord(item.quantity);
   if(item.key==='potrubi'&&/\b32\b/.test(item.query||'')) return `${word} metrů potrubí o průměru 32 mm`;
@@ -534,8 +554,13 @@ function rememberDictation(previous, next){
 function findDictationLine(draft, folded){
   const keys = [['ventil','ventil'],['postrik','postrkovac'],['potrub','potrubi'],['kolen','koleno'],['t kus','tkus'],['trysk','tryska']];
   const hit = keys.find(([needle])=>folded.includes(needle));
-  if(!hit) return null;
-  return (draft.materials||[]).find(line=>line.key===hit[1])||null;
+  if(hit) return (draft.materials||[]).find(line=>line.key===hit[1])||null;
+  const words = folded.split(' ').map(materialStem).filter(word=>word.length>3);
+  const catalogs = (draft.materials||[]).filter(line=>line.key==='catalog' && words.some(word=>{
+    const query = materialStem(line.query||'');
+    return query && (query.includes(word)||word.includes(query));
+  }));
+  return catalogs.length===1?catalogs[0]:null;
 }
 function draftMaterial(piece){
   return {key:piece.key, label:piece.label, query:piece.query, quantity:piece.quantity, unit:piece.unit, generic:piece.generic!==false};
@@ -550,6 +575,7 @@ export function parseServiceDictation(original){
   if(!actions.length) return null;
   const materials = [];
   for(const action of actions){
+    if(action.kind==='check'||action.kind==='test') continue;
     for(const piece of action.pieces){
       if(!piece.key) continue;
       const previous = materials.find(line=>line.key===piece.key&&line.query===piece.query);
@@ -589,6 +615,12 @@ export function matchProtocolQuery(query, items){
   }).filter(row=>row.hits===wanted.length&&row.coverage>=0.5);
   if(!rows.length) return {missing:true};
   rows.sort((a,b)=>b.coverage-a.coverage||a.extra-b.extra||String(a.item.name).localeCompare(String(b.item.name),'cs'));
+  if(rows.length===1 && rows[0].extra===0) return {item:rows[0].item};
+  if(rows.length===1){
+    const have = protocolTokens(`${rows[0].item.name} ${rows[0].item.sku||''}`);
+    const sameFamily = have.every(token=>wanted.some(need=>token.includes(need)||need.includes(token)));
+    if(sameFamily) return {item:rows[0].item};
+  }
   const best = rows[0];
   const ties = rows.filter(row=>row.coverage===best.coverage&&row.extra===best.extra);
   if(ties.length===1&&best.extra===0) return {item:best.item};
@@ -620,6 +652,21 @@ export function reviseServiceDraft(draft, text){
   const original = String(text||'').trim();
   const folded = foldCzech(original);
   if(!folded) return null;
+  const optionalAnswer = folded.match(/^odpoved na (kontrolu tesnosti|funkcnost systemu|dalsi navstevu|dalsi zavady) (ano|ne|preskocit)$/);
+  const shortAnswer = /^(ano|jo|ne|preskocit|preskoc)$/.test(folded)?folded:'';
+  const pendingKey = {ano:'yes',jo:'yes',ne:'no',preskocit:'skip',preskoc:'skip'}[shortAnswer]&&draft.pendingQuestion?draft.pendingQuestion:'';
+  const answeredKey = optionalAnswer?{ 'kontrolu tesnosti':'tightness','funkcnost systemu':'functional','dalsi navstevu':'next','dalsi zavady':'defects' }[optionalAnswer[1]] : pendingKey;
+  if(answeredKey){
+    const choice = optionalAnswer?{ano:'yes',ne:'no',preskocit:'skip'}[optionalAnswer[2]]:{ano:'yes',jo:'yes',ne:'no',preskocit:'skip',preskoc:'skip'}[shortAnswer];
+    const next = cloneDictation(draft);
+    next.asked = [...new Set([...(next.asked||[]), answeredKey])];
+    next.pendingQuestion = '';
+    if(choice==='yes'){
+      const sentence = {tightness:'Pracovník potvrdil, že kontrola těsnosti byla provedena.', functional:'Pracovník potvrdil, že systém je plně funkční.', next:'Pracovník uvedl, že je nutná další návštěva.', defects:'Pracovník uvedl, že byly zjištěny další závady.'}[answeredKey];
+      if(sentence && !next.work.includes(sentence)) next.work = `${next.work} ${sentence}`.trim();
+    }
+    return {draft:rememberDictation(draft, next)};
+  }
   if(/\bvrat posledni\b|\bzrus posledni zmenu\b|\bvrat to zpet\b/.test(folded)){
     const history = draft.history||[];
     if(!history.length) return {draft, undo:'empty'};
@@ -658,6 +705,19 @@ export function reviseServiceDraft(draft, text){
     line.itemId = '';
     return {draft:rememberDictation(draft, next)};
   }
+  if(/\b(nakonec jen|byly to jen|bylo to jen)\b/.test(folded)){
+    const words = folded.split(' ').filter(Boolean);
+    const number = firstDictationNumber(words);
+    if(!number) return null;
+    const next = cloneDictation(draft);
+    const named = findDictationLine(next, folded);
+    const quantified = next.materials.filter(line=>line.quantity!=null);
+    const target = named || (quantified.length===1?quantified[0]:null);
+    if(!target) return {draft, clarify:`Množství ${number.value} nemá jasnou položku. Řekněte kterou, nic jsem nezměnil.`};
+    target.quantity = number.value;
+    target.itemId = '';
+    return {draft:rememberDictation(draft, next)};
+  }
   if(/\b(byly|byli|byl|bylo|jsou)\b/.test(folded)){
     const line = findDictationLine(next, folded);
     const brand = original.match(/\b(?:byly|byli|byl|bylo|jsou)\s+([^.?]{2,40})/iu);
@@ -678,6 +738,13 @@ export function reviseServiceDraft(draft, text){
     if(/funkc/.test(folded)) next.asked = [...new Set([...(next.asked||[]), 'functional'])];
     if(/dalsi navstev|priste/.test(folded)) next.asked = [...new Set([...(next.asked||[]), 'next'])];
     if(/zavad/.test(folded)) next.asked = [...new Set([...(next.asked||[]), 'defects'])];
+    return {draft:rememberDictation(draft, next)};
+  }
+  if(/\b(smaz|odstran)\b/.test(folded) && /\bradek|radku\b/.test(folded)){
+    const next = cloneDictation(draft);
+    const index = /\bdruh/.test(folded)?1:/\btret/.test(folded)?2:/\bprv/.test(folded)?0:-1;
+    if(index<0||!next.materials[index]) return {draft, clarify:'Který řádek rozpracovaného konceptu mám odebrat? Uložený záznam nemažu.'};
+    next.materials.splice(index, 1);
     return {draft:rememberDictation(draft, next)};
   }
   return null;
@@ -795,4 +862,17 @@ export function contextualCommand(command, context){
     return {...command, intent:'jobs.create', params:{title, customer:name, when:command.params?.when||'today', dueDate:command.params?.dueDate||''}};
   }
   return command;
+}
+
+export function interpretAssistant(input, today, context){
+  const rules = contextualCommand(parseAssistantCommand(input, today), context);
+  const folded = foldCzech(String(input||''));
+  if(rules.intent==='refused.destructive' && context?.protocol && /\bradek|radku\b/.test(folded)){
+    return {intent:'protocol.report', params:{text:String(input||''), base:context.protocol}, text:String(input||'')};
+  }
+  const meaning = understandUtterance(input, today, context);
+  if(meaning?.intent && (meaning.override || rules.intent==='unknown')){
+    return {intent:meaning.intent, params:meaning.params||{}, text:rules.text||String(input||'')};
+  }
+  return rules;
 }
