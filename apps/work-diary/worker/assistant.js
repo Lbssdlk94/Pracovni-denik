@@ -107,6 +107,31 @@ async function nextWork(env, m, h, params, today, options){
   return {reply:`${lead}: „${row.job.title}“${place?' · '+place:''}, ${row.date}${time}. Cestu ani stav zakázky jsem nezměnil.`, cards:jobCards([row.job])};
 }
 async function navigationAddress(env, m, h, params, today, options){
+  const wanted = String(params.query||'').trim();
+  if(wanted){
+    const found = await findJobs(env, m, h, wanted);
+    if(found.error) return {reply:found.error};
+    if(found.jobs.length===1){
+      const job = found.jobs[0];
+      if(!mapsHref(job)) return {reply:`U „${job.title}“ adresa v evidenci není. Mapu jsem neotevřel a adresu jsem si nevymyslel.`, cards:jobCards([job])};
+      return {reply:`Adresa „${job.title}“: ${[job.address, job.city].filter(Boolean).join(', ')}. Tlačítko jen otevře mapu. Cestu jsem nezahájil.`, cards:jobCards([job])};
+    }else if(found.jobs.length>1){
+      return {reply:`Našel jsem víc zakázek pro „${wanted}“. Upřesněte, kam mám navigovat. Mapu jsem neotevřel.\n`+lines(found.jobs, jobLine, ''), cards:jobCards(found.jobs)};
+    }
+    const customers = await customersGet(env, m, h, '/api/customers?q='+encodeURIComponent(wanted.slice(0,100)));
+    const customerError = blocked(customers);
+    if(customerError) return {reply:customerError};
+    const list = customers.data.customers||[];
+    if(list.length>1) return {reply:`Vyhovuje víc zákazníků. Mapu jsem neotevřel.\n`+lines(list, customer=>`• ${customer.name}`, '')};
+    if(list.length===1){
+      const address = (list[0].addresses||[])[0]||{};
+      const place = [address.address, address.city].filter(Boolean).join(', ');
+      const href = place ? 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(place) : '';
+      if(!href) return {reply:`U „${list[0].name}“ adresa v evidenci není. Mapu jsem neotevřel a adresu jsem si nevymyslel.`};
+      return {reply:`Adresa „${list[0].name}“: ${place}. Tlačítko jen otevře mapu. Cestu jsem nezahájil.`, cards:[{type:'customer', id:list[0].id, title:list[0].name, subtitle:place, href, openLabel:'Otevřít zákazníka'}]};
+    }
+    return {reply:`Místo „${wanted}“ v zakázkách ani u zákazníků nevidím. Mapu jsem neotevřel a adresu jsem si nevymyslel.`};
+  }
   const currentId = params.currentJobId || options.context?.jobId || '';
   let job = null;
   if(currentId){
@@ -347,6 +372,7 @@ async function run(env, ctx, m, h, command, today, options){
   if(!options.propose&&intent==='jobs.assign'&&params.jobId) return applyJobChange(env, m, h, params);
   if(!options.propose&&intent==='jobs.status'&&params.jobId) return applyStatus(env, m, h, params);
   if(!options.propose&&intent==='jobs.depart'&&params.jobId) return applyDeparture(env, m, h, params);
+  if(!options.propose&&intent==='jobs.work'&&params.jobId) return applyWork(env, m, h, params);
   if(!options.propose&&intent==='attendance.arrive') return applyPunch(env, m, h, 'arrival', params);
   if(!options.propose&&intent==='attendance.leave') return applyPunch(env, m, h, 'departure', params);
   if(!options.propose&&intent==='materials.add'&&params.jobId) return applyMaterialLines(env, ctx, m, h, params);
@@ -419,6 +445,9 @@ async function run(env, ctx, m, h, command, today, options){
   if(intent==='diary.day') return proposeDiary(env, m, h, params, options);
   if(intent==='dictionary.add') return proposeDictionary(env, m, params, options);
   if(intent==='jobs.reschedule'||intent==='jobs.assign'||intent==='jobs.depart'||intent==='jobs.status') return prepareJobCommand(env, m, h, intent, params, today, tomorrow, options);
+  if(intent==='jobs.work') return prepareWork(env, m, h, params, today, options);
+  if(intent==='jobs.unplanned') return unplannedJobs(env, m, h, params, today);
+  if(intent==='jobs.personDay') return personDay(env, m, h, params, today);
   if(intent==='attendance.active'||intent==='attendance.arrive'||intent==='attendance.leave') return attendanceCommand(env, m, h, intent, params, today, options);
   if(intent==='jobs.search'||intent==='jobs.history'||intent==='jobs.hours'||intent==='jobs.materials'||intent==='protocol.draft'){
     return jobIntent(env, ctx, m, h, intent, params, today, tomorrow, options);
@@ -427,6 +456,7 @@ async function run(env, ctx, m, h, command, today, options){
   if(intent==='jobs.plan') return planJob(env, m, h, params, today, options);
   if(intent==='customers.create') return createCustomer(env, m, h, params, options);
   if(intent==='attendance.hours'||intent==='attendance.report') return attendanceIntent(env, m, h, intent, params, today);
+  if(intent==='customers.contact' && !params.query && options.context?.customerName) params.query = String(options.context.customerName).slice(0,160);
   if(intent==='customers.search'||intent==='customers.contact'||intent==='customers.history'||intent==='customers.tariffs') return customerIntent(env, m, h, intent, params);
   if(intent==='materials.search') return materialSearch(env, m, h, params.query||'');
   if(intent==='materials.add'||intent==='materials.price'||intent==='materials.readiness'||intent==='materials.shopping') return materialCommand(env, ctx, m, h, intent, params, today, tomorrow, options);
@@ -466,6 +496,19 @@ async function prepareJobCommand(env, m, h, intent, params, today, tomorrow, opt
   if((intent==='jobs.reschedule'||intent==='jobs.assign')&&!manager(m)) return {reply:'Termín a přiřazení mění vlastník nebo správce.'};
   if(intent==='jobs.status'&&!params.status) return {reply:'Řekněte, jaký stav mám nastavit: plánovaná, probíhá, hotová nebo nedokončená.'};
   if(intent==='jobs.reschedule'&&!params.dueDate) return {reply:'Řekněte den, třeba pátek nebo zítra. Termín jsem nezměnil.'};
+  if(intent==='jobs.reschedule'&&params.current&&!params.query&&!options.context?.jobId) return {reply:'Kterou zakázku mám přesunout? Řekněte jméno zákazníka. Termín jsem nezměnil.'};
+  if(intent==='jobs.depart'&&params.next){
+    const loaded = await assignedWindow(env, m, h, today);
+    if(loaded.error) return {reply:loaded.error};
+    const picked = pickNextWork(loaded.jobs, today, options.context?.jobId||'');
+    if(picked.choices) return {reply:'Na stejný termín vidím víc zakázek a nehádám, ke které vyjet. Vyberte jednu. Cestu jsem nezahájil.\n'+picked.choices.map(occurrenceLine).join('\n'), cards:jobCards(picked.choices.map(row=>row.job))};
+    if(!picked.next) return {reply:'Další přiřazenou práci v rozvrhu nevidím. Odjezd jsem nezapsal.'};
+    const nextJob = picked.next.job;
+    const plan = arrivalPlan();
+    const summary = `Vyjet na další práci „${nextJob.title}“ a označit ji jako na cestě, příjezd ${plan.arrivalDate} v ${plan.arrivalTime}? Stav se změní jen když jste k zakázce přiřazený.`;
+    if(options.propose) return {reply:summary, confirm:await propose(env, m, {intent, params:{jobId:nextJob.id, version:nextJob.version, ...plan}}, summary)};
+    return applyDeparture(env, m, h, {jobId:nextJob.id, ...plan});
+  }
   const dueDate = params.dueDate==='tomorrow'?tomorrow:params.dueDate;
   let found;
   if(params.current&&!params.query&&options.context?.jobId) found = {jobs:[]};
@@ -538,6 +581,118 @@ async function applyDeparture(env, m, h, params){
   const result = await callJson(()=>handleJobs(write('/api/jobs/'+encodeURIComponent(params.jobId)+'/departure','POST',{version:loaded.data.job.version, arrivalDate:params.arrivalDate, arrivalTime:params.arrivalTime}, h._headers), env, m, h));
   if(!result.ok) return {reply:result.data.error||'Odjezd se nepodařilo zapsat.'};
   return {reply:`U zakázky „${result.data.job?.title||''}“ je stav na cestě, příjezd ${params.arrivalDate} v ${params.arrivalTime}.`, mutated:'jobs'};
+}
+async function loadJobTime(env, m, h, jobId){
+  let jobTime = null;
+  try{({handleJobTime:jobTime} = await import('./job-time.js'));}
+  catch{jobTime = typeof handleJobTime==='function' ? handleJobTime : null;}
+  if(typeof jobTime!=='function') return {error:'Pracovní interval v téhle evidenci nemám. Docházku ani zakázku jsem nezměnil.'};
+  return {jobTime};
+}
+async function readJobTime(env, m, h, jobId){
+  const loaded = await loadJobTime(env, m, h, jobId);
+  if(loaded.error) return loaded;
+  const result = await callJson(()=>loaded.jobTime(get('/api/jobs/'+encodeURIComponent(jobId)+'/time', h._headers), env, m, h));
+  if(!result.ok) return {error:blocked(result)||result.data?.error||'Pracovní dobu se nepodařilo načíst. Nic jsem nezapsal.'};
+  return {data:result.data, jobTime:loaded.jobTime};
+}
+async function spokenJob(env, m, h, params, options){
+  if(params.query){
+    const found = await findJobs(env, m, h, params.query);
+    if(found.error) return {error:found.error};
+    return oneJob(found.jobs, params.query);
+  }
+  const id = options.context?.jobId||'';
+  if(!id) return {error:params.action==='stop'
+    ?'Na které zakázce mám ukončit práci? Otevřete ji, nebo řekněte u koho. Docházku ani zakázku jsem nezavřel.'
+    :'Na které zakázce mám práci zahájit? Otevřete ji, nebo řekněte u koho. Nic jsem nezapsal.'};
+  const loaded = await jobsGet(env, m, h, '/api/jobs/'+encodeURIComponent(id));
+  if(!loaded.ok) return {error:blocked(loaded)||'Otevřenou zakázku se nepodařilo načíst. Nic jsem nezapsal.'};
+  return {job:loaded.data.job};
+}
+async function prepareWork(env, m, h, params, today, options){
+  if(!on(h.features,'attendance')) return {reply:'Pracovní interval potřebuje zapnutou docházku. Nic jsem nezapsal.'};
+  if(options.preview) return {reply:'V náhledu role práci nezapisuji.'};
+  const picked = await spokenJob(env, m, h, params, options);
+  if(picked.error) return {reply:picked.error};
+  if(picked.choices) return {reply:'Našel jsem víc zakázek. Upřesněte název. Interval jsem nezapsal.\n'+lines(picked.choices, jobLine, '')};
+  const job = picked.job;
+  const time = await readJobTime(env, m, h, job.id);
+  if(time.error) return {reply:time.error};
+  const mine = time.data.job?.myTime;
+  if(!mine) return {reply:'Váš pracovní interval nevidím. Nic jsem nezapsal.'};
+  const active = mine.active||null;
+  const same = active && active.jobId===job.id;
+  if(params.action==='stop'){
+    if(!same) return {reply:active?`Na „${job.title}“ nemáte otevřený interval. Práce běží jinde. Docházku ani zakázku jsem nezavřel.`:`Na „${job.title}“ nemáte otevřený interval. Docházku ani zakázku jsem nezavřel.`};
+    const summary = `Ukončit jen vaši práci na „${job.title}“? Docházka zůstane otevřená a zakázka se neoznačí jako hotová.`;
+    if(options.propose) return {reply:summary, confirm:await propose(env, m, {intent:'jobs.work', params:{jobId:job.id, action:'stop'}}, summary)};
+    return applyWork(env, m, h, {jobId:job.id, action:'stop'});
+  }
+  if(same && active.kind==='work') return {reply:`Na „${job.title}“ už práci máte otevřenou. Nový interval jsem nezaložil.`};
+  let arrival = '';
+  const people = await attendanceGet(env, m, h, `/api/attendance?month=${today.slice(0,7)}`);
+  if(people.ok && !people.data.activeShift) arrival = ' Docházka není otevřená, takže se s intervalem zapíše i příchod.';
+  const summary = (active && !same
+    ? `Ukončit váš interval jinde a zahájit práci na „${job.title}“?`
+    : `Zahájit vaši práci na „${job.title}“?`)
+    + ' Odchod z docházky nezapíšu a zakázku neoznačím jako hotovou.'+arrival;
+  if(options.propose) return {reply:summary, confirm:await propose(env, m, {intent:'jobs.work', params:{jobId:job.id, action:'start'}}, summary)};
+  return applyWork(env, m, h, {jobId:job.id, action:'start'});
+}
+async function applyWork(env, m, h, params){
+  const loaded = await jobsGet(env, m, h, '/api/jobs/'+encodeURIComponent(params.jobId));
+  if(!loaded.ok) return {reply:blocked(loaded)||'Zakázku se nepodařilo načíst. Interval jsem nezapsal.'};
+  const time = await readJobTime(env, m, h, params.jobId);
+  if(time.error) return {reply:time.error};
+  const mine = time.data.job?.myTime;
+  if(!mine) return {reply:'Váš pracovní interval nevidím. Nic jsem nezapsal.'};
+  const action = params.action==='stop'?'stop':'work';
+  if(action==='stop' && mine.active?.jobId!==params.jobId) return {reply:'Otevřený interval na téhle zakázce už nevidím. Docházku ani zakázku jsem nezavřel.'};
+  const body = {operationId:crypto.randomUUID(), action, at:Date.now(), workers:[{userId:m.user_id, version:mine.version}], ...(action==='work'?{allowSwitch:true}:{})};
+  const result = await callJson(()=>time.jobTime(write('/api/jobs/'+encodeURIComponent(params.jobId)+'/time/actions','POST', body, h._headers), env, m, h));
+  if(!result.ok) return {reply:result.data?.error||'Interval se nepodařilo zapsat. Docházku ani celou zakázku jsem kvůli tomu nezavřel.'};
+  const title = result.data.job?.title || loaded.data.job?.title || '';
+  if(action==='stop') return {reply:`Ukončil jsem jen váš interval na „${title}“. Docházka běží dál a zakázka není hotová.`, mutated:'jobs'};
+  return {reply:`Zahájil jsem vaši práci na „${title}“. Odchod z docházky jsem nezapsal a zakázku jsem neoznačil jako hotovou.`, mutated:'jobs'};
+}
+function datedVisit(job){
+  if(job?.dueDate) return true;
+  return (job?.schedule?.dates||[]).some(date=>/^\d{4}-\d{2}-\d{2}$/.test(String(date||''))) || (job?.terms||[]).some(term=>/^\d{4}-\d{2}-\d{2}$/.test(String(term?.date||'')));
+}
+async function unplannedJobs(env, m, h, params, today){
+  const type = ['service','installation','survey'].includes(params.type)?params.type:'';
+  const month = today.slice(0,7);
+  const result = await jobsGet(env, m, h, `/api/jobs?state=planned&order=schedule&month=${month}&day=undated${type?'&type='+type:''}`);
+  const error = blocked(result, 'Zakázky bez termínu se nepodařilo načíst.');
+  if(error) return {reply:error};
+  const jobs = (result.data.jobs||[]).filter(job=>!datedVisit(job));
+  const more = result.data.nextCursor?' Seznam pokračuje, ukázal jsem první část.':'';
+  return {reply:(jobs.length?`Bez termínu, čekají na naplánování:\n`+lines(jobs, jobLine, ''):'Zakázku bez termínu nevidím. Nic jsem nenaplánoval.')+more, cards:jobCards(jobs)};
+}
+async function personDay(env, m, h, params, today){
+  const when = params.when==='tomorrow'?addDays(today,1):today;
+  const person = String(params.person||'').trim();
+  if(!person) return {reply:'Řekněte jméno. Den jsem si nevymyslel.'};
+  let assignee = '', who = person;
+  if(manager(m)){
+    const people = await attendanceGet(env, m, h, `/api/attendance?month=${when.slice(0,7)}&userId=all`);
+    if(!people.ok) return {reply:blocked(people)||'Tým se nepodařilo načíst. Den jsem nevypsal.'};
+    const hits = (people.data.employees||[]).filter(item=>nearName(person, item.name));
+    if(!hits.length) return {reply:`Pracovníka „${person}“ v týmu nevidím. Den jsem si nevymyslel.`};
+    if(hits.length>1) return {reply:'Vyhovuje víc lidí: '+hits.map(item=>item.name).join(', ')+'. Upřesněte jméno.'};
+    assignee = hits[0].id;
+    who = hits[0].name;
+  }else if(nearName(person, m.name)){
+    assignee = m.user_id;
+    who = m.name;
+  }else return {reply:'Den kolegy vidí správce. Vám ukážu jen vlastní zakázky, když řeknete své jméno. Nic jsem si nevymyslel.'};
+  const result = await jobsGet(env, m, h, `/api/jobs?state=all&order=schedule&month=${when.slice(0,7)}&day=${when}&assignee=${encodeURIComponent(assignee)}`);
+  const error = blocked(result, 'Zakázky se nepodařilo načíst.');
+  if(error) return {reply:error};
+  const jobs = result.data.jobs||[];
+  const label = params.when==='tomorrow'?'Zítra':'Dnes';
+  return {reply:jobs.length?`${label} má ${who}:\n`+lines(jobs, jobLine, ''):`${label} pro ${who} žádnou zakázku nevidím.`, cards:jobCards(jobs)};
 }
 async function attendanceCommand(env, m, h, intent, params, today, options){
   if(!on(h.features,'attendance')) return {reply:'Docházka je v nastavení firmy vypnutá.'};
@@ -1390,7 +1545,8 @@ async function customerResultCards(env, m, h, list){
 async function customerIntent(env, m, h, intent, params){
   if(intent==='customers.tariffs'&&!on(h.features,'subscriptions')) return {reply:'Předplatné a tarify jsou v nastavení firmy vypnuté.'};
   const query = params.query||'';
-  if((intent==='customers.search'||intent==='customers.contact'||intent==='customers.history')&&!query) return {reply:'Napište jméno zákazníka.'};
+  if(intent==='customers.contact'&&!query) return {reply:'Komu mám zavolat? Číslo jsem si nevymyslel a hovor jsem neotevřel.'};
+  if((intent==='customers.search'||intent==='customers.history')&&!query) return {reply:'Napište jméno zákazníka.'};
   const result = await customersGet(env,m,h,'/api/customers'+(query?`?q=${encodeURIComponent(query.slice(0,100))}`:''));
   const error = blocked(result);
   if(error) return {reply:error};

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {interpretAssistant, parseAssistantCommand, parseServiceDictation, reviseServiceDraft, matchProtocolQuery, annotateProtocolMaterials} from '../web/assistant-commands.js';
+import {interpretAssistant, parseAssistantCommand, parseServiceDictation, reviseServiceDraft, matchProtocolQuery, annotateProtocolMaterials, nextWeekday} from '../web/assistant-commands.js';
 import {pickNextWork, modelReadCommand} from '../web/assistant-intent.js';
 import {extractLocalUnderstanding} from '../web/assistant-local.js';
 
@@ -42,6 +42,76 @@ test('Held-out Czech paraphrases share an intent without being stored as sentenc
   const batch = interpretAssistant('Dorazil jsem k Novákovi, vyměnili jsme tři ventily a musíme se sem vrátit v pátek.', today);
   assert.equal(batch.intent, 'assistant.batch');
   assert.match(batch.params.reply, /Nic jsem neprovedl/);
+});
+
+test('Colloquial field phrases do not steal the next-job question or attendance', ()=>{
+  const depart = ['Jedu na další zakázku.','Jedu dál.','Vyjíždím na další práci.','Jedu k dalšímu zákazníkovi.','Odjíždím na další.','Přesouvám se dál.','Pokračuju na další zakázku.','Jdu na další práci.'];
+  for(const phrase of depart){
+    const command = interpretAssistant(phrase, today);
+    assert.equal(command.intent, 'jobs.depart', phrase);
+    assert.equal(command.params.next, true, phrase);
+    assert.equal(command.params.query||'', '', phrase);
+  }
+  const named = interpretAssistant('Jedu k Novákovi.', today);
+  assert.equal(named.intent, 'jobs.depart');
+  assert.equal(named.params.next, undefined);
+  assert.equal(named.params.query, 'Novák');
+  assert.equal(intent('Jedu.'), 'unknown');
+  assert.equal(intent('Jsem na cestě k zákazníkovi.'), 'jobs.depart');
+  assert.equal(intent('Jaká je další zakázka?'), 'jobs.next');
+  assert.equal(intent('Kam mám jet až potom?'), 'jobs.next');
+  assert.equal(intent('Kde pak budeme pracovat?'), 'jobs.next');
+  assert.equal(intent('Začni docházku.'), 'attendance.arrive');
+  assert.equal(intent('Ukonči docházku.'), 'attendance.leave');
+  assert.equal(intent('Dnes končím, zapiš odchod.'), 'attendance.leave');
+  assert.equal(intent('Končím.'), 'assistant.clarify');
+  for(const phrase of ['Zahaj práci.','Začni pracovat.','Začínám.','Pouštím se do práce.','Jdu dělat.']){
+    const command = interpretAssistant(phrase, today);
+    assert.equal(command.intent, 'jobs.work', phrase);
+    assert.equal(command.params.action, 'start', phrase);
+  }
+  for(const phrase of ['Ukonči práci.','Končím s prací.','Přestávám pracovat.','Zavři můj interval.']){
+    const command = interpretAssistant(phrase, today);
+    assert.equal(command.intent, 'jobs.work', phrase);
+    assert.equal(command.params.action, 'stop', phrase);
+  }
+  assert.notEqual(intent('Ukonči zakázku.'), 'jobs.work');
+  assert.notEqual(intent('Ukonči zakázku.'), 'attendance.leave');
+  assert.equal(intent('Naviguj tam.'), 'navigation.address');
+  assert.equal(intent('Otevři mapu.'), 'navigation.address');
+  assert.equal(intent('Ukaž cestu.'), 'navigation.address');
+  assert.equal(intent('Spusť navigaci.'), 'navigation.address');
+  const called = interpretAssistant('Zavolej Novákovi.', today);
+  assert.equal(called.intent, 'customers.contact');
+  assert.equal(called.params.query, 'Novák');
+  assert.equal(interpretAssistant('Vytoč číslo.', today).intent, 'customers.contact');
+  assert.equal(interpretAssistant('Brnkni mu.', today).params.query, '');
+  assert.equal(intent('Co ještě nemá termín?'), 'jobs.unplanned');
+  assert.equal(intent('Co čeká na naplánování?'), 'jobs.unplanned');
+  assert.equal(intent('Které servisy jsou bez termínu?'), 'jobs.unplanned');
+  assert.equal(interpretAssistant('Které servisy jsou bez termínu?', today).params.type, 'service');
+  assert.equal(intent('Kteří zákazníci čekají na servis?'), 'customers.waitingService');
+  const move = interpretAssistant('Dej Nováka na čtvrtek.', today);
+  assert.equal(move.intent, 'jobs.reschedule');
+  assert.equal(move.params.query, 'Novák');
+  assert.equal(move.params.dueDate, nextWeekday(today, 'ctvrtek'));
+  const current = interpretAssistant('Dej to na pátek.', today);
+  assert.equal(current.intent, 'jobs.reschedule');
+  assert.equal(current.params.current, true);
+  assert.equal(current.params.query, '');
+  assert.equal(current.params.dueDate, '2026-11-27');
+  const kept = interpretAssistant('Přesuň zakázku u Nováka na pátek.', today);
+  assert.equal(kept.intent, 'jobs.reschedule');
+  assert.equal(kept.params.query, 'Novák');
+  assert.equal(kept.params.dueDate, '2026-11-27');
+  const marek = interpretAssistant('Co má dnes Marek?', today);
+  assert.equal(marek.intent, 'jobs.personDay');
+  assert.equal(marek.params.person, 'Marek');
+  assert.equal(marek.params.when, 'today');
+  assert.equal(intent('Co dělá Marek?'), 'jobs.personDay');
+  assert.equal(intent('Kde je dnes Marek?'), 'jobs.personDay');
+  assert.equal(intent('Co máme dnes za práci?'), 'jobs.today');
+  assert.equal(intent('Kolik hodin odpracoval Marek v listopadu?'), 'attendance.hours');
 });
 
 test('Next work uses every term and does not invent an order', ()=>{

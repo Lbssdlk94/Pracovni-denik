@@ -101,3 +101,49 @@ test('An unknown model intent cannot bypass the server and a read hint can', asy
     assert.match(hinted.body.reply, /nevidím|Pořadí|další/i);
   }finally{env.sqlite.close();}
 });
+
+test('Leaving for the next job waits for confirmation and does not invent a route', async()=>{
+  const env = environment();
+  try{
+    assert.equal((await call(env, '/api/me', people.owner)).status, 200);
+    assert.equal((await call(env, '/api/invitations', people.owner, 'POST', {email:people.worker.email, role:'worker'})).status, 200);
+    assert.equal((await call(env, '/api/me', people.worker)).status, 200);
+    env.sqlite.prepare('UPDATE members SET name=? WHERE user_id=?').run('Marek', people.worker.id);
+    const today = day(0), tomorrow = day(1);
+    assert.equal((await call(env, '/api/jobs/job-now', people.owner, 'PUT', {version:0, title:'Dnešní filtr', status:'in_progress', dueDate:today, startTime:'08:00', customerName:'Novák', address:'Zahradní 1', city:'Brno', incompleteReason:'', assignedTo:people.worker.id})).status, 200);
+    assert.equal((await call(env, '/api/jobs/job-next', people.owner, 'PUT', {version:0, title:'Pozdější ventil', status:'planned', dueDate:tomorrow, startTime:'09:30', customerName:'Dvořák', address:'Lipová 8', city:'Plzeň', incompleteReason:'', assignedTo:people.worker.id})).status, 200);
+    assert.equal((await call(env, '/api/jobs/job-open', people.owner, 'PUT', {version:0, title:'Servis bez data', status:'planned', dueDate:'', customerName:'Horák', incompleteReason:'', assignedTo:people.worker.id})).status, 200);
+    for(const text of ['Jedu na další zakázku.','Jedu dál.','Vyjíždím na další práci.','Jedu k dalšímu zákazníkovi.']){
+      const answer = await json(await call(env, '/api/assistant', people.worker, 'POST', {text, context:{jobId:'job-now'}}));
+      assert.equal(answer.status, 200, text+' '+JSON.stringify(answer.body));
+      assert.match(answer.body.reply, /Pozdější ventil/, text);
+      assert.match(answer.body.reply, /na cestě/, text);
+      assert.ok(answer.body.confirm?.id, text);
+      assert.equal(env.sqlite.prepare("SELECT status FROM jobs WHERE id='job-next'").get().status, 'planned', text);
+    }
+    const shown = await json(await call(env, '/api/assistant', people.worker, 'POST', {text:'Jaká je další zakázka?', context:{jobId:'job-now'}}));
+    assert.equal(shown.body.confirm, null);
+    assert.match(shown.body.reply, /nezměnil/);
+    const proposed = await json(await call(env, '/api/assistant', people.worker, 'POST', {text:'Jedu na další zakázku.', context:{jobId:'job-now'}}));
+    const done = await json(await call(env, '/api/assistant', people.worker, 'POST', {confirmId:proposed.body.confirm.id}));
+    assert.equal(done.status, 200, JSON.stringify(done.body));
+    assert.match(done.body.reply, /na cestě/);
+    assert.equal(env.sqlite.prepare("SELECT status FROM jobs WHERE id='job-next'").get().status, 'on_way');
+    assert.equal(env.sqlite.prepare("SELECT status FROM jobs WHERE id='job-now'").get().status, 'in_progress');
+    const stopped = await json(await call(env, '/api/assistant', people.worker, 'POST', {text:'Ukonči práci.', context:{jobId:'job-now'}}));
+    assert.equal(stopped.body.confirm, null);
+    assert.match(stopped.body.reply, /interval|Docházku/);
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM attendance_shifts').get().n, 0);
+    const loose = await json(await call(env, '/api/assistant', people.worker, 'POST', {text:'Co ještě nemá termín?'}));
+    assert.equal(loose.body.confirm, null);
+    assert.match(loose.body.reply, /Servis bez data/);
+    assert.doesNotMatch(loose.body.reply, /Pozdější ventil/);
+    const dayOf = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Co má dnes Marek?'}));
+    assert.equal(dayOf.body.confirm, null);
+    assert.match(dayOf.body.reply, /Dnešní filtr/);
+    const moved = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Dej Nováka na čtvrtek.'}));
+    assert.ok(moved.body.confirm?.id, JSON.stringify(moved.body));
+    assert.match(moved.body.reply, /Dnešní filtr|Novák/);
+    assert.equal(env.sqlite.prepare("SELECT due_date FROM jobs WHERE id='job-now'").get().due_date, today);
+  }finally{env.sqlite.close();}
+});

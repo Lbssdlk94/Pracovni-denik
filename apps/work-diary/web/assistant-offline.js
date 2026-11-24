@@ -5,7 +5,7 @@ import {pickNextWork} from './assistant-intent.js';
 const STATUS = {planned:'plánovaná', on_way:'na cestě', in_progress:'probíhá', done:'hotová', incomplete:'nedokončená'};
 const missing = 'Tento přehled v zařízení nemám. Připojte se. Nic jsem si nevymyslel.';
 const noWrite = 'Zápis bez připojení neukládám. Až budete online, příkaz zopakujte. Nic se teď nezměnilo.';
-const writeIntents = ['jobs.create','jobs.plan','jobs.followup','jobs.complete','diary.day','defects.track','dictionary.add','protocol.draft','protocol.report','protocol.note','protocol.photo','jobs.reschedule','jobs.assign','jobs.depart','jobs.status','attendance.arrive','attendance.leave','materials.add'];
+const writeIntents = ['jobs.create','jobs.plan','jobs.followup','jobs.complete','diary.day','defects.track','dictionary.add','protocol.draft','protocol.report','protocol.note','protocol.photo','jobs.reschedule','jobs.assign','jobs.depart','jobs.work','jobs.status','attendance.arrive','attendance.leave','materials.add'];
 
 function lines(items, render, empty){
   if(!items.length) return empty;
@@ -63,6 +63,17 @@ export function answerOffline(command, snapshot = {}){
   }
   if(intent==='jobs.incomplete'){
     return {reply:'Nedokončené z uloženého přehledu:\n'+lines(jobs.filter(job=>job.status==='incomplete'), jobLine, 'V uloženém přehledu žádná nedokončená zakázka není.')};
+  }
+  if(intent==='jobs.unplanned'){
+    const rows = jobs.filter(job=>job.status==='planned' && !job.dueDate && !(job.schedule?.dates||[]).some(date=>/^\d{4}-\d{2}-\d{2}$/.test(String(date||''))));
+    return {reply:'Bez termínu z uloženého přehledu:\n'+lines(rows, jobLine, 'V uloženém přehledu žádná zakázka bez termínu není.')+' Údaje nemusí být aktuální. Nic jsem nenaplánoval.'};
+  }
+  if(intent==='jobs.personDay'){
+    const person = String(command.params?.person||'').toLocaleLowerCase('cs');
+    const day = command.params?.when==='tomorrow'?tomorrow:today;
+    if(!person) return {reply:missing, missing:true};
+    const rows = jobs.filter(job=>String(job.assignedName||'').toLocaleLowerCase('cs').includes(person) && (job.dueDate===day || (job.schedule?.dates||[]).includes(day)));
+    return {reply:`${command.params.person} z uložené kopie${day?' ('+day+')':''}:\n`+lines(rows, jobLine, 'V uložené kopii pro něj žádnou zakázku nevidím.')+' Údaje nemusí být aktuální.'};
   }
   if(intent==='customers.waitingService'||intent==='jobs.plannedServices'){
     const rows = jobs.filter(job=>(job.jobType==='service'||intent==='jobs.plannedServices') && job.status!=='done');

@@ -107,7 +107,18 @@ export function assistantSuggestions(){
     'Vytvoř servisní protokol.',
     'Kolik hodin jsem dnes odpracoval?',
     'Kteří zákazníci čekají na servis?',
-    'Vytvoř pracovní výkaz za tento měsíc.'
+    'Vytvoř pracovní výkaz za tento měsíc.',
+    'Jedu na další zakázku.',
+    'Jedu dál.',
+    'Vyjíždím na další práci.',
+    'Jedu k dalšímu zákazníkovi.',
+    'Zahaj práci.',
+    'Ukonči práci.',
+    'Naviguj tam.',
+    'Zavolej Novákovi.',
+    'Co ještě nemá termín?',
+    'Dej Nováka na čtvrtek.',
+    'Co má dnes Marek?'
   ];
 }
 
@@ -204,6 +215,119 @@ function clipField(value, max){
   return String(value||'').replace(/[?.!,]+$/g,'').trim().slice(0, max);
 }
 
+const MOVE_AT = /\b(jedu|jedes|jede|jedem|jedeme|jedou|vyjizd\w*|vyrazim|vyrazime|vyrazit|vyrazte|odjizd\w*|presouvam\w*|presouvame|presouva|jdu|pokracuj\w*|pokracujeme|pokracuju)\b/;
+const MOTION_RE = /\b(jedu|jedes|jede|jedem|jedeme|jedou|vyjizd\w*|vyrazim|vyrazime|vyrazit|vyrazte|odjizd\w*|presouvam\w*|presouvame|presouva)\b/;
+const GENERIC_PLACE = /^(zakaz\w*|prac\w*|tam|to|tohle|tuhle|tomu|tomuto|misto|adres\w*|vyjezd\w*|navstev\w*|cestu|cesta|ceste|dals\w*|dal|dale|nej|servis\w*|realiz\w*|domu|doma|dnes|zitra|tady|sem|tom|ni)$/;
+const PERSON_STOP = new Set(['dnes','dneska','zitra','zitrejsek','praci','prace','zakazku','zakazka','zakazky','navstevu','navstevy','ona','tym','vsichni','nekdo','tom','tam','servis','realizaci','tady','tuhle','ten','muj','moje','moji','sve','svoji','neco','vyjezd','plan','termin','praci','interval','intervalu']);
+
+function leavingNext(text){
+  if(/\bdals\w*\b|\bdale\b/.test(text)) return true;
+  const motionAt = text.search(MOVE_AT);
+  const further = text.search(/\bdal\b/);
+  return motionAt>=0 && further>motionAt;
+}
+function isMotion(text){
+  return MOTION_RE.test(text) || (/\b(jdu|pokracuj\w*|pokracujeme|pokracuju)\b/.test(text) && leavingNext(text));
+}
+function travelName(original){
+  const match = String(original||'').match(/\b(?:k|ke|na|do|za)\s+(?:pana|paní|pani|panu|pane\s+)?(\p{L}+)/iu);
+  if(!match) return '';
+  const folded = foldCzech(match[1]);
+  if(!folded || folded.length<3 || GENERIC_PLACE.test(folded) || weekdayMention(folded)) return '';
+  return softenName(match[1]);
+}
+function originalToken(original, folded){
+  const words = String(original||'').match(/\p{L}+/gu)||[];
+  return words.find(word=>foldCzech(word)===folded)||'';
+}
+function departPhrase(original, text){
+  const onRoad = /jsem na ceste/.test(text);
+  const motion = isMotion(text);
+  if(!onRoad && !motion) return null;
+  if(/\b(kam|kde|jaka|jake|jaky|kolik|hodin|odprac|vykaz|dochaz)\b/.test(text)) return null;
+  const name = travelName(original);
+  const next = leavingNext(text) && !name;
+  if(!onRoad && !next && !name) return null;
+  if(onRoad && !next && !name){
+    return {intent:'jobs.depart', params:{query:softenName(capture(original, [/k\s+(.+)/iu])), current:/\bteto\b|\btuhle\b|\baktualni\b|\bzakaznikovi\b/.test(text)}, text:original};
+  }
+  if(next) return {intent:'jobs.depart', params:{query:'', next:true}, text:original};
+  return {intent:'jobs.depart', params:{query:name, current:false}, text:original};
+}
+function workTarget(original){
+  const named = softenName(capture(original, [/\bu\s+(?:pana|paní|pani|panu|pane\s+)?(\p{L}+)/iu, /zakáz(?:ce|ku|ky)\s+(?:u\s+)?(\p{L}+)/iu]));
+  const folded = foldCzech(named);
+  if(!folded || GENERIC_PLACE.test(folded) || /^(teto|tuhle|aktualni|tom|to)$/.test(folded)) return {query:'', current:true};
+  return {query:named, current:false};
+}
+function workPhrase(original, text){
+  if(/\b(dochaz\w*|smen\w*|prichod\w*|odchod\w*|hodin\w*|odprac\w*|vykaz\w*|kolik|protokol)\b/.test(text)) return null;
+  if(/prace je hotov|zakazk\w*\s+(mame\s+)?(hotov|dokonc)|mame hotovo|je dokoncena/.test(text)) return null;
+  const closesJob = /\b(ukonci\w*|ukoncit)\b/.test(text) && /\bzakazk\w*\b/.test(text) && !/\bprac\w*\b/.test(text);
+  if(closesJob) return null;
+  const stop = (/\b(ukonci\w*|ukoncit)\b/.test(text) && /\b(prac\w*|interval\w*)\b/.test(text))
+    || (/\bkoncim s\b/.test(text) && /\bprac/.test(text))
+    || (/\bprestav\w*/.test(text) && /\bprac/.test(text))
+    || (/\bzavri\w*/.test(text) && /\binterval/.test(text))
+    || /\bkoncim prac/.test(text);
+  const start = !stop && (
+    (/\bzahaj\w*\b/.test(text) && /\b(prac\w*|mak\w*)\b/.test(text))
+    || (/\b(zacni|zacnem|zacinat|zaciname|zacinam)\b/.test(text) && /\b(prac\w*|mak\w*)\b/.test(text))
+    || /^(zacinam|zaciname|zahajuji|zahajime)$/.test(text)
+    || (/\bpoust\w*\b/.test(text) && /\bse\b/.test(text) && /\bdo\b/.test(text))
+    || (/\bjdu\b/.test(text) && /\b(delat|pracovat|makat)\b/.test(text))
+    || /\bberu se\b/.test(text)
+    || (/\bspoust\w*\b/.test(text) && /\bprac/.test(text))
+  );
+  if(!stop && !start) return null;
+  return {intent:'jobs.work', params:{action:stop?'stop':'start', ...workTarget(original)}, text:original};
+}
+function navigationPhrase(original, text){
+  if(!/\b(navig\w*|otevri mapu|ukaz cest\w*|ukaz adres\w*|otevri cestu|spust navig\w*)\b/.test(text)) return null;
+  const name = travelName(original);
+  return {intent:'navigation.address', params:{query:name, current:!name}, text:original};
+}
+function callPhrase(original, text){
+  if(!/\b(zavolej\w*|zavolat|vytoc\w*|brnk\w*|volej(?!bal)\w*)\b/.test(text)) return null;
+  if(/\bnezavol\w*\b/.test(text)) return null;
+  const raw = capture(original, [/(?:zavolej(?:te)?|zavolat|vytoč(?:te)?|volej(?:te)?|brnkni(?:te)?|brnkněte)\s+(?:na\s+|k\s+|číslo\s+|cislo\s+)?(.+)/iu]);
+  const folded = foldCzech(raw).replace(/^(pana|pani|panu|pane)\s+/,'');
+  const generic = !folded || /^(tam|to|mu|ji|jemu|ho|sem|tady|cislo|cislem|telefon|telefonu|zakaznikovi|zakaznika|zakaznik)$/.test(folded);
+  return {intent:'customers.contact', params:{query:generic?'':softenName(raw.replace(/^(pana|paní|pani|panu|pane)\s+/i,''))}, text:original};
+}
+function unplannedPhrase(original, text){
+  if(!/\b(termin\w*|naplan\w*)\b/.test(text)) return null;
+  if(!/\b(nema\w*|nemaj\w*|bez|ceka\w*|neni|nejsou|jeste|ktere|kdo|co|uka\w*|najdi)\b/.test(text) && !/bez termin/.test(text) && !/nenaplan/.test(text)) return null;
+  if(/\b(hodin|odprac|vykaz|kolik)\b/.test(text)) return null;
+  const type = /\bservis\w*\b/.test(text)?'service':/\brealizac\w*\b/.test(text)?'installation':/\bzamer\w*\b/.test(text)?'survey':'';
+  return {intent:'jobs.unplanned', params:{type}, text:original};
+}
+function personPhrase(original, text){
+  if(/\b(hodin|odprac|vykaz|dochaz|kolik|mame|mate|mas)\b/.test(text)) return null;
+  const match = text.match(/\b(?:co ma|co dela|kde je|kde bude)\b\s+(.+)/);
+  if(!match) return null;
+  const words = match[1].split(' ').filter(word=>word.length>=3 && !PERSON_STOP.has(word) && !weekdayMention(word));
+  const folded = words[0]||'';
+  if(!folded) return null;
+  const person = softenName(originalToken(original, folded)||folded);
+  if(!person) return null;
+  return {intent:'jobs.personDay', params:{person, when:/\bzitra|zitre/.test(text)?'tomorrow':'today'}, text:original};
+}
+function reschedulePhrase(original, text, today){
+  const verb = /\b(presun\w*|preloz\w*|dej|dejte|dejme|hod|hodim|hodime|hodte|posun\w*|naplanuj\w*|naplanovat)\b/.test(text);
+  const dayName = weekdayMention(text);
+  const relative = /\bzitra|zitre/.test(text)?'tomorrow':(/\bdnes\b/.test(text)?today:'');
+  if(!verb || (!dayName && !relative) || planWork(original, today)) return null;
+  let query = softenName(capture(original, [
+    /zakázku\s+(?:u\s+)?(.+?)\s+na\s+/iu,
+    /u\s+(.+?)\s+na\s+/iu,
+    /(?:přesuň(?:te)?|přelož(?:te)?|dej(?:te|me)?|hoď(?:te)?|hodím|hodíme|posuň(?:te)?|posunout|naplánuj(?:te|me)?|naplánovat)\s+(?:zakázku\s+)?(?:u\s+)?(.+?)\s+na\s+/iu
+  ]));
+  const foldedQuery = foldCzech(query);
+  if(!query || /^(to|tam|ji|ho|tu|tuhle|tuto|toto|zakazku|zakazka|termin|terminu)$/.test(foldedQuery)) query = '';
+  return {intent:'jobs.reschedule', params:{query, dueDate:dayName?nextWeekday(today, dayName):relative, weekday:dayName, current:!query}, text:original};
+}
+
 export function parseCustomerDraft(original){
   const phone = clipField((original.match(/(?:telefon|tel\.?)\s*(\+?[0-9][0-9 ()\-./]{2,40})/iu)||[])[1], 50);
   const email = clipField((original.match(/[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+/u)||[])[0], 254);
@@ -224,14 +348,23 @@ export function parseAssistantCommand(input, today){
   if(parseDictionaryList(original)) return {intent:'dictionary.list', params:{}, text:original};
   if(/\b(smaz|odstran|vymaz|zrus zakaz|zrus protokol)\b/.test(text)) return {intent:'refused.destructive', params:{}, text:original};
   if(/^(napoveda|pomoc|co umis|co umite|jak fungujes)\b/.test(text)) return {intent:'help', params:{}, text:original};
-  if(/jsem na ceste/.test(text)) return {intent:'jobs.depart', params:{query:softenName(capture(original, [/k\s+(.+)/iu])), current:/\bteto\b|\bzakaznikovi\b/.test(text)}, text:original};
+  const depart = departPhrase(original, text);
+  if(depart) return depart;
+  const work = workPhrase(original, text);
+  if(work) return work;
+  const navigation = navigationPhrase(original, text);
+  if(navigation) return navigation;
+  const call = callPhrase(original, text);
+  if(call) return call;
+  const unplanned = unplannedPhrase(original, text);
+  if(unplanned) return unplanned;
+  const person = personPhrase(original, text);
+  if(person) return person;
   if(/\b(zacni|zacina|zapis prichod|prichod)\b/.test(text)&&/dochaz|smen|praci/.test(text)) return {intent:'attendance.arrive', params:{}, text:original};
   if(/\b(ukonci|ukoncit|odchod)\b/.test(text)&&/dochaz|smen|praci/.test(text)) return {intent:'attendance.leave', params:{}, text:original};
   if(/aktivni/.test(text)&&/dochaz|smen/.test(text)) return {intent:'attendance.active', params:{}, text:original};
-  if(/\b(presun|preloz)\b/.test(text)){
-    const dayName = weekdayMention(text);
-    return {intent:'jobs.reschedule', params:{query:softenName(capture(original, [/zakázku\s+(?:u\s+)?(.+?)\s+na\s+/iu, /u\s+(.+?)\s+na\s+/iu])), dueDate:dayName?nextWeekday(today, dayName):(/\bzitra|zitre/.test(text)?'tomorrow':''), weekday:dayName}, text:original};
-  }
+  const moved = reschedulePhrase(original, text, today);
+  if(moved) return moved;
   if(/\bprirad\b/.test(text)) return {intent:'jobs.assign', params:{person:softenName(capture(original, [/přiřaď\s+(\p{L}+)/iu])), query:softenName(capture(original, [/zakáz(?:ce|ku|ce)\s+(.+)/iu, /realizaci\s+(.+)/iu, /k\s+(.+)/iu]))}, text:original};
   if(/\b(oznac|nastav stav)\b/.test(text)&&/zakaz/.test(text)){
     const status = /nedokonc/.test(text)?'incomplete':/hotov|dokonc/.test(text)?'done':/probiha|v praci/.test(text)?'in_progress':/plan/.test(text)?'planned':'';
@@ -871,7 +1004,8 @@ export function interpretAssistant(input, today, context){
     return {intent:'protocol.report', params:{text:String(input||''), base:context.protocol}, text:String(input||'')};
   }
   const meaning = understandUtterance(input, today, context);
-  if(meaning?.intent && (meaning.override || rules.intent==='unknown')){
+  const locked = new Set(['jobs.depart','jobs.work','jobs.unplanned','jobs.personDay','navigation.address','customers.contact','jobs.reschedule']);
+  if(meaning?.intent && (meaning.override || rules.intent==='unknown') && !locked.has(rules.intent)){
     return {intent:meaning.intent, params:meaning.params||{}, text:rules.text||String(input||'')};
   }
   return rules;
