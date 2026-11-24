@@ -118,7 +118,11 @@ export function assistantSuggestions(){
     'Zavolej Novákovi.',
     'Co ještě nemá termín?',
     'Dej Nováka na čtvrtek.',
-    'Co má dnes Marek?'
+    'Co má dnes Marek?',
+    'Máme nové poptávky?',
+    'Kdo čeká na cenovou nabídku?',
+    'Shrň poslední poptávku.',
+    'Převeď tuto poptávku na zakázku.'
   ];
 }
 
@@ -327,6 +331,34 @@ function reschedulePhrase(original, text, today){
   if(!query || /^(to|tam|ji|ho|tu|tuhle|tuto|toto|zakazku|zakazka|termin|terminu)$/.test(foldedQuery)) query = '';
   return {intent:'jobs.reschedule', params:{query, dueDate:dayName?nextWeekday(today, dayName):relative, weekday:dayName, current:!query}, text:original};
 }
+function inquiryPhrase(original, text){
+  const reply = /odpoved/.test(text) && /zakaznik/.test(text);
+  const missing = /zjistit/.test(text) && /zakaznik/.test(text);
+  const inquiry = /poptav/.test(text);
+  const quote = /nabid/.test(text) && /cek|rozhodnut|odesl|priprav/.test(text);
+  const uncalled = /\bnezavolali\b|\bnezavolano\b|jeste nezavol/.test(text);
+  const countNew = /\bkolik je novych\b/.test(text) && !/zakaz|hodin|dochaz|odprac|material|servis|navstev/.test(text);
+  if(!inquiry && !quote && !uncalled && !reply && !missing && !countNew) return null;
+  if(/dochaz|smen|hodin|odprac|vykaz/.test(text)) return null;
+  if(!inquiry && /ceka/.test(text) && /servis/.test(text) && /zakaz/.test(text)) return null;
+  const category = /oboji/.test(text)?'both':(/zavlah/.test(text) && /garden|zahrad/.test(text)?'both':(/zavlah/.test(text)?'irrigation':(/garden|zahrad/.test(text)?'garden':'')));
+  const number = (original.match(/P-\d{4}-\d{4}/i)||[])[0]||'';
+  const rawName = softenName(capture(original, [/poptávk\p{L}*\s+(?:od\s+|na\s+|pro\s+)?(\p{L}[\p{L}'-]{2,})/iu]));
+  const named = /^(zavlah\w*|garden\w*|zahrad\w*|oboji|nov\w*|servis\w*|realiz\w*|posledn\w*|tuto|tu)$/.test(foldCzech(rawName))?'':rawName;
+  const query = number || (/posledn|tuto|tohoto|tento/.test(text)?'':named);
+  if(inquiry && /\b(preved|prevest|prevest)\b|na zakazku/.test(text) && /poptav/.test(text)) return {intent:'inquiries.convert', params:{query}, text:original};
+  if(missing) return {intent:'inquiries.detail', params:{mode:'missing', query}, text:original};
+  if(reply) return {intent:'inquiries.detail', params:{mode:'reply', query}, text:original};
+  if(inquiry && /\b(shrn|shrnut|posledn)\b/.test(text)) return {intent:'inquiries.detail', params:{mode:'summary', query}, text:original};
+  if(inquiry && /\b(oznac|nastav|prepni|kontaktovan|prohlidk|zamitn|archivuj|prijmi)\b/.test(text)){
+    const status = /archiv/.test(text)?'archived':/zamit/.test(text)?'rejected':/prijat|prijmi/.test(text)?'accepted':/prohlid/.test(text)?'visit_set':/odeslan/.test(text)?'quote_sent':/rozhodnut/.test(text)?'awaiting':/nabid/.test(text)?'quote_prep':'contacted';
+    return {intent:'inquiries.status', params:{query, status}, text:original};
+  }
+  if(countNew || (inquiry && /\b(kolik|mame|mate|nejak)\b/.test(text) && !/\b(ukaz|otevri|kdo|kter)\b/.test(text))) return {intent:'inquiries.count', params:{category}, text:original};
+  const statuses = quote?['quote_prep','quote_sent','awaiting']:null;
+  const status = uncalled || (inquiry && /\bnov/.test(text))?'new':'';
+  return {intent:'inquiries.open', params:{category, status, statuses, query:uncalled?'':query}, text:original};
+}
 
 export function parseCustomerDraft(original){
   const phone = clipField((original.match(/(?:telefon|tel\.?)\s*(\+?[0-9][0-9 ()\-./]{2,40})/iu)||[])[1], 50);
@@ -348,6 +380,8 @@ export function parseAssistantCommand(input, today){
   if(parseDictionaryList(original)) return {intent:'dictionary.list', params:{}, text:original};
   if(/\b(smaz|odstran|vymaz|zrus zakaz|zrus protokol)\b/.test(text)) return {intent:'refused.destructive', params:{}, text:original};
   if(/^(napoveda|pomoc|co umis|co umite|jak fungujes)\b/.test(text)) return {intent:'help', params:{}, text:original};
+  const inquiry = inquiryPhrase(original, text);
+  if(inquiry) return inquiry;
   const depart = departPhrase(original, text);
   if(depart) return depart;
   const work = workPhrase(original, text);
@@ -1004,7 +1038,7 @@ export function interpretAssistant(input, today, context){
     return {intent:'protocol.report', params:{text:String(input||''), base:context.protocol}, text:String(input||'')};
   }
   const meaning = understandUtterance(input, today, context);
-  const locked = new Set(['jobs.depart','jobs.work','jobs.unplanned','jobs.personDay','navigation.address','customers.contact','jobs.reschedule']);
+  const locked = new Set(['jobs.depart','jobs.work','jobs.unplanned','jobs.personDay','navigation.address','customers.contact','jobs.reschedule','inquiries.open','inquiries.count','inquiries.detail','inquiries.status','inquiries.convert']);
   if(meaning?.intent && (meaning.override || rules.intent==='unknown') && !locked.has(rules.intent)){
     return {intent:meaning.intent, params:meaning.params||{}, text:rules.text||String(input||'')};
   }

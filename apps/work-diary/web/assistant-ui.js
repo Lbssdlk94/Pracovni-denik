@@ -1,6 +1,6 @@
-import {interpretAssistant} from './assistant-commands.js?v=assistant-phrases-v1';
-import {answerOffline, queueOfflineWrite} from './assistant-offline.js?v=assistant-phrases-v1';
-import {peekCachedJobs} from './cloud.js?v=time-rights-v1';
+import {interpretAssistant} from './assistant-commands.js?v=inquiries-v1';
+import {answerOffline, queueOfflineWrite} from './assistant-offline.js?v=inquiries-v1';
+import {peekCachedJobs} from './cloud.js?v=inquiries-v1';
 import {extractLocalCommand, extractLocalUnderstanding, localMinistral} from './assistant-local.js?v=assistant-intent-v1';
 import {durationPickerMarkup, refreshDurationTotals} from './planning-fields.js?v=workspace-roles-v1';
 

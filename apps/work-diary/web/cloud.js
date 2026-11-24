@@ -44,8 +44,8 @@ export const warmJobMonths=()=>workspaceBlocked?Promise.resolve():jobListCache.w
 export async function request(path,options={}){
  if(workspaceBlocked)throw workspaceResetError();
  const route=path.split('?')[0],method=(options.method||'GET').toUpperCase();
- const changesJobs=method!=='GET'&&method!=='HEAD'&&/^\/api\/(?:jobs|customers|gardens|subscriptions|tariffs|members|features|local-accounts|workspace\/members)(?:\/|$)/.test(route);
- if(method!=='GET'&&method!=='HEAD'&&(/^\/api\/(?:customers|gardens|members|features|local-accounts|workspace\/members)(?:\/|$)/.test(route)||/^\/api\/jobs(?:\/[-\w]{1,100})?$/.test(route)))await directoryCache.invalidate();
+ const changesJobs=method!=='GET'&&method!=='HEAD'&&/^\/api\/(?:jobs|customers|gardens|inquiries|subscriptions|tariffs|members|features|local-accounts|workspace\/members)(?:\/|$)/.test(route);
+ if(method!=='GET'&&method!=='HEAD'&&(/^\/api\/(?:customers|gardens|inquiries|members|features|local-accounts|workspace\/members)(?:\/|$)/.test(route)||/^\/api\/jobs(?:\/[-\w]{1,100})?$/.test(route)))await directoryCache.invalidate();
  if(changesJobs)readCache.invalidate();
  if(changesJobs)jobListCache.beginChange();
  if(route==='/api/jobs'&&method==='GET')return jobListCache.request(path,options);

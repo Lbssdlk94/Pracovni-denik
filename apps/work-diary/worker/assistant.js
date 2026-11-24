@@ -14,6 +14,7 @@ import {handleServiceWork} from './service-work.js';
 import {handleJobDiary} from './job-diary.js';
 import {handleGardenHistory} from './garden-history.js';
 import {handleSubscriptions} from './subscriptions.js';
+import {inquiryCommand} from './inquiries.js';
 
 const MANAGERS = ['owner','administrator','admin'];
 const STATUS = {planned:'plánovaná', on_way:'na cestě', in_progress:'probíhá', done:'hotová', incomplete:'nedokončená'};
@@ -364,6 +365,11 @@ async function confirm(env, ctx, m, h, id, mode, preview, concept){
 async function run(env, ctx, m, h, command, today, options){
   const {intent, params} = command;
   const tomorrow = addDays(today, 1);
+  if(String(intent||'').startsWith('inquiries.')){
+    const answer = await inquiryCommand(env, m, h, intent, params||{}, options);
+    if(answer.proposal && options.propose) return {reply:answer.reply, confirm:await propose(env, m, {intent, params:answer.proposal.params, text:command.text||''}, answer.proposal.summary)};
+    return answer;
+  }
   if(!options.propose&&intent==='protocol.draft'&&params.jobId) return protocolDraft(env, ctx, m, h, {id:params.jobId, title:params.title, description:params.description||'', dueDate:params.dueDate||''}, options);
   if(!options.propose&&intent==='jobs.create'&&params.dueDate) return createJob(env, m, h, params, today, tomorrow, options);
   if(!options.propose&&intent==='jobs.plan') return planJob(env, m, h, params, today, options);
@@ -394,7 +400,7 @@ async function run(env, ctx, m, h, command, today, options){
   if(!options.propose&&intent==='import.customers') return applyCustomerImport(env, m, h, params);
   if(!options.propose&&intent==='import.materials') return applyMaterialImport(env, m, h, params);
   if(intent==='unknown') return {reply:'Tomuhle příkazu nerozumím. Můžete zkusit některou z dostupných akcí.', suggestions:assistantSuggestions()};
-  if(intent==='help') return {reply:'Umím zakázky, docházku, hodiny na zakázce z evidence, zákazníky, materiál a přípravu servisního protokolu. Zákazníka a zakázku přidám jen tehdy, když to smí vaše role, a zápis nejdřív potvrdíte. Mazání nechávám na stávajících obrazovkách.', suggestions:assistantSuggestions()};
+  if(intent==='help') return {reply:'Umím zakázky, docházku, hodiny na zakázce z evidence, zákazníky, materiál, poptávky a přípravu servisního protokolu. Zákazníka, zakázku i převod poptávky přidám jen tehdy, když to smí vaše role, a zápis nejdřív potvrdíte. Mazání nechávám na stávajících obrazovkách.', suggestions:assistantSuggestions()};
   if(intent==='refused.destructive') return {reply:'Smazání nebo zrušení tady nespouštím, aby se nic omylem neztratilo. Použijte stávající obrazovku záznamu.'};
 
   if(intent.startsWith('jobs.')||intent.startsWith('protocol.')){

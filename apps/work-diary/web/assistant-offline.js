@@ -5,7 +5,7 @@ import {pickNextWork} from './assistant-intent.js';
 const STATUS = {planned:'plánovaná', on_way:'na cestě', in_progress:'probíhá', done:'hotová', incomplete:'nedokončená'};
 const missing = 'Tento přehled v zařízení nemám. Připojte se. Nic jsem si nevymyslel.';
 const noWrite = 'Zápis bez připojení neukládám. Až budete online, příkaz zopakujte. Nic se teď nezměnilo.';
-const writeIntents = ['jobs.create','jobs.plan','jobs.followup','jobs.complete','diary.day','defects.track','dictionary.add','protocol.draft','protocol.report','protocol.note','protocol.photo','jobs.reschedule','jobs.assign','jobs.depart','jobs.work','jobs.status','attendance.arrive','attendance.leave','materials.add'];
+const writeIntents = ['jobs.create','jobs.plan','jobs.followup','jobs.complete','diary.day','defects.track','dictionary.add','protocol.draft','protocol.report','protocol.note','protocol.photo','jobs.reschedule','jobs.assign','jobs.depart','jobs.work','jobs.status','attendance.arrive','attendance.leave','materials.add','inquiries.convert','inquiries.status'];
 
 function lines(items, render, empty){
   if(!items.length) return empty;
@@ -30,6 +30,10 @@ export function answerOffline(command, snapshot = {}){
   const jobs = Array.isArray(snapshot.jobs) ? snapshot.jobs : null;
   if(intent==='assistant.clarify'||intent==='assistant.explain'||intent==='assistant.refuse'||intent==='assistant.batch'||intent==='materials.plan'){
     return {reply:(command.params?.reply||'Bez připojení nic neměním. Až budete online, vyhodnotím požadavek znovu.')+' Údaj jsem si nevymyslel.', missing:intent!=='assistant.refuse'};
+  }
+  if(String(intent||'').startsWith('inquiries.')){
+    if(writeIntents.includes(intent)) return {reply:noWrite, missing:true};
+    return {reply:'Poptávky v zařízení nemám. Připojte se. Nic jsem si nevymyslel ani neodeslal.', missing:true};
   }
   if(intent==='jobs.next'){
     if(!jobs) return {reply:'Další práci v zařízení nemám. Připojte se. Pořadí neodhaduji. Nic jsem nezměnil.', missing:true};
