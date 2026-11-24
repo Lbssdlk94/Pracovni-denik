@@ -40,7 +40,11 @@ enum APIJobsPresentation {
     static func normalize(_ text:String)->String{text.folding(options:[.diacriticInsensitive,.caseInsensitive],locale:Locale(identifier:"cs_CZ")).trimmingCharacters(in:.whitespacesAndNewlines)}
     static func matches(_ job:APIValue,filters:APIJobsFilters,period:APIJobsPeriod,query:String,now:Date,selected:String?=nil,rangeStart:String?=nil,rangeEnd:String?=nil,normalizedSearch:String?=nil,personalActiveID:String="")->Bool{
         let status=job["status"].string,due=job["dueDate"].string
-        if filters.state=="approval"{guard APIJobsGroup.of(job) == .approval else{return false}}
+        if filters.state=="waiting"{
+            let waiting=job["workPhase"].string=="waiting" || (job["status"].string=="planned" && job["dueDate"].string.isEmpty && job["schedule"]["dates"].array.isEmpty)
+            guard waiting else{return false}
+        }
+        else if filters.state=="approval"{guard APIJobsGroup.of(job) == .approval else{return false}}
         else if filters.state != "all",status != filters.state{return false}
         if !filters.worker.isEmpty,job["assignedTo"].string != filters.worker,!job["assignedTos"].array.contains(.s(filters.worker)){return false}
         if !filters.type.isEmpty,job["jobType"].string != filters.type{return false}
@@ -73,7 +77,8 @@ enum APIJobsPresentation {
     }
     private struct SortRow{let job:APIValue;let schedule:[String];let customer:String}
     static func paths(filters:APIJobsFilters,period:APIJobsPeriod,mine:Bool,manager:Bool,userID:String,now:Date)->[String]{
-        var q=[URLQueryItem(name:"state",value:filters.state=="approval" ? "all" : filters.state),URLQueryItem(name:"order",value:"schedule")]
+        var q=[URLQueryItem(name:"state",value:filters.state=="approval" || filters.state=="waiting" ? "all" : filters.state),URLQueryItem(name:"order",value:"schedule")]
+        if filters.state=="waiting"{q.append(URLQueryItem(name:"phase",value:"waiting"))}
         let worker = !manager || mine ? userID : filters.worker
         if !worker.isEmpty{q.append(URLQueryItem(name:"assignee",value:worker))}
         for (key,value) in [("type",filters.type),("protocol",filters.protocolState),("attention",filters.attention),("discipline",filters.discipline=="all" ? "" : filters.discipline)] where !value.isEmpty{q.append(URLQueryItem(name:key,value:value))}

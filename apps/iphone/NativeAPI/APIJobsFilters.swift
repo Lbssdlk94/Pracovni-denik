@@ -19,6 +19,7 @@ struct APIJobsFilterSheet:View {
                 Section("Stav zakázky"){
                     Picker("Stav",selection:$draft.state){
                         Text("Všechny stavy").tag("all")
+                        Text("Čeká na naplánování").tag("waiting")
                         ForEach(["planned","on_way","in_progress","approval","incomplete","done"],id:\.self){key in Text(key=="approval" ? "Čeká na schválení" : key=="incomplete" ? "Nemohu dokončit" : APIFormat.status(key)).tag(key)}
                     }.accessibilityIdentifier("jobs-filter-state")
                 }
@@ -26,7 +27,7 @@ struct APIJobsFilterSheet:View {
                     if store.manager {
                         Picker("Pracovník",selection:$draft.worker){Text("Všichni pracovníci").tag("");ForEach(people,id:\.id){Text($0.title).tag($0.id)};if !draft.worker.isEmpty,!people.contains(where:{$0.id==draft.worker}){Text("Vybraný pracovník").tag(draft.worker)}}
                     }
-                    Picker("Typ zakázky",selection:$draft.type){Text("Všechny typy").tag("");Text("Servis").tag("service");Text("Realizace").tag("installation");Text("Zaměření").tag("survey")}.accessibilityIdentifier("jobs-filter-type")
+                    Picker("Typ zakázky",selection:$draft.type){Text("Všechny typy").tag("");Text("Servis").tag("service");Text("Realizace").tag("installation");Text("Zaměření").tag("survey");Text("Zazimování").tag("blowout");Text("Údržba zahrady").tag("maintenance")}.accessibilityIdentifier("jobs-filter-type")
                     if !store.me["workspace"].isNull {
                         Picker("Obor",selection:$draft.discipline){Text(store.me["workspace"]["disciplines"].array.count>1 ? "Obojí" : "Dostupný obor").tag("all");ForEach(store.me["workspace"]["disciplines"].array.map(\.string),id:\.self){Text($0=="garden" ? "Dr. Garden" : "Dr. Závlaha").tag($0)}}
                     }

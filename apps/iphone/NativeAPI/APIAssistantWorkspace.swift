@@ -125,6 +125,9 @@ struct APIAssistantWorkspace: View {
     @State private var history = false
     @State private var pickedPhoto: PhotosPickerItem?
     @State private var showCamera = false
+    @State private var useMinistral = false
+    @State private var prompts: [String] = []
+    @StateObject private var ministral = MinistralLibrary.shared
     private var wide: Bool { size == .regular }
     private var concept: APIValue {
         get { memory.active.concept }
@@ -180,7 +183,17 @@ struct APIAssistantWorkspace: View {
                 Button("Nový chat", systemImage: "square.and.pencil") { memory.startNew() }
                 Button("Historie", systemImage: "clock") { history = true }
                 Divider()
-                Text("Místní model Ministral 3B v této verzi iPhonu není. Základní režim zpracuje stejný příkaz jen z evidence a nic si nevymýšlí.")
+                Toggle("Přepsat příkaz modelem Ministral", isOn: $useMinistral)
+                Text(ministral.message).font(.caption)
+                if ministral.downloading {
+                    ProgressView(value: ministral.progress)
+                    Button("Zrušit stahování") { ministral.cancel() }
+                } else if ministral.installed {
+                    Button("Smazat model z telefonu") { ministral.remove(); useMinistral = false }
+                } else {
+                    Button("Stáhnout Ministral 3B") { ministral.start() }
+                }
+                Text("Model jen přepíše větu na příkaz. Evidenci čte a ukládá stávající asistent až po potvrzení.")
             } label: { Image(systemName: "ellipsis") }.frame(width: 44, height: 44).accessibilityLabel("Nastavení asistenta")
         }.padding(.horizontal, 4)
     }
@@ -190,6 +203,11 @@ struct APIAssistantWorkspace: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 6) {
                     if memory.active.items.isEmpty { Text("Napište příkaz. Zakázka se uloží až tlačítkem Uložit zakázku.").font(.caption).foregroundStyle(.secondary) }
+                    if !prompts.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack { ForEach(prompts, id: \.self) { prompt in Button(prompt) { memory.setDraft(prompt) }.buttonStyle(.bordered).font(.caption) } }
+                        }
+                    }
                     ForEach(memory.active.items) { item in
                         Text(item.text).font(.subheadline).frame(maxWidth: .infinity, alignment: item.mine ? .trailing : .leading)
                             .padding(.horizontal, 10).padding(.vertical, 7)
@@ -215,7 +233,13 @@ struct APIAssistantWorkspace: View {
     private var result: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                if concept.isNull { Text("Výsledek příkazu se objeví tady. Bez tlačítka Uložit zakázku se nic nezapíše.").font(.subheadline).foregroundStyle(.secondary) }
+                if concept.isNull {
+                    Text(memory.active.confirmID.isEmpty ? "Výsledek příkazu se objeví tady. Bez tlačítka Uložit zakázku se nic nezapíše." : "Příkaz čeká na potvrzení. Text je v rozhovoru. Dokud neklepnete na Potvrdit, nic se neuloží.").font(.subheadline).foregroundStyle(.secondary)
+                    if !memory.active.confirmID.isEmpty {
+                        Button("Potvrdit") { Task { await confirm() } }.disabled(busy).buttonStyle(.borderedProminent).frame(minHeight: 44)
+                        Button("Zrušit") { Task { await cancelConcept() } }.disabled(busy).frame(minHeight: 44)
+                    }
+                }
                 else { conceptForm }
             }.padding(12)
         }
@@ -379,21 +403,42 @@ struct APIAssistantWorkspace: View {
     private func deliver(_ text: String) async {
         let notes = memory.active.concept["notes"].string
         memory.syncPlanFromConcept()
+        var outgoing = text
+        if useMinistral && store.online {
+            do {
+                let raw = try await MinistralRuntime.answer(text)
+                if let command = MinistralCommand.extract(raw) { outgoing = command }
+                else { memory.append("Ministral nevrátil jeden příkaz. Posílám původní větu základnímu asistentovi, který nic neuloží bez potvrzení.", mine: false) }
+            } catch {
+                let shown = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                memory.append(shown + " Pokračuji základním režimem.", mine: false)
+            }
+        }
         memory.append(text, mine: true)
+        if outgoing != text { memory.append("Příkaz pro evidenci: \(outgoing)", mine: false) }
         memory.setDraft("")
         memory.setNotice("")
         if !store.online {
-            memory.enqueuePending(text)
+            memory.enqueuePending(outgoing)
             let message = "Příkaz jsem si schoval. Zápis bez připojení neukládám. Až budete online, navrhnu ho znovu a počkám na potvrzení. Nic se teď neuložilo."
             memory.append(message, mine: false)
             memory.setNotice(message)
             return
         }
         do {
-            var body: APIValue = .object(["text": .s(text), "mode": .s("basic")])
+            var body: APIValue = .object(["text": .s(outgoing), "mode": .s("basic")])
             if !memory.active.context.isNull { body["context"] = memory.active.context }
             let response = try await store.write("/api/assistant", method: "POST", body: body)
-            memory.append(response["reply"].string, mine: false)
+            var reply = response["reply"].string
+            let cards = response["cards"].array.map { card in
+                [card["title"].string, card["subtitle"].string].filter { !$0.isEmpty }.joined(separator: " · ")
+            }.filter { !$0.isEmpty }
+            if !cards.isEmpty { reply += (reply.isEmpty ? "" : "\n") + cards.joined(separator: "\n") }
+            prompts = response["suggestions"].array.map(\.string).filter { !$0.isEmpty }
+            if response["choices"].array.isEmpty == false && prompts.isEmpty {
+                prompts = response["choices"].array.map(\.string).filter { !$0.isEmpty }
+            }
+            memory.append(reply, mine: false)
             if !response["context"].isNull { memory.setContext(response["context"]) }
             if !response["concept"].isNull {
                 var next = response["concept"]
@@ -403,8 +448,9 @@ struct APIAssistantWorkspace: View {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             }
             memory.setConfirm(response["confirm"]["id"].string)
+            if response["concept"].isNull && !response["confirm"]["id"].string.isEmpty { memory.setTab("result") }
         } catch {
-            if !store.online { memory.enqueuePending(text) }
+            if !store.online { memory.enqueuePending(outgoing) }
             let shown = ((error as? LocalizedError)?.errorDescription ?? error.localizedDescription).trimmingCharacters(in: .whitespacesAndNewlines)
             let message = (shown.isEmpty ? "Server neposlal podrobnost." : shown) + (memory.active.concept.isNull ? "" : " Rozpracovaný koncept zůstává v iPhonu.")
             memory.append(message, mine: false)

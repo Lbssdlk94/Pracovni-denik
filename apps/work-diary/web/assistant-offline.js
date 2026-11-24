@@ -1,6 +1,7 @@
 // Offline answers use only the snapshot the caller already has. Missing data stays missing.
 import {attendanceHours} from './attendance-model.js?v=workspace-roles-v1';
 import {pickNextWork} from './assistant-intent.js';
+import {filterJobs, formatSelectionReply, selectionCards} from './job-selection.js';
 
 const STATUS = {planned:'plánovaná', on_way:'na cestě', in_progress:'probíhá', done:'hotová', incomplete:'nedokončená'};
 const missing = 'Tento přehled v zařízení nemám. Připojte se. Nic jsem si nevymyslel.';
@@ -67,6 +68,12 @@ export function answerOffline(command, snapshot = {}){
   }
   if(intent==='jobs.incomplete'){
     return {reply:'Nedokončené z uloženého přehledu:\n'+lines(jobs.filter(job=>job.status==='incomplete'), jobLine, 'V uloženém přehledu žádná nedokončená zakázka není.')};
+  }
+  if(intent==='jobs.selection'){
+    if(!jobs) return {reply:'Výběr podle druhu práce počítá server. V zařízení ten seznam nemám a nic si nedomýšlím.', missing:true};
+    if(command.params?.ask) return {reply:'Offline druh práce nehádám. Upřesněte ho. V uložených zakázkách jsem nic nehledal.', suggestions:(command.params.choices||[]).slice(0,8)};
+    const selected = filterJobs(jobs, {phase:command.params?.phase||'open', kind:command.params?.kind||''});
+    return {reply:formatSelectionReply(selected.jobs, selected)+'\nJen uložená kopie v telefonu. Nemusí být aktuální a nemusí obsahovat všechny zakázky. Hotové a zrušené jsem do otevřeného výběru nedal.', cards:selectionCards(selected.jobs)};
   }
   if(intent==='jobs.unplanned'){
     const rows = jobs.filter(job=>job.status==='planned' && !job.dueDate && !(job.schedule?.dates||[]).some(date=>/^\d{4}-\d{2}-\d{2}$/.test(String(date||''))));

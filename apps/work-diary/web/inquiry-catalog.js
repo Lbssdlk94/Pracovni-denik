@@ -13,11 +13,11 @@ export const INQUIRY_STATUSES=[
 export const INQUIRY_SERVICES=[
  {id:'new_install',label:'Nová realizace',category:'irrigation',jobType:'installation'},
  {id:'service',label:'Servis stávající závlahy',category:'irrigation',jobType:'service'},
- {id:'winterize',label:'Zazimování',category:'irrigation',jobType:'service'},
+ {id:'winterize',label:'Zazimování',category:'irrigation',jobType:'blowout'},
  {id:'spring_start',label:'Jarní spuštění',category:'irrigation',jobType:'service'},
  {id:'extension',label:'Rozšíření systému',category:'irrigation',jobType:'installation'},
  {id:'garden_build',label:'Realizace zahrady',category:'garden',jobType:'installation'},
- {id:'maintenance',label:'Údržba zahrady',category:'garden',jobType:'service'},
+ {id:'maintenance',label:'Údržba zahrady',category:'garden',jobType:'maintenance'},
  {id:'planting',label:'Výsadba',category:'garden',jobType:'installation'},
  {id:'lawn',label:'Realizace trávníku',category:'garden',jobType:'installation'},
  {id:'other',label:'Ostatní zahradnické práce',category:'garden',jobType:'survey'}

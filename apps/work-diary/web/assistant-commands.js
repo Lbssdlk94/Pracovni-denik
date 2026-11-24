@@ -1,6 +1,7 @@
 // Rule-based Czech commands. No model, no network. The same function is used
 import {planWork, revisePlan} from './job-plan.js';
 import {understandUtterance} from './assistant-intent.js';
+import {parseWorkQuestion} from './job-selection.js';
 // by the worker and by tests. Later local or cloud models may only replace
 // this parser; they must still call the existing authorized actions.
 
@@ -299,10 +300,13 @@ function callPhrase(original, text){
   const generic = !folded || /^(tam|to|mu|ji|jemu|ho|sem|tady|cislo|cislem|telefon|telefonu|zakaznikovi|zakaznika|zakaznik)$/.test(folded);
   return {intent:'customers.contact', params:{query:generic?'':softenName(raw.replace(/^(pana|paní|pani|panu|pane)\s+/i,''))}, text:original};
 }
-function unplannedPhrase(original, text){
+function unplannedPhrase(original, text, kinds){
   if(!/\b(termin\w*|naplan\w*)\b/.test(text)) return null;
   if(!/\b(nema\w*|nemaj\w*|bez|ceka\w*|neni|nejsou|jeste|ktere|kdo|co|uka\w*|najdi)\b/.test(text) && !/bez termin/.test(text) && !/nenaplan/.test(text)) return null;
   if(/\b(hodin|odprac|vykaz|kolik)\b/.test(text)) return null;
+  const work = parseWorkQuestion(original, kinds);
+  const legacyService = work?.kind==='service' && /bez termin/.test(text);
+  if(work?.kind && !legacyService) return null;
   const type = /\bservis\w*\b/.test(text)?'service':/\brealizac\w*\b/.test(text)?'installation':/\bzamer\w*\b/.test(text)?'survey':'';
   return {intent:'jobs.unplanned', params:{type}, text:original};
 }
@@ -369,7 +373,7 @@ export function parseCustomerDraft(original){
   return {name, phone, email, address:parts[0]||'', city:clipField(parts.slice(1).join(', '), 120)};
 }
 
-export function parseAssistantCommand(input, today){
+export function parseAssistantCommand(input, today, kinds){
   const original = String(input||'').trim().slice(0,500);
   const text = foldCzech(original);
   const month = namedMonth(text, today);
@@ -390,7 +394,7 @@ export function parseAssistantCommand(input, today){
   if(navigation) return navigation;
   const call = callPhrase(original, text);
   if(call) return call;
-  const unplanned = unplannedPhrase(original, text);
+  const unplanned = unplannedPhrase(original, text, kinds);
   if(unplanned) return unplanned;
   const person = personPhrase(original, text);
   if(person) return person;
@@ -437,6 +441,8 @@ export function parseAssistantCommand(input, today){
   if(planWork(original, today)) return {intent:'jobs.plan', params:{text:original}, text:original};
   if(/realizac/.test(text) && /\b(strav|celkem|odprac|kolik)\b/.test(text) && !/\bod\s+\d/.test(text)) return {intent:'jobs.realizationHours', params:{}, text:original};
   if(/cekaj/.test(text) && /servis/.test(text) && /zakaz/.test(text)) return {intent:'customers.waitingService', params:{}, text:original};
+  const workQuestion = parseWorkQuestion(original, kinds);
+  if(workQuestion) return {intent:'jobs.selection', params:workQuestion, text:original};
   if(/\b(hodin|dochaz|smen|vykaz|odprac)/.test(text)){
     if(/zakaz/.test(text)){
       return {intent:'jobs.hours', params:{
@@ -1031,14 +1037,14 @@ export function contextualCommand(command, context){
   return command;
 }
 
-export function interpretAssistant(input, today, context){
-  const rules = contextualCommand(parseAssistantCommand(input, today), context);
+export function interpretAssistant(input, today, context, kinds){
+  const rules = contextualCommand(parseAssistantCommand(input, today, kinds), context);
   const folded = foldCzech(String(input||''));
   if(rules.intent==='refused.destructive' && context?.protocol && /\bradek|radku\b/.test(folded)){
     return {intent:'protocol.report', params:{text:String(input||''), base:context.protocol}, text:String(input||'')};
   }
   const meaning = understandUtterance(input, today, context);
-  const locked = new Set(['jobs.depart','jobs.work','jobs.unplanned','jobs.personDay','navigation.address','customers.contact','jobs.reschedule','inquiries.open','inquiries.count','inquiries.detail','inquiries.status','inquiries.convert']);
+  const locked = new Set(['jobs.depart','jobs.work','jobs.unplanned','jobs.personDay','navigation.address','customers.contact','jobs.reschedule','jobs.selection','inquiries.open','inquiries.count','inquiries.detail','inquiries.status','inquiries.convert']);
   if(meaning?.intent && (meaning.override || rules.intent==='unknown') && !locked.has(rules.intent)){
     return {intent:meaning.intent, params:meaning.params||{}, text:rules.text||String(input||'')};
   }

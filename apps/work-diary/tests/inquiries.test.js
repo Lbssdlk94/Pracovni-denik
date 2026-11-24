@@ -4,6 +4,7 @@ import {api} from '../worker/api.js';
 import {environment, people, request} from './fixtures.mjs';
 import {interpretAssistant} from '../web/assistant-commands.js';
 import {answerOffline} from '../web/assistant-offline.js';
+import {inquiryWriteDiscipline} from '../worker/inquiries.js';
 
 const ctx={waitUntil:task=>Promise.resolve(task).catch(()=>{})};
 const call=(env,path,person=people.owner,method='GET',value,extra)=>api(request(path,person,method,value,extra),env,ctx);
@@ -153,4 +154,14 @@ test('Veřejné odeslání má limit osmi poptávek za hodinu',async()=>{
  for(let i=0;i<8;i++)assert.equal((await submit(env,{email:`limit${i}@example.com`,phone:`+420 777 000 00${i}`})).response.status,200);
  assert.equal((await submit(env,{email:'limit9@example.com',phone:'+420 777 000 099'})).response.status,429);
  assert.equal(env.sqlite.prepare('SELECT COUNT(*) n FROM inquiries').get().n,8);
+});
+
+test('Převod při oboru Vše vezme jednoznačný obor a u Obojí nabídne výběr',()=>{
+ const fail=(status,message,extra)=>{const error=new Error(message);error.status=status;error.extra=extra;throw error;};
+ const both={_workspace:{disciplines:['irrigation','garden']}};
+ assert.equal(inquiryWriteDiscipline(both,{category:'irrigation'},'all',fail),'irrigation');
+ assert.equal(inquiryWriteDiscipline(both,{category:'garden'},'',fail),'garden');
+ assert.throws(()=>inquiryWriteDiscipline(both,{category:'both'},'all',fail),error=>error.status===409&&error.extra.choices.includes('garden'));
+ assert.equal(inquiryWriteDiscipline(both,{category:'both'},'garden',fail),'garden');
+ assert.equal(inquiryWriteDiscipline({}, {category:'irrigation'},'all',fail),'irrigation');
 });

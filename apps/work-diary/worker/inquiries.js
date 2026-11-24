@@ -3,6 +3,7 @@ import {handleCustomers} from './customers.js';
 import {handleJobs} from './jobs.js';
 import {readEmailConfiguration} from './email-config.js';
 import {installationInfo} from './installation.js';
+import {readJobKinds} from './job-kinds.js';
 const INQUIRY_MANAGERS=['owner','administrator','admin'];
 const QUOTE_STATUSES=['quote_prep','quote_sent','awaiting'];
 const licenseSql=discipline=>`EXISTS(SELECT 1 FROM workspace_organizations o JOIN workspace_organization_policies p ON p.organization_id=o.id WHERE o.discipline='${discipline}' AND p.active=1 AND p.expires_at>CAST(strftime('%s','now') AS INTEGER)*1000)`;
@@ -273,17 +274,30 @@ async function linkCustomer(request,env,m,h,id){
  return json({inquiry:dto(await visible(env,m,id))});
 }
 function jobTypeFor(serviceType){return inquiryService(serviceType)?.jobType||'service';}
+export function inquiryWriteDiscipline(member, row, requested, fail){
+  const asked = requested && requested !== 'all' ? requested : '';
+  const fromInquiry = row?.category === 'irrigation' || row?.category === 'garden' ? row.category : '';
+  if(!member?._workspace) return asked || fromInquiry || null;
+  const allowed = (member._workspace.disciplines||[]).filter(item=>item==='irrigation'||item==='garden');
+  const choice = asked || fromInquiry;
+  if(choice && allowed.includes(choice)) return choice;
+  if(fromInquiry && !allowed.includes(fromInquiry)) fail(403,'K oboru této poptávky nemáte přístup.');
+  fail(409,'Poptávka patří oběma oborům. Vyberte závlahu, nebo Garden.',{code:'discipline_required',choices:allowed});
+}
 async function convertInquiry(request,env,m,h,id){
  const {fail,json,body,cleanText,expectedVersion,validId}=h,b=await body(request,20000);
  if(!b||typeof b!=='object') fail(400,'Zkontrolujte převod.');
  const row=await visible(env,m,id);if(!row) fail(404,'Poptávka nebyla nalezena.');
  const found=await duplicates(env,row);
  if(b.preview===true){
-  return json({preview:true,inquiry:dto(row),duplicates:found,suggestion:{title:`${inquiryServiceLabel(row.service_type)} · ${row.last_name}`.slice(0,120),jobType:jobTypeFor(row.service_type),description:row.description,address:row.address,city:row.city,dueDate:row.preferred_date,customerName:`${row.first_name} ${row.last_name}`.trim(),company:row.company}});
+  const unambiguous=row.category==='irrigation'||row.category==='garden'?row.category:null;
+  const choices=unambiguous?[]:(m._workspace?.disciplines||['irrigation','garden']).filter(item=>item==='irrigation'||item==='garden');
+  return json({preview:true,inquiry:dto(row),duplicates:found,discipline:unambiguous,disciplineChoices:choices,suggestion:{title:`${inquiryServiceLabel(row.service_type)} · ${row.last_name}`.slice(0,120),jobType:jobTypeFor(row.service_type),description:row.description,address:row.address,city:row.city,dueDate:row.preferred_date,customerName:`${row.first_name} ${row.last_name}`.trim(),company:row.company,discipline:unambiguous}});
  }
  const version=expectedVersion(b.version);
  if(row.version!==version) fail(409,'Poptávku mezitím změnil kolega. Načtěte ji znovu.');
  if(row.job_id) fail(409,'Z této poptávky už zakázka vznikla.',{jobId:row.job_id});
+ const discipline=inquiryWriteDiscipline(m,row,b.discipline||b.job?.discipline,fail);
  if(!['existing','new'].includes(b.mode)) fail(400,'Vyberte existujícího zákazníka, nebo založení nového.');
  if(b.mode==='new'&&found.customers.length&&b.acknowledgeDuplicates!==true) fail(409,'Stejný telefon nebo e-mail už v adresáři je. Propojte ho, nebo potvrďte, že chcete přesto založit nového.',{code:'duplicate_customer',matches:found.customers});
  let customerId=b.mode==='existing'?validId(b.customerId):null;
@@ -295,7 +309,10 @@ async function convertInquiry(request,env,m,h,id){
  const address=cleanText(jobInput.address??row.address,500);
  const city=cleanText(jobInput.city??row.city,120);
  const dueDate=cleanText(jobInput.dueDate??row.preferred_date,10);
- const jobType=['service','installation','survey'].includes(jobInput.jobType)?jobInput.jobType:jobTypeFor(row.service_type);
+ const kinds=await readJobKinds(env);
+ const requestedType=jobInput.jobType;
+ const jobType=kinds.some(kind=>kind.id===requestedType)?requestedType:jobTypeFor(row.service_type);
+ if(!kinds.some(kind=>kind.id===jobType)) fail(400,'Vyberte druh práce z číselníku zakázek.');
  const assignedTo=jobInput.assignedTo?validId(jobInput.assignedTo):m.user_id;
  if(!await env.DB.prepare('SELECT user_id FROM members WHERE user_id=?').bind(assignedTo).first()) fail(400,'Vyberte člověka z týmu.');
  const claimed=await env.DB.prepare(`UPDATE inquiries SET version=version+1,updated_at=? WHERE id=? AND version=? AND job_id IS NULL AND ${managerSql}`).bind(Date.now(),id,version,m.user_id).run();
@@ -303,7 +320,7 @@ async function convertInquiry(request,env,m,h,id){
  let gardenId=row.garden_id;
  if(b.mode==='new'&&!await env.DB.prepare('SELECT id FROM customers WHERE id=?').bind(customerId).first()){
   const name=cleanText(jobInput.customerName||`${row.first_name} ${row.last_name}`,160,true);
-  const created=await handleCustomers(jsonRequest(request,`/api/customers/${customerId}`,{version:0,name,email:row.email,phones:[{id:'phone',label:'Mobil',number:row.phone}],addresses:[{id:'site',label:'Realizace',address:row.street,city:row.city}],contactNotes:row.company?`Firma: ${row.company}`:'',irrigationOrigin:'unknown'}),env,m,h);
+  const created=await handleCustomers(jsonRequest(request,`/api/customers/${customerId}`,{version:0,...(discipline?{discipline}:{}),name,email:row.email,phones:[{id:'phone',label:'Mobil',number:row.phone}],addresses:[{id:'site',label:'Realizace',address:row.street,city:row.city}],contactNotes:row.company?`Firma: ${row.company}`:'',irrigationOrigin:'unknown'}),env,m,h);
   const data=await created.json();
   if(!created.ok) fail(created.status,data.error||'Zákazníka se nepodařilo založit.');
   const garden=await env.DB.prepare('SELECT id FROM gardens WHERE customer_id=? AND deleted=0 ORDER BY created_at LIMIT 1').bind(customerId).first();
@@ -314,7 +331,7 @@ async function convertInquiry(request,env,m,h,id){
   gardenId=gardens?.id||null;
  }
  const jobId='job_'+id.replaceAll('-','').slice(0,20);
- const job=await handleJobs(jsonRequest(request,`/api/jobs/${jobId}`,{version:0,title,jobType,customerId,customerAddressId:b.mode==='new'?'site':null,customerName:`${row.first_name} ${row.last_name}`.trim(),city,description,address,gardenId,assignedTo,dueDate,status:'planned',incompleteReason:''}),env,m,h);
+ const job=await handleJobs(jsonRequest(request,`/api/jobs/${jobId}`,{version:0,...(discipline?{discipline}:{}),title,jobType,customerId,customerAddressId:b.mode==='new'?'site':null,customerName:`${row.first_name} ${row.last_name}`.trim(),city,description,address,gardenId,assignedTo,dueDate,status:'planned',incompleteReason:''}),env,m,h);
  const jobData=await job.json();
  if(!job.ok) fail(job.status,jobData.error||'Zakázku se nepodařilo založit.');
  const finalGarden=jobData.job?.gardenId||gardenId||null;

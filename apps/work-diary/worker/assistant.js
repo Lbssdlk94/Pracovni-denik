@@ -1,4 +1,6 @@
 import {interpretAssistant, assistantModeInfo, assistantSuggestions, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, planMaterialLines, parseServiceDictation, reviseServiceDraft, annotateProtocolMaterials, serviceDraftQuestions, parseDictionaryCommand, applyAssistantDictionary, matchProtocolQuery} from '../web/assistant-commands.js';
+import {formatSelectionReply, selectionCards} from '../web/job-selection.js';
+import {readJobKinds} from './job-kinds.js';
 import {modelReadCommand, pickNextWork} from '../web/assistant-intent.js';
 import {planWork, revisePlan, matchPeople, planCollisions, planSummary, nameStem, customerHit} from '../web/job-plan.js';
 import {featureEnabled} from '../web/features.js';
@@ -273,7 +275,8 @@ export async function handleAssistant(request, env, ctx, m, h){
   const rawText = typeof body.text==='string'?body.text:'';
   const entries = await dictionaryEntries(env);
   const text = parseDictionaryCommand(rawText)?rawText:applyAssistantDictionary(rawText, entries);
-  const command = interpretAssistant(text, today, context);
+  const kinds = await readJobKinds(env);
+  const command = interpretAssistant(text, today, context, kinds);
   const hinted = command.intent==='unknown'?modelReadCommand(body.understanding):null;
   const answer = await run(env, ctx, m, h, hinted||command, today, {propose:true, preview, context:body.context&&typeof body.context==='object'?body.context:null});
   return h.json(reply(mode, answer.reply, answer));
@@ -435,12 +438,9 @@ async function run(env, ctx, m, h, command, today, options){
     if(error) return {reply:error};
     return {reply:'Nedokončené zakázky:\n'+lines(result.data.jobs||[], jobLine, 'Nedokončená zakázka tu není.'), cards:jobCards(result.data.jobs)};
   }
-  if(intent==='customers.waitingService'){
-    if(!on(h.features,'jobs')) return {reply:'Zakázky jsou v nastavení firmy vypnuté.'};
-    const result = await jobsGet(env,m,h,'/api/jobs?state=active&type=service&order=schedule');
-    const error = blocked(result);
-    if(error) return {reply:error};
-    return {reply:'Zákazníci, kteří čekají na servis:\n'+lines(result.data.jobs||[], job=>`• ${job.customerName||'Zákazník bez jména'} · ${job.title} (${STATUS[job.status]||job.status})`, 'Žádný otevřený servis v zakázkách nevidím.')};
+  if(intent==='jobs.selection'||intent==='customers.waitingService'){
+    const mapped = intent==='customers.waitingService'?{matched:true, ask:false, kind:'service', phase:'open'}:params;
+    return jobSelection(env, m, h, mapped);
   }
   if(intent==='jobs.realizationHours') return realizationHours(env, m, h);
   if(intent==='jobs.crew') return crewOnRealization(env, m, h, today);
@@ -471,6 +471,27 @@ async function run(env, ctx, m, h, command, today, options){
   return {reply:'Tomuhle příkazu nerozumím.', suggestions:assistantSuggestions()};
 }
 
+async function jobSelection(env, m, h, params){
+  if(!on(h.features,'jobs')) return {reply:'Zakázky jsou v nastavení firmy vypnuté.'};
+  const kinds = await readJobKinds(env);
+  if(!params || params.ask){
+    const choices = (params?.choices?.length?params.choices:kinds.map(kind=>kind.label)).slice(0,8);
+    const reason = params?.reason==='irrigation'
+      ? 'Samotné slovo závlaha neurčuje druh práce. Může jít o realizaci, servis i zazimování.'
+      : 'V příkazu není jednoznačný druh práce.';
+    return {reply:reason+' Upřesněte ho. Nic jsem nehledal v poznámkách jiných zakázek.', suggestions:choices.map(label=>'Kdo čeká na '+label+'?'), cards:[]};
+  }
+  const kind = kinds.find(item=>item.id===params.kind);
+  if(!kind) return {reply:'Tento druh práce v číselníku zakázek není. Nic jsem nedohledával podle poznámek.'};
+  const phase = params.phase||'open';
+  const result = await jobsGet(env,m,h,`/api/jobs?phase=${encodeURIComponent(phase)}&type=${encodeURIComponent(kind.id)}&order=schedule&state=all`);
+  const error = blocked(result,'Zakázky se nepodařilo načíst.');
+  if(error) return {reply:error};
+  const jobs = result.data.jobs||[];
+  const selection = result.data.selection||{total:jobs.length, customers:0, counts:{waiting:0,scheduled:0,active:0,done:0}};
+  const meta = {...selection, total:selection.total, kindLabel:kind.label, phase, kinds};
+  return {reply:formatSelectionReply(jobs, meta), cards:selectionCards(jobs, kinds), suggestions:[]};
+}
 async function findJobs(env, m, h, query){
   const q = query?`&q=${encodeURIComponent(query.slice(0,100))}`:'';
   const result = await jobsGet(env,m,h,`/api/jobs?state=all${q}`);

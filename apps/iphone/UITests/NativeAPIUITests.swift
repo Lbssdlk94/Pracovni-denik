@@ -59,7 +59,7 @@ final class NativeAPIUITests:XCTestCase {
     }
 
     func testReaderAppearancePreviewHasAnAlwaysAvailableReturnToActualRole(){
-        let app=launch();let picker=app.buttons["role-preview-picker"].firstMatch;XCTAssertTrue(picker.waitForExistence(timeout:10));picker.tap();app.buttons["Čtenář"].tap()
+        let app=launch();app.tabBars.buttons["Více"].tap();app.buttons["Nastavení"].tap();let picker=app.buttons["role-preview-picker"].firstMatch;XCTAssertTrue(picker.waitForExistence(timeout:10));picker.tap();app.buttons["Čtenář"].tap()
         XCTAssertTrue(app.staticTexts["Náhled: Čtenář"].waitForExistence(timeout:10));XCTAssertTrue(app.buttons["Zpět k mojí roli"].exists)
         app.tabBars.buttons["Více"].tap();XCTAssertFalse(app.buttons["Tým"].exists);capture("nahled-ctenar-api",app)
         app.buttons["Zpět k mojí roli"].firstMatch.tap();XCTAssertTrue(app.staticTexts["native-overview-title"].waitForExistence(timeout:10));XCTAssertFalse(app.staticTexts["Náhled: Čtenář"].exists)

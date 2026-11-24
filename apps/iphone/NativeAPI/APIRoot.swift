@@ -84,7 +84,6 @@ struct APIHeader:ToolbarContent {
     @ObservedObject var store:APIStore
     var unread:Int?=nil
     var body:some ToolbarContent{
-        ToolbarItem(placement:.topBarTrailing){if store.canPreviewRoles{APIRolePreviewPicker(store:store)}}
         ToolbarItem(placement:.topBarTrailing){if store.enabled("notifications"){NavigationLink{APIResourceList(store:store,resource:APIResource(entity:.notifications))}label:{Image(systemName:"bell").overlay(alignment:.topTrailing){if let unread,unread>0{Text(unread>99 ? "99+" : String(unread)).font(.caption2.bold()).padding(4).foregroundStyle(Color.white).background(DiaryStyle.actionFill,in:Capsule()).offset(x:12,y:-10)}}}.accessibilityLabel("Upozornění").accessibilityValue(unread.map{"\($0) nepřečtených"} ?? "")}}
     }
 }
@@ -94,6 +93,7 @@ struct APIMore:View {
         category("Práce v terénu","leaf",entities:[.gardens,.defects,.shafts])
         category("Firemní agenda","building.2",entities:[.materials,.vehicles,.subscriptions])
         if store.manager && store.enabled("teamManagement"){NavigationLink{APIResourceList(store:store,resource:APIResource(entity:.team))}label:{row("Tým","person.2")}}
+        if store.manager{NavigationLink{APIInquiriesList(store:store)}label:{row("Poptávky","tray.full")}}
         if store.enabled("notifications"){NavigationLink{APIResourceList(store:store,resource:APIResource(entity:.notifications))}label:{row("Upozornění","bell")}}
         NavigationLink{APISettings(store:store)}label:{row("Nastavení","gearshape")}
         NavigationLink{APIOutboxView(store:store)}label:{row("Koncepty a synchronizace","arrow.triangle.2.circlepath")}

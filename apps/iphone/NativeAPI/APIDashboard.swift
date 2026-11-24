@@ -87,22 +87,45 @@ struct APIOverview:View {
     }
     private var personalContent:some View {
         VStack(alignment:.leading,spacing:18){
-            if store.enabled("attendance"){APIDashboardAttendanceCard(store:store,data:data,job:displayJob,snapshot:projected)}
-            APIDashboardStats(store:store,data:data,company:false)
-            if !displayJob.isNull,store.enabled("jobs") {
-                APIDashboardCurrentJob(store:store,job:displayJob,snapshot:projected)
-            }else if store.enabled("jobs"){
-                let active=projected["states"].array.first{$0["userId"].string==store.userID}?["active"] ?? data["myState"]["active"]
-                Text(active.isNull ? "Nemáte další naplánovanou návštěvu." : "Aktivní zakázka není v tomto přehledu dostupná. Podrobnosti se obnoví po synchronizaci; docházka zůstává přístupná.").font(.subheadline).foregroundStyle(.secondary)
-            }
-            if store.enabled("jobs")&&store.enabled("jobDay"){timeline}
+            homeButtons
+            if store.enabled("jobs"){nearestVisit}
             attention
             if store.enabled("notifications"),data["notifications"].array.contains(where:{$0["readAt"].isNull}) {
                 APIDashboardSection(title:"Moje oznámení"){
                     ForEach(Array(data["notifications"].array.filter{$0["readAt"].isNull}.prefix(5)),id:\.id){notice in
-                        NavigationLink{APIEntityDetail(store:store,resource:APIResource(entity:.notifications),initial:notice)}label:{APIJobSettingsRow(title:notice["title"].string,symbol:"bell",detail:notice["body"].string)}.buttonStyle(.plain)
+                        NavigationLink{APIEntityDetail(store:store,resource:APIResource(entity:.notifications),initial:notice)}label:{APIJobSettingsRow(title:notice["title"].string,symbol:"bell",detail:notice["kind"].string.hasPrefix("inquiry") ? "Poptávky" : notice["body"].string)}.buttonStyle(.plain)
                     }
                 }
+            }
+        }
+    }
+    private var homeButtons:some View {
+        VStack(spacing:10){
+            if store.enabled("jobs"){
+                NavigationLink{APIJobsScreen(store:store,filter:APIDashboardJobFilter(mine:true))}label:{homeButton("Dnešní návštěvy","calendar")}
+                NavigationLink{APIJobsScreen(store:store)}label:{homeButton("Zakázky","list.clipboard")}
+            }
+            if store.enabled("attendance"){NavigationLink{APIAttendanceView(store:store)}label:{homeButton("Docházka","clock")}}
+            if store.enabled("customers"){NavigationLink{APIResourceList(store:store,resource:APIResource(entity:.customers))}label:{homeButton("Zákazníci","person.crop.rectangle")}}
+        }
+    }
+    private func homeButton(_ title:String,_ symbol:String)->some View {
+        HStack{Image(systemName:symbol).frame(width:28);Text(title).font(.headline);Spacer();Image(systemName:"chevron.right").font(.caption)}.frame(minHeight:48).padding(.horizontal,12).background(Color.white,in:RoundedRectangle(cornerRadius:16))
+    }
+    private var nearestVisit:some View {
+        let job=displayJob.isNull ? data["nextJob"] : displayJob
+        return VStack(alignment:.leading,spacing:8){
+            Text("Nejbližší návštěva").font(.headline)
+            if job.isNull || job["id"].string.isEmpty {
+                Text("Nemáte další naplánovanou návštěvu.").font(.subheadline).foregroundStyle(.secondary)
+            } else {
+                NavigationLink{APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:job)}label:{
+                    VStack(alignment:.leading,spacing:4){
+                        Text(job["customerName"].string.isEmpty ? job.title : job["customerName"].string).font(.headline)
+                        Text(job.title).font(.subheadline)
+                        Text((job["completionPercent"].isNull ? "Dokončení není uložené" : "Dokončení \(job["completionPercent"].int) %")).font(.subheadline).foregroundStyle(.secondary)
+                    }.frame(maxWidth:.infinity,alignment:.leading)
+                }.buttonStyle(.plain)
             }
         }
     }

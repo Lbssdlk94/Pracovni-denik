@@ -76,7 +76,7 @@ struct APIJobListRow:View {
     private var statusBadge:some View{
         let status=current["status"].string
         let color:Color=status=="done" ? .green : status=="on_way" ? .blue : status=="incomplete" ? DiaryStyle.warning : DiaryStyle.accent
-        return Text(current["serviceApproval"].string=="pending" ? "Ke schválení" : status=="incomplete" ? "Nelze dokončit" : APIFormat.status(status)).font(.caption2.weight(.semibold)).foregroundStyle(.primary).padding(.horizontal,7).padding(.vertical,4).background(color.opacity(0.12),in:Capsule()).fixedSize(horizontal:false,vertical:true)
+        return Text(current["workPhase"].string=="waiting" ? "Čeká na naplánování" : current["serviceApproval"].string=="pending" ? "Ke schválení" : status=="incomplete" ? "Nelze dokončit" : APIFormat.status(status)).font(.caption2.weight(.semibold)).foregroundStyle(.primary).padding(.horizontal,7).padding(.vertical,4).background(color.opacity(0.12),in:Capsule()).fixedSize(horizontal:false,vertical:true)
     }
     private var crew:some View{
         let names=Dictionary(current["handoffs"].array.map{($0["userId"].string,$0["name"].string)},uniquingKeysWith:{$1})
