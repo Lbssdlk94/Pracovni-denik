@@ -6,7 +6,7 @@ import {transientConnectionError} from './io.js?v=connection-recovery-v1';
 import {createConnectionRecovery} from './connection-recovery.js?v=connection-recovery-v1';
 import {createWorkspaceUI,workspaceFilterMarkup,workspaceBadge,workspaceDisciplineField} from './workspace-ui.js?v=shared-directory-v1';
 import {createWorkspaceRecoveryUI} from './workspace-recovery-ui.js?v=shared-directory-v1';
-import {createOverviewUI} from './overview-ui.js?v=field-mobile-v2';
+import {createOverviewUI} from './overview-ui.js?v=today-home-v1';
 import {interfaceIcon} from './interface-icons.js?v=approved-b-v2';
 import {createVehiclesUI} from './vehicles-ui.js?v=fleet-photo-v1';
 import {gardenSectionIds} from './features.js?v=fleet-photo-v1';
@@ -111,7 +111,7 @@ function siteLabel(plural=false){return sessionInfo?.license?.labels?.[plural?'s
 function navigationItems(){return [['overview','grid','Přehled'],['jobs','archive','Zakázky'],['subscriptions','check','Předplatné'],['home','grid',enabled('gardens')?siteLabel(true):'Šachty'],['customers','users','Zákazníci'],['materials','archive','Materiál'],['defects','info','Závady'],['attendance','check','Docházka'],['vehicles','archive','Vozidla'],['team','users','Náš tým'],['settings','settings','Nastavení']].filter(([id])=>(id!=='vehicles'||enabled('vehicles'))&&(id!=='defects'||enabled('defects'))&&(id!=='home'||enabled('gardens')||enabled('shafts'))&&(id!=='materials'||enabled('materials'))&&(id!=='subscriptions'||enabled('subscriptions'))&&(id!=='jobs'||enabled('jobs'))&&(id!=='customers'||enabled('customers'))&&(id!=='team'||manageable()&&enabled('teamManagement'))&&(id!=='attendance'||enabled('attendance')));}
 const signoutLink=()=>`<a class="signout" href="${['link','password'].includes(sessionInfo?.user.authMethod)?'/?login=1':'/signout-with-chatgpt?return_to=%2F'}" target="_top" data-signout>Odhlásit se</a>`;
 function navigationMarkup(active){
-  const items=navigationItems(),byId=new Map(items.map(item=>[item[0],item])),mobilePrimary=new Set(['overview','jobs']);
+  const items=navigationItems(),byId=new Map(items.map(item=>[item[0],item])),mobilePrimary=new Set(['overview','customers']);
   const orderOf=id=>({overview:10,jobs:20,attendance:30,home:50,customers:60,materials:70,defects:80,subscriptions:90,vehicles:110,team:120,settings:130}[id]||200);
   const button=id=>{const item=byId.get(id);if(!item)return '';const label=item[2],short=id==='overview'?'Dnes':id==='team'?'Tým':label;return `<button class="${active===id?'active':''}${mobilePrimary.has(id)?' nav-mobile-primary':''}" style="order:${orderOf(id)}" data-page="${id}" aria-label="${esc(label)}" ${active===id?'aria-current="page"':''}>${id==='overview'?interfaceIcon('overview'):navigationIcon(id)}<span class="nav-long">${esc(label)}</span><span class="nav-short" aria-hidden="true">${esc(short)}</span></button>`;};
   const groups=[['Práce',['overview','jobs','attendance'],0],['Evidence',['home','customers','materials','defects','subscriptions'],40],['Tým',['vehicles','team','settings'],100]];
