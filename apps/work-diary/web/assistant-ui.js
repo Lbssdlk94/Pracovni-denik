@@ -130,6 +130,8 @@ function ensureAssistantScrollGuard(){
   document.addEventListener('touchmove', event=>{
     if(!document.body.classList.contains('assistant-open')||!mobileAssistant()) return;
     const scroller = event.target.closest?.('.assistant-log, .assistant-stage, .assistant-popover');
+    const view = window.visualViewport;
+    if(view && view.offsetTop>1) return;
     if(!scroller){event.preventDefault(); return;}
     const dy = (event.touches?.[0]?.clientY||0) - assistantTouchY;
     const atTop = scroller.scrollTop<=0;
@@ -158,18 +160,41 @@ function bindKeyboard(host){
   const root = host.closest('#assistant-root')||host;
   if(root.dataset.viewport==='1'||!window.visualViewport) return;
   root.dataset.viewport='1';
+  let frame = 0, seenHeight = -1;
   const apply = ()=>{
     const view = window.visualViewport;
-    const keyboard = window.innerHeight - view.height - view.offsetTop > 80;
-    root.style.setProperty('--vv-height', Math.round(view.height)+'px');
-    root.style.setProperty('--vv-top', Math.round(view.offsetTop)+'px');
-    root.style.setProperty('--kb-pad', keyboard?'0px':'env(safe-area-inset-bottom)');
+    const focused = document.activeElement;
+    const editing = !!focused && root.contains(focused) && focused.matches('textarea, input, select');
+    const keyboard = !!document.body.classList.contains('assistant-open') && editing && window.innerHeight - view.height - view.offsetTop > 80;
+    const height = Math.round(view.height);
+    const resized = height!==seenHeight;
+    seenHeight = height;
+    root.classList.toggle('keyboard-open', keyboard);
+    if(!keyboard){
+      root.style.setProperty('--vv-height', '100%');
+      root.style.setProperty('--vv-top', '0px');
+      root.style.setProperty('--kb-pad', 'env(safe-area-inset-bottom)');
+      // iOS pans the visual viewport for the keyboard and then leaves it there.
+      if(mobileAssistant() && document.body.classList.contains('assistant-open') && (view.offsetTop>1 || window.scrollY>1) && root.dataset.vvReset!=='1'){
+        root.dataset.vvReset='1';
+        window.scrollTo(0, 0);
+        setTimeout(()=>{delete root.dataset.vvReset;}, 500);
+      }
+      return;
+    }
+    root.style.setProperty('--vv-height', height+'px');
+    root.style.setProperty('--vv-top', Math.round(Math.max(0, view.offsetTop))+'px');
+    root.style.setProperty('--kb-pad', '0px');
     const field = host.querySelector('textarea');
     const log = host.querySelector('.assistant-log');
-    if(keyboard && field && document.activeElement===field && log) log.scrollTop = log.scrollHeight;
+    if(resized && field && document.activeElement===field && log) log.scrollTop = log.scrollHeight;
   };
+  const settle = ()=>{cancelAnimationFrame(frame); frame = requestAnimationFrame(()=>{apply(); setTimeout(apply, 80); setTimeout(apply, 350);});};
   window.visualViewport.addEventListener('resize', apply);
   window.visualViewport.addEventListener('scroll', apply);
+  host.addEventListener('focusin', settle);
+  host.addEventListener('focusout', settle);
+  window.addEventListener('touchend', ()=>{if(document.body.classList.contains('assistant-open')) settle();}, {passive:true});
   apply();
 }
 function current(){
