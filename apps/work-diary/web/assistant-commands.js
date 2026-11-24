@@ -7,7 +7,7 @@ import {parseWorkQuestion} from './job-selection.js';
 
 export const ASSISTANT_MODES = [
   {id:'basic', label:'Základní asistent', available:true, kind:'rules', detail:'Příkazy podle pravidel nad stávajícími daty. Bez AI a bez dalšího předplatného.'},
-  {id:'local', label:'V zařízení', available:true, kind:'local', detail:'Ministral 3B se stáhne do prohlížeče, asi 2,2 GB. Do aplikace ani na server se model nevkládá. Firemní údaje dál bere stávající asistent a zápis čeká na potvrzení.'},
+  {id:'local', label:'Ministral 3B', available:true, kind:'local', detail:'Na počítači se Ministral 3B stáhne do prohlížeče, asi 2,2 GB. Na mobilu je jen v aplikaci. Na server se model neposílá. Firemní údaje dál bere stávající asistent a zápis čeká na potvrzení.'},
   {id:'cloud', label:'Cloud', available:false, kind:'cloud', detail:'Nedostupné. Cloudový poskytovatel není zapojený a placené API se nevolá.'}
 ];
 

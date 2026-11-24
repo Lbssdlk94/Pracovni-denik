@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseAssistantCommand, contextualCommand, assistantModeInfo, ASSISTANT_MODES, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, foldCzech, nextWeekday, parseMaterialAddition, planMaterialLines, weekdayDate, weekSpan, parseServiceDictation, reviseServiceDraft, matchProtocolQuery, annotateProtocolMaterials, serviceDraftQuestions, applyAssistantDictionary, followUpDate, mentionedWorkDate} from '../web/assistant-commands.js';
+import {desktopCanRunMinistral} from '../web/assistant-local.js';
 import {answerOffline, queueOfflineWrite} from '../web/assistant-offline.js';
 
 const today = '2026-11-21';
@@ -113,12 +114,24 @@ test('Synonyms, destructive refusals and mode registry stay local', ()=>{
   assert.equal(assistantModeInfo('local').available, true);
   assert.equal(assistantModeInfo('cloud').available, false);
   assert.match(assistantModeInfo('local').detail, /2,2 GB/);
+  assert.match(assistantModeInfo('local').detail, /jen v aplikaci/);
   assert.match(assistantModeInfo('cloud').detail, /není zapojený/);
   assert.deepEqual(ASSISTANT_PROVIDERS.filter(item=>item.available).map(item=>item.id), ['basic','ministral-3b']);
   assert.ok(ASSISTANT_PROVIDERS.some(item=>item.id==='ministral-3b'&&item.available===true));
   assert.ok(ASSISTANT_PROVIDERS.some(item=>item.id==='qwen'&&item.available===false));
   assert.ok(ASSISTANT_PROVIDERS.some(item=>item.id==='apple-foundation'&&item.available===false));
   assert.deepEqual(KNOWLEDGE_KINDS.map(item=>item.available), [false, false, false]);
+});
+
+test('Ministral 3B runs in a desktop browser and not on a phone', ()=>{
+  const media = flags=>query=>({matches:flags[query]===true});
+  const desktop = {'(min-width:761px)':true, '(hover:hover) and (pointer:fine)':true};
+  const phone = {'(min-width:761px)':true, '(hover:hover) and (pointer:fine)':false};
+  const narrow = {'(min-width:761px)':false, '(hover:hover) and (pointer:fine)':true};
+  assert.equal(desktopCanRunMinistral(media(desktop)), true);
+  assert.equal(desktopCanRunMinistral(media(phone)), false);
+  assert.equal(desktopCanRunMinistral(media(narrow)), false);
+  assert.equal(desktopCanRunMinistral(null), false);
 });
 
 test('Offline answers stay inside the stored snapshot', ()=>{

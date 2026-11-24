@@ -3,10 +3,19 @@ import UIKit
 import PhotosUI
 
 final class APIAssistantMemory: ObservableObject {
-    struct Item: Codable, Identifiable, Equatable {
+    struct Card: Codable, Identifiable, Equatable {
+        var id: String
+        var type: String
+        var title: String
+        var subtitle: String
+        var href: String
+        var openLabel: String
+    }
+    struct Item: Identifiable, Equatable {
         var id = UUID().uuidString
         var text: String
         var mine: Bool
+        var cards: [Card] = []
     }
     struct Thread: Codable, Identifiable, Equatable {
         var id = UUID().uuidString
@@ -42,13 +51,13 @@ final class APIAssistantMemory: ObservableObject {
         threads[index].updated = Date().timeIntervalSince1970
         persist()
     }
-    func append(_ text: String, mine: Bool) {
+    func append(_ text: String, mine: Bool, cards: [Card] = []) {
         let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !clean.isEmpty else { return }
+        guard !clean.isEmpty || !cards.isEmpty else { return }
         update {
-            $0.items.append(Item(text: clean, mine: mine))
+            $0.items.append(Item(text: clean, mine: mine, cards: cards))
             if $0.items.count > 40 { $0.items.removeFirst($0.items.count - 40) }
-            if mine && $0.title == "Nový chat" { $0.title = String(clean.prefix(42)) }
+            if mine && $0.title == "Nový chat" && !clean.isEmpty { $0.title = String(clean.prefix(42)) }
         }
     }
     func setConcept(_ value: APIValue) { update { $0.concept = value } }
@@ -115,6 +124,24 @@ final class APIAssistantMemory: ObservableObject {
     }
 }
 
+extension APIAssistantMemory.Item: Codable {
+    enum CodingKeys: String, CodingKey { case id, text, mine, cards }
+    init(from decoder: Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        id = try box.decodeIfPresent(String.self, forKey: .id) ?? UUID().uuidString
+        text = try box.decodeIfPresent(String.self, forKey: .text) ?? ""
+        mine = try box.decodeIfPresent(Bool.self, forKey: .mine) ?? false
+        cards = try box.decodeIfPresent([APIAssistantMemory.Card].self, forKey: .cards) ?? []
+    }
+    func encode(to encoder: Encoder) throws {
+        var box = encoder.container(keyedBy: CodingKeys.self)
+        try box.encode(id, forKey: .id)
+        try box.encode(text, forKey: .text)
+        try box.encode(mine, forKey: .mine)
+        try box.encode(cards, forKey: .cards)
+    }
+}
+
 struct APIAssistantWorkspace: View {
     @ObservedObject var store: APIStore
     @ObservedObject var memory: APIAssistantMemory
@@ -134,6 +161,7 @@ struct APIAssistantWorkspace: View {
         nonmutating set { memory.setConcept(newValue) }
     }
     var body: some View {
+        NavigationStack {
         VStack(spacing: 0) {
             bar
             if !memory.active.notice.isEmpty {
@@ -162,6 +190,53 @@ struct APIAssistantWorkspace: View {
             }
         }
         .sheet(isPresented: $showCamera) { APICamera { bytes in Task { await uploadCaptured(bytes) } } }
+        }
+    }
+    @ViewBuilder private func assistantCard(_ card: APIAssistantMemory.Card) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if card.type == "job" || card.type == "customer" || card.type == "material" || (card.type == "inquiry" && store.manager) {
+                NavigationLink { cardDestination(card) } label: { cardFace(card) }.buttonStyle(.plain)
+            } else if card.type == "inquiry" {
+                cardFace(card)
+                Text("Poptávku otevře jen správce.").font(.caption2).foregroundStyle(.secondary)
+            } else {
+                cardFace(card)
+            }
+            if let url = externalURL(card.href) {
+                Link(card.href.hasPrefix("tel:") ? "Zavolat" : "Otevřít mapu", destination: url).font(.caption)
+            }
+        }
+    }
+    @ViewBuilder private func cardDestination(_ card: APIAssistantMemory.Card) -> some View {
+        let initial = APIValue.object(["id": .s(card.id), "title": .s(card.title), "name": .s(card.title)])
+        switch card.type {
+        case "customer":
+            APIEntityDetail(store: store, resource: APIResource(entity: .customers), initial: initial)
+        case "material":
+            APIEntityDetail(store: store, resource: APIResource(entity: .materials), initial: initial)
+        case "inquiry":
+            APIInquiryDetail(store: store, inquiryID: card.id)
+        default:
+            APIEntityDetail(store: store, resource: APIResource(entity: .jobs), initial: initial)
+        }
+    }
+    private func cardFace(_ card: APIAssistantMemory.Card) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(card.title.isEmpty ? (card.openLabel.isEmpty ? "Otevřít" : card.openLabel) : card.title).font(.subheadline.weight(.semibold))
+                if !card.subtitle.isEmpty { Text(card.subtitle).font(.caption).foregroundStyle(.secondary) }
+            }
+            Spacer(minLength: 8)
+            Image(systemName: "chevron.right").font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityLabel(card.openLabel.isEmpty ? "Otevřít \(card.title)" : card.openLabel)
+    }
+    private func externalURL(_ href: String) -> URL? {
+        if href.hasPrefix("tel:") || href.hasPrefix("https://www.google.com/maps/search/") { return URL(string: href) }
+        return nil
     }
     private var statusLine: String {
         let place = memory.active.context["customerName"].string
@@ -209,10 +284,16 @@ struct APIAssistantWorkspace: View {
                         }
                     }
                     ForEach(memory.active.items) { item in
-                        Text(item.text).font(.subheadline).frame(maxWidth: .infinity, alignment: item.mine ? .trailing : .leading)
-                            .padding(.horizontal, 10).padding(.vertical, 7)
-                            .background(item.mine ? DiaryStyle.soft : Color.clear, in: RoundedRectangle(cornerRadius: 14))
-                            .id(item.id)
+                        VStack(alignment: item.mine ? .trailing : .leading, spacing: 6) {
+                            if !item.text.isEmpty {
+                                Text(item.text).font(.subheadline).frame(maxWidth: .infinity, alignment: item.mine ? .trailing : .leading)
+                                    .padding(.horizontal, 10).padding(.vertical, 7)
+                                    .background(item.mine ? DiaryStyle.soft : Color.clear, in: RoundedRectangle(cornerRadius: 14))
+                            }
+                            if !item.mine {
+                                ForEach(item.cards) { card in assistantCard(card) }
+                            }
+                        }.id(item.id)
                     }
                 }.padding(.horizontal, 12).padding(.vertical, 8)
             }
@@ -430,15 +511,17 @@ struct APIAssistantWorkspace: View {
             if !memory.active.context.isNull { body["context"] = memory.active.context }
             let response = try await store.write("/api/assistant", method: "POST", body: body)
             var reply = response["reply"].string
-            let cards = response["cards"].array.map { card in
-                [card["title"].string, card["subtitle"].string].filter { !$0.isEmpty }.joined(separator: " · ")
-            }.filter { !$0.isEmpty }
-            if !cards.isEmpty { reply += (reply.isEmpty ? "" : "\n") + cards.joined(separator: "\n") }
+            let cards = response["cards"].array.compactMap { value -> APIAssistantMemory.Card? in
+                let id = value["id"].string
+                let type = value["type"].string
+                guard !id.isEmpty, ["job", "customer", "material", "inquiry"].contains(type) || !value["href"].string.isEmpty else { return nil }
+                return APIAssistantMemory.Card(id: id.isEmpty ? value["href"].string : id, type: type.isEmpty ? "link" : type, title: value["title"].string, subtitle: value["subtitle"].string, href: value["href"].string, openLabel: value["openLabel"].string)
+            }
             prompts = response["suggestions"].array.map(\.string).filter { !$0.isEmpty }
             if response["choices"].array.isEmpty == false && prompts.isEmpty {
                 prompts = response["choices"].array.map(\.string).filter { !$0.isEmpty }
             }
-            memory.append(reply, mine: false)
+            memory.append(reply, mine: false, cards: cards)
             if !response["context"].isNull { memory.setContext(response["context"]) }
             if !response["concept"].isNull {
                 var next = response["concept"]

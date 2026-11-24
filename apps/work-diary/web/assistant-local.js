@@ -4,6 +4,14 @@ import {ASSISTANT_INTENT_IDS, modelReadCommand} from './assistant-intent.js';
 export const MODEL_BYTES = 2_147_023_008;
 export const MODEL_FILE = 'Ministral-3-3B-Instruct-2512-Q4_K_M.gguf';
 export const MODEL_URL = 'https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF/resolve/main/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf';
+// A phone can be wider than 760 px in landscape, so width alone is not enough.
+export function desktopCanRunMinistral(match){
+  const query = match || (typeof globalThis.matchMedia==='function' ? globalThis.matchMedia.bind(globalThis) : null);
+  if(typeof query!=='function') return false;
+  try{
+    return query('(min-width:761px)').matches===true && query('(hover:hover) and (pointer:fine)').matches===true;
+  }catch{return false;}
+}
 const RUNTIME = 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.13.0/esm/index.js';
 const RUNTIME_WASM = 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.13.0/esm/wasm-from-cdn.js';
 const SYSTEM = 'Jsi pracovní asistent deníku v prohlížeči. Nevymýšlej zákazníky, hodiny, ceny, materiál ani stav zakázek. Odpověz jen jedním JSON objektem {"intent":"jeden podporovaný záměr","command":"krátký český příkaz"}. Povolené záměry: '+ASSISTANT_INTENT_IDS.join(', ')+'. Neznámý záměr nevracej. Příkaz jen pojmenuje požadavek, nic neukládá. Když se uživatel jen ptá, co umíš, odpověz česky jednou větou.';

@@ -1,7 +1,7 @@
 import {interpretAssistant} from './assistant-commands.js?v=inquiries-v1';
 import {answerOffline, queueOfflineWrite} from './assistant-offline.js?v=inquiries-v1';
 import {peekCachedJobs} from './cloud.js?v=inquiries-v1';
-import {extractLocalCommand, extractLocalUnderstanding, localMinistral} from './assistant-local.js?v=assistant-intent-v1';
+import {extractLocalCommand, extractLocalUnderstanding, localMinistral, desktopCanRunMinistral} from './assistant-local.js?v=assistant-intent-v1';
 import {durationPickerMarkup, refreshDurationTotals} from './planning-fields.js?v=workspace-roles-v1';
 
 function esc(value){
@@ -73,13 +73,13 @@ export function mountWorkAssistant({db, getSession, onChanged, openCustomer, ope
     runtime.historyOpen = false;
   }
   if(!runtime.theme) runtime.theme = localStorage.getItem(themeKey()) || 'system';
-  runtime.mode = localStorage.getItem(modeKey())==='local'?'local':'basic';
+  runtime.mode = localStorage.getItem(modeKey())==='local' && desktopCanRunMinistral() ? 'local' : 'basic';
   const thread = current();
   const paint = ()=>render(host, session, paint, {db, getSession, onChanged, openCustomer, openJob, openMaterial});
   if(host.dataset.mounted!==scope){
     paint();
     host.dataset.mounted = scope;
-    if(runtime.mode==='local') localMinistral().refresh();
+    if(runtime.mode==='local' && desktopCanRunMinistral()) localMinistral().refresh();
     const field = host.querySelector('textarea');
     if(field && document.activeElement!==field) field.value = thread?.draft||'';
   }
@@ -123,6 +123,10 @@ function ensureAssistantScrollGuard(){
   if(assistantGuard) return;
   assistantGuard = true;
   window.matchMedia('(max-width:760px)').addEventListener('change', ()=>{
+    const saved = localStorage.getItem(modeKey())==='local';
+    runtime.mode = saved && desktopCanRunMinistral() ? 'local' : 'basic';
+    if(runtime.mode==='local') localMinistral().refresh();
+    repaint();
     const root = document.querySelector('#assistant-root');
     if(root) applyBubble(root);
   });
@@ -276,7 +280,7 @@ function render(host, session, paint, api){
     if(runtime.threadId===row.id){runtime.threadId=runtime.threads[0]?.id||'';runtime.detail=null;}
     persist(session);paint();
   });
-  host.querySelectorAll('[data-mode]').forEach(button=>button.onclick=()=>{runtime.mode=button.dataset.mode==='local'?'local':'basic';localStorage.setItem(modeKey(), runtime.mode);runtime.menuOpen=false;if(runtime.mode==='local') localMinistral().refresh();paint();});
+  host.querySelectorAll('[data-mode]').forEach(button=>button.onclick=()=>{if(!desktopCanRunMinistral()) return; runtime.mode=button.dataset.mode==='local'?'local':'basic';localStorage.setItem(modeKey(), runtime.mode);runtime.menuOpen=false;if(runtime.mode==='local') localMinistral().refresh();paint();});
   host.querySelector('[data-menu]')?.addEventListener('click', ()=>{runtime.menuOpen=!runtime.menuOpen;runtime.historyOpen=false;paint();});
   host.querySelector('[data-hide-chat]')?.addEventListener('click', ()=>{runtime.chatHidden=!runtime.chatHidden;runtime.menuOpen=false;paint();});
   host.querySelector('.assistant-tabs')?.addEventListener('click', event=>{const tab=event.target.closest('[data-tab]');if(!tab)return;runtime.mobileTab=tab.dataset.tab;if(runtime.mobileTab==='result')runtime.resultFresh=false;paint();});
@@ -668,7 +672,8 @@ function historyPopover(shown, total, thread){
   return `<div class="assistant-popover assistant-history" aria-label="Historie konverzací"><label class="assistant-search">Hledat<input data-query value="${esc(runtime.query)}" placeholder="Hledat konverzaci"></label><div class="assistant-thread-list">${shown.map(item=>`<div class="assistant-thread ${item.id===thread?.id?'is-current':''}"><button type="button" data-thread="${esc(item.id)}"><span>${esc(item.title)}</span><small>${esc(dayLabel(item.updatedAt))}</small></button><button type="button" data-rename="${esc(item.id)}" aria-label="Přejmenovat">✎</button><button type="button" data-delete="${esc(item.id)}" aria-label="Smazat konverzaci">×</button></div>`).join('')||'<p class="assistant-empty">Zatím tu žádný chat není.</p>'}${total>shown.length?`<p class="assistant-more">Dalších ${total-shown.length} je v zařízení.</p>`:''}</div></div>`;
 }
 function menuPopover(){
-  return `<div class="assistant-popover assistant-menu" aria-label="Možnosti asistenta"><p>Režim</p><div class="assistant-modes"><button type="button" data-mode="basic" aria-pressed="${runtime.mode!=='local'}">Základní</button><button type="button" data-mode="local" aria-pressed="${runtime.mode==='local'}">V zařízení</button></div>${runtime.mode==='local'?localCard():'<p class="assistant-empty">Základní režim nepotřebuje stažený model.</p>'}</div>`;
+  if(!desktopCanRunMinistral()) return `<div class="assistant-popover assistant-menu" aria-label="Možnosti asistenta"><p>Režim</p><p class="assistant-empty">Na mobilu je Ministral 3B jen v aplikaci. Tady zůstává základní asistent. Data bere z evidence a zápis neuloží bez potvrzení.</p></div>`;
+  return `<div class="assistant-popover assistant-menu" aria-label="Možnosti asistenta"><p>Režim</p><div class="assistant-modes"><button type="button" data-mode="basic" aria-pressed="${runtime.mode!=='local'}">Základní</button><button type="button" data-mode="local" aria-pressed="${runtime.mode==='local'}">Ministral 3B</button></div>${runtime.mode==='local'?localCard():'<p class="assistant-empty">Základní režim nepotřebuje stažený model. Ministral 3B jen přepíše větu, evidenci čte stávající asistent.</p>'}</div>`;
 }
 function welcomeTiles(session){
   const role = session?.user?.role;
@@ -833,7 +838,7 @@ async function ask(text, api, paint, confirmId, cancelId, file, concept){
   const alive = ()=>generation===runtime.generation;
   try{
     if(session?.rolePreview?.active&&(confirmId||cancelId)){if(alive()) push(session,'assistant','V náhledu role změny neukládám.');return false;}
-    if(!confirmId&&!cancelId&&!file&&runtime.mode==='local'){
+    if(!confirmId&&!cancelId&&!file&&runtime.mode==='local'&&desktopCanRunMinistral()){
       const model = localMinistral();
       if(!model.snapshot().installed){if(alive()) push(session,'assistant','Ministral 3B v prohlížeči není. Používám základní režim, který bere jen data z evidence.');}
       else{
