@@ -205,6 +205,10 @@ struct APIAssistantWorkspace: View {
             if let url = externalURL(card.href) {
                 Link(card.href.hasPrefix("tel:") ? "Zavolat" : "Otevřít mapu", destination: url).font(.caption)
             }
+            if card.type == "job" && concept["kind"].string == "protocol" && concept["jobId"].string.isEmpty {
+                Button("Použít tuhle") { memory.setDraft("Zakázka \(card.title)"); Task { await send() } }
+                    .buttonStyle(.bordered).font(.caption).frame(minHeight: 44)
+            }
         }
     }
     @ViewBuilder private func cardDestination(_ card: APIAssistantMemory.Card) -> some View {
@@ -295,6 +299,7 @@ struct APIAssistantWorkspace: View {
                             }
                         }.id(item.id)
                     }
+                    if memory.active.concept["kind"].string == "protocol" { protocolForm }
                 }.padding(.horizontal, 12).padding(.vertical, 8)
             }
             .scrollDismissesKeyboard(.interactively)
@@ -314,11 +319,15 @@ struct APIAssistantWorkspace: View {
     private var result: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
-                if concept.isNull {
+                if concept["kind"].string == "protocol" {
+                    Text("Návrh je v rozhovoru").font(.headline)
+                    Text("\(protocolPlace(concept)). Text, materiál a tlačítka Zahodit a Uložit jsou u poslední zprávy.").font(.subheadline).foregroundStyle(.secondary)
+                    Button("Zpět do rozhovoru") { memory.setTab("chat") }.frame(minHeight: 44)
+                } else if concept.isNull {
                     Text(memory.active.confirmID.isEmpty ? "Výsledek příkazu se objeví tady. Bez tlačítka Uložit zakázku se nic nezapíše." : "Příkaz čeká na potvrzení. Text je v rozhovoru. Dokud neklepnete na Potvrdit, nic se neuloží.").font(.subheadline).foregroundStyle(.secondary)
                     if !memory.active.confirmID.isEmpty {
                         Button("Potvrdit") { Task { await confirm() } }.disabled(busy).buttonStyle(.borderedProminent).frame(minHeight: 44)
-                        Button("Zrušit") { Task { await cancelConcept() } }.disabled(busy).frame(minHeight: 44)
+                        Button("Zahodit") { Task { await cancelConcept() } }.disabled(busy).frame(minHeight: 44)
                     }
                 }
                 else { conceptForm }
@@ -334,34 +343,64 @@ struct APIAssistantWorkspace: View {
     }
     private var protocolForm: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack { Text("Servisní protokol").font(.headline); Text("Koncept").font(.caption.weight(.bold)).padding(.horizontal, 8).padding(.vertical, 4).background(DiaryStyle.soft, in: Capsule()) }
-            Text([concept["jobTitle"].string, concept["customerName"].string, concept["address"].string].filter { !$0.isEmpty }.joined(separator: " · ")).font(.subheadline)
-            TextField("Provedené práce", text: binding("work"), axis: .vertical).frame(minHeight: 88).accessibilityLabel("Provedené práce")
+            HStack { Text("Servisní protokol").font(.headline); Text("Návrh").font(.caption.weight(.bold)).padding(.horizontal, 8).padding(.vertical, 4).background(DiaryStyle.soft, in: Capsule()) }
+            Text(protocolPlace(concept)).font(.subheadline.weight(.semibold))
+            if !concept["work"].string.isEmpty { Text(concept["work"].string).font(.subheadline) }
             ForEach(Array(concept["materials"].array.enumerated()), id: \.offset) { index, row in
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(row["label"].string.isEmpty ? "Materiál" : row["label"].string).font(.caption.weight(.semibold))
-                    HStack {
-                        TextField("Množství", text: materialBinding(index, "quantity")).frame(minHeight: 44).accessibilityLabel("Množství \(row["label"].string)")
-                        Text(row["unit"].string).frame(minWidth: 28)
-                    }
-                    if !row["choices"].array.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(materialSentence(row)).font(.subheadline)
+                    if row["status"].string == "choices" && !row["choices"].array.isEmpty {
                         Picker("Katalog", selection: choiceBinding(index)) {
                             Text("Nevybráno").tag("")
                             ForEach(Array(row["choices"].array.enumerated()), id: \.offset) { _, choice in
                                 Text(choice["name"].string).tag(choice["id"].string)
                             }
                         }.frame(minHeight: 44)
-                    } else if row["status"].string == "missing" {
-                        Text("V katalogu není. Novou položku nezakládám.").font(.caption).foregroundStyle(.secondary)
-                    } else if row["status"].string == "unquantified" {
-                        Text("Množství chybí, do katalogu se nezapíše.").font(.caption).foregroundStyle(.secondary)
                     }
-                }.padding(8).background(DiaryStyle.surface, in: RoundedRectangle(cornerRadius: 14))
+                }
             }
-            ForEach(concept["questions"].array, id: \.string) { question in Text(question.string).font(.caption) }
-            Button("Uložit do protokolu") { Task { await confirm() } }.disabled(memory.active.confirmID.isEmpty || busy).buttonStyle(.borderedProminent).frame(minHeight: 44)
-            Button("Zrušit koncept") { Task { await cancelConcept() } }.disabled(memory.active.confirmID.isEmpty || busy).frame(minHeight: 44)
+            if concept["materials"].array.isEmpty { Text("Z diktátu nevidím materiál.").font(.caption).foregroundStyle(.secondary) }
+            let question = concept["questions"].array.first?.string ?? concept["optionalQuestions"].array.first?.string ?? ""
+            if !question.isEmpty { Text(question).font(.caption).foregroundStyle(DiaryStyle.warning) }
+            Text("Nic se nezapíše, dokud neklepnete na Uložit.").font(.caption).foregroundStyle(.secondary)
+            Button("Uložit") { Task { await confirm() } }.disabled(memory.active.confirmID.isEmpty || busy).buttonStyle(.borderedProminent).frame(minHeight: 44)
+            Button("Zahodit") { Task { await cancelConcept() } }.disabled(busy).frame(minHeight: 44)
         }
+        .padding(12)
+        .background(DiaryStyle.surface, in: RoundedRectangle(cornerRadius: 16))
+    }
+    private func protocolPlace(_ concept: APIValue) -> String {
+        let title = concept["jobTitle"].string.trimmingCharacters(in: .whitespacesAndNewlines)
+        let customer = concept["customerName"].string.trimmingCharacters(in: .whitespacesAndNewlines)
+        let city = concept["city"].string.trimmingCharacters(in: .whitespacesAndNewlines)
+        let status = concept["statusLabel"].string.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fold: (String) -> String = { $0.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "cs")).lowercased() }
+        var parts: [String] = []
+        if !title.isEmpty { parts.append(title) } else if !customer.isEmpty { parts.append(customer) }
+        if !customer.isEmpty, customer != title, title.isEmpty || !fold(title).contains(fold(customer)) { parts.append(customer) }
+        var place = concept["address"].string.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !place.isEmpty, !city.isEmpty, fold(place).contains(fold(city)), let range = place.range(of: city, options: [.caseInsensitive, .diacriticInsensitive, .backwards]) {
+            if place[range.upperBound...].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                place = String(place[..<range.lowerBound]).trimmingCharacters(in: CharacterSet(charactersIn: " ,"))
+            }
+        }
+        if !place.isEmpty { parts.append(place) }
+        else if !city.isEmpty, title.isEmpty || !fold(title).contains(fold(city)) { parts.append(city) }
+        if !status.isEmpty, !parts.contains(where: { fold($0).contains(fold(status)) }) { parts.append(status) }
+        return parts.isEmpty ? "Zakázka není vybraná" : parts.joined(separator: " · ")
+    }
+    private func materialSentence(_ row: APIValue) -> String {
+        let status = row["status"].string
+        let preferred = status == "matched" ? row["name"].string : row["label"].string
+        let fallback = status == "matched" ? row["label"].string : row["name"].string
+        let name = (preferred.isEmpty ? fallback : preferred).trimmingCharacters(in: .whitespacesAndNewlines)
+        let shown = name.isEmpty ? "položka" : name
+        let unit = row["unit"].string.isEmpty && status == "missing" ? "ks" : row["unit"].string
+        let head = [row["quantity"].string, unit, shown].filter { !$0.isEmpty }.joined(separator: " ")
+        if status == "missing" { return "\(head), v katalogu nejsou, nezakládám" }
+        if status == "unquantified" { return "\(shown), množství chybí" }
+        if status == "choices" { return "\(head), v katalogu je víc položek" }
+        return head
     }
     private var noteForm: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -501,7 +540,7 @@ struct APIAssistantWorkspace: View {
         memory.setNotice("")
         if !store.online {
             memory.enqueuePending(outgoing)
-            let message = "Příkaz jsem si schoval. Zápis bez připojení neukládám. Až budete online, navrhnu ho znovu a počkám na potvrzení. Nic se teď neuložilo."
+            let message = "Příkaz jsem si schoval. Nic jsem nezapsal. Až bude signál, navrhnu ho znovu a počkám na uložení."
             memory.append(message, mine: false)
             memory.setNotice(message)
             return
@@ -511,12 +550,7 @@ struct APIAssistantWorkspace: View {
             if !memory.active.context.isNull { body["context"] = memory.active.context }
             let response = try await store.write("/api/assistant", method: "POST", body: body)
             var reply = response["reply"].string
-            let cards = response["cards"].array.compactMap { value -> APIAssistantMemory.Card? in
-                let id = value["id"].string
-                let type = value["type"].string
-                guard !id.isEmpty, ["job", "customer", "material", "inquiry"].contains(type) || !value["href"].string.isEmpty else { return nil }
-                return APIAssistantMemory.Card(id: id.isEmpty ? value["href"].string : id, type: type.isEmpty ? "link" : type, title: value["title"].string, subtitle: value["subtitle"].string, href: value["href"].string, openLabel: value["openLabel"].string)
-            }
+            let cards = responseCards(response)
             prompts = response["suggestions"].array.map(\.string).filter { !$0.isEmpty }
             if response["choices"].array.isEmpty == false && prompts.isEmpty {
                 prompts = response["choices"].array.map(\.string).filter { !$0.isEmpty }
@@ -527,7 +561,7 @@ struct APIAssistantWorkspace: View {
                 var next = response["concept"]
                 if next["notes"].string.isEmpty && !notes.isEmpty { next["notes"] = .s(notes) }
                 memory.setConcept(next)
-                memory.setTab("result")
+                if next["kind"].string == "protocol" { memory.setTab("chat") } else { memory.setTab("result") }
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             }
             memory.setConfirm(response["confirm"]["id"].string)
@@ -535,7 +569,7 @@ struct APIAssistantWorkspace: View {
         } catch {
             if !store.online { memory.enqueuePending(outgoing) }
             let shown = ((error as? LocalizedError)?.errorDescription ?? error.localizedDescription).trimmingCharacters(in: .whitespacesAndNewlines)
-            let message = (shown.isEmpty ? "Server neposlal podrobnost." : shown) + (memory.active.concept.isNull ? "" : " Rozpracovaný koncept zůstává v iPhonu.")
+            let message = (shown.isEmpty ? "Server neposlal podrobnost." : shown) + (memory.active.concept.isNull ? "" : " Návrh zůstává. Nic dalšího jsem nezapsal.")
             memory.append(message, mine: false)
             memory.setNotice(message)
         }
@@ -582,7 +616,7 @@ struct APIAssistantWorkspace: View {
         defer { busy = false }
         do {
             let response = try await store.write("/api/assistant", method: "POST", body: .object(["confirmId": .s(id), "concept": concept, "mode": .s("basic")]))
-            memory.append(response["reply"].string, mine: false)
+            memory.append(response["reply"].string, mine: false, cards: responseCards(response))
             memory.setNotice("")
             if !response["mutated"].isNull {
                 memory.setConcept(.null)
@@ -592,19 +626,27 @@ struct APIAssistantWorkspace: View {
             }
         } catch {
             let shown = ((error as? LocalizedError)?.errorDescription ?? error.localizedDescription).trimmingCharacters(in: .whitespacesAndNewlines)
-            let message = (shown.isEmpty ? "Uložení se nepodařilo. Server neposlal podrobnost." : shown) + " Koncept zůstává, můžete ho opravit a uložit znovu."
+            let message = (shown.isEmpty ? "Uložení se nepodařilo. Server neposlal podrobnost." : shown) + " Návrh zůstává. Nic dalšího jsem nezapsal."
             memory.append(message, mine: false)
             memory.setNotice(message)
         }
     }
     private func cancelConcept() async {
         let id = memory.active.confirmID
-        guard !id.isEmpty else { return }
-        _ = try? await store.write("/api/assistant", method: "POST", body: .object(["cancelId": .s(id), "mode": .s("basic")]))
+        if !id.isEmpty { _ = try? await store.write("/api/assistant", method: "POST", body: .object(["cancelId": .s(id), "mode": .s("basic")])) }
         memory.setConcept(.null)
         memory.setConfirm("")
         memory.setContext(.null)
         memory.setNotice("")
-        memory.append("Koncept je zrušený. Nic se neuložilo.", mine: false)
+        memory.setTab("chat")
+        memory.append("Koncept je zahozený. Nic se neuložilo.", mine: false)
+    }
+    private func responseCards(_ response: APIValue) -> [APIAssistantMemory.Card] {
+        response["cards"].array.compactMap { value -> APIAssistantMemory.Card? in
+            let id = value["id"].string
+            let type = value["type"].string
+            guard !id.isEmpty, ["job", "customer", "material", "inquiry"].contains(type) || !value["href"].string.isEmpty else { return nil }
+            return APIAssistantMemory.Card(id: id.isEmpty ? value["href"].string : id, type: type.isEmpty ? "link" : type, title: value["title"].string, subtitle: value["subtitle"].string, href: value["href"].string, openLabel: value["openLabel"].string)
+        }
     }
 }

@@ -47,6 +47,11 @@
 .assistant-modes button[aria-pressed=true]{background:var(--as-mint);color:var(--as-green);border-color:transparent}
 .assistant-concept{margin-top:10px;padding:12px;border:1px solid var(--as-line);border-radius:18px;background:var(--as-surface)}
 .assistant-concept p,.assistant-concept li{margin:4px 0 0;color:var(--as-muted);font-size:13px}
+.assistant-protocol-card .assistant-place{color:var(--as-ink);font-weight:700;font-size:15px}
+.assistant-material-list{margin:8px 0 0;padding:0 0 0 18px}
+.assistant-protocol-card .assistant-muted{font-size:13px}
+.assistant-choice{display:grid;gap:4px;margin-top:6px;font-size:12px}
+.assistant-choice select{min-height:40px;border:1px solid var(--as-line);border-radius:12px;background:var(--as-bg);color:var(--as-ink);padding:8px}
 .assistant-days{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .assistant-days span{padding:6px 8px;border-radius:12px;background:var(--as-mint);color:var(--as-green);font-size:12px;font-weight:700}
 .assistant-local{margin:0 18px 8px;padding:12px;border:1px solid var(--as-line);border-radius:16px;background:var(--as-bg)}

@@ -24,7 +24,7 @@ export function queueOfflineWrite(queue, command, options = {}){
   if(list.some(item=>item.text===text)) return {queued:false, duplicate:true, queue:list, reply:'Ten příkaz už ve frontě je. Zápis bez připojení neukládám. Až budete online, navrhnu ho znovu. Nic se teď nezměnilo.'};
   const item = {text, intent:command.intent};
   const next = options.front ? [item, ...list].slice(0,20) : [...list, item].slice(-20);
-  return {queued:true, duplicate:false, queue:next, reply:'Příkaz jsem si schoval do fronty. Zápis bez připojení neukládám. Až budete online, navrhnu ho znovu a počkám na potvrzení. Nic se teď nezměnilo.'};
+  return {queued:true, duplicate:false, queue:next, reply:'Příkaz jsem si schoval. Nic jsem nezapsal. Až bude signál, navrhnu ho znovu a počkám na uložení.'};
 }
 export function answerOffline(command, snapshot = {}){
   const intent = command?.intent;

@@ -21,8 +21,8 @@ test('Safari keyboard inset and iPhone assistant status are source contracts, no
   assert.match(swift, /PhotosPicker/);
   const thread = swift.slice(swift.indexOf('struct Thread'), swift.indexOf('private struct Saved'));
   assert.doesNotMatch(thread, /pending/);
-  assert.match(project, /CURRENT_PROJECT_VERSION: 19/);
-  assert.match(project, /MARKETING_VERSION: 0\.8\.10/);
+  assert.match(project, /CURRENT_PROJECT_VERSION: 20/);
+  assert.match(project, /MARKETING_VERSION: 0\.8\.11/);
   assert.doesNotMatch(swift, /\]=\./);
 });
 
@@ -32,6 +32,10 @@ test('A stuck concept can be dropped on the phone without a live confirm', ()=>{
   assert.match(ui, /data-discard-concept/);
   assert.match(ui, /conceptDismissed/);
   assert.match(ui, /Koncept je zahozený\. Nic se neuložilo\./);
+  assert.match(ui, /Nic se nezapíše, dokud neklepnete na Uložit/);
+  assert.match(ui, /v katalogu nejsou, nezakládám/);
+  assert.match(ui, /Návrh je v rozhovoru/);
+  assert.doesNotMatch(ui, /Koncept je otevřený v panelu Výsledek/);
   assert.match(ui, /function discardConcept/);
   assert.doesNotMatch(ui, /data-cancel="\$\{esc\(confirm\?\.id\|\|''\)\}" \$\{confirm\?'':'disabled'\}>Zrušit/);
   assert.match(css, /\.assistant-concept-scroll/);

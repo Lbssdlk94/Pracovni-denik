@@ -362,7 +362,7 @@ async function confirm(env, ctx, m, h, id, mode, preview, concept){
     return reply(mode, done.reply, {confirm:done.confirm});
   }
   await auditCommit(env, row, done.reply, h);
-  return reply(mode, done.reply, {mutated:done.mutated||null, context:done.context||null, concept:done.concept||null});
+  return reply(mode, done.reply, {mutated:done.mutated||null, context:done.context||null, concept:done.concept||null, cards:done.cards||[]});
 }
 
 async function run(env, ctx, m, h, command, today, options){
@@ -950,6 +950,8 @@ function protocolConcept(draft, job, questions){
     customerName:job?.customerName||'',
     address:job?.address||'',
     city:job?.city||'',
+    status:job?.status||'',
+    statusLabel:STATUS[job?.status]||'',
     work:draft.work||'',
     materials:(draft.materials||[]).map(line=>({key:line.key, label:line.label, query:line.query, quantity:line.quantity==null?'':String(line.quantity), unit:line.unit||'', status:line.status||'', itemId:line.status==='matched'?line.itemId||'':'', choiceId:line.status==='matched'?line.itemId||'':'', name:line.catalogName||line.label, choices:line.choices||[]})),
     questions:questions?.required||[],
@@ -957,19 +959,10 @@ function protocolConcept(draft, job, questions){
   };
 }
 function protocolReplyText(job, draft){
-  const questions = serviceDraftQuestions(draft);
-  const rows = (draft.materials||[]).map(line=>{
-    const qty = line.quantity==null?'množství k upřesnění':`${line.quantity} ${line.unit||''}`.trim();
-    if(line.status==='matched') return `• ${line.catalogName||line.label}: ${qty}.`;
-    if(line.status==='choices') return `• ${line.label}: ${qty}. V katalogu je víc možností, nic jsem nevybral.`;
-    if(line.status==='missing') return `• ${line.label}: ${qty}. V katalogu položku nevidím, novou nezakládám.`;
-    if(line.status==='unquantified') return `• ${line.label}: množství k upřesnění.`;
-    return `• ${line.label}: ${qty}.`;
-  });
-  const where = job?`Zakázka „${job.title}“${job.customerName?' · '+job.customerName:''}${job.address?' · '+job.address:''}.`:'Zakázku jsem jednoznačně nenašel. Zápis nikam neukládám.';
-  const ask = questions.required.length?'\nPotřebuji upřesnit:\n'+questions.required.map(item=>'• '+item).join('\n'):'';
-  const optional = questions.optional.length?'\nMůžete doplnit, není to povinné:\n'+questions.optional.map(item=>'• '+item).join('\n'):'';
-  return `${where}\n\nProvedené práce:\n${draft.work}\n\nSpotřebovaný materiál:\n${rows.join('\n')||'• Z diktátu nevidím materiál.'}${ask}${optional}${job?' Do protokolu se to zapíše až po potvrzení.':''}`;
+  const one = serviceDraftQuestions(draft).required[0] || '';
+  if(!job) return one ? `Zakázku jsem jednoznačně nenašel. Zápis nikam neukládám. ${one}` : 'Zakázku jsem jednoznačně nenašel. Zápis nikam neukládám.';
+  const line = `Návrh protokolu pro „${job.title||'zakázku'}“. Nic se nezapíše, dokud neklepnete na Uložit.`;
+  return one ? `${line} ${one}` : line;
 }
 function storedProtocol(draft){
   return {
@@ -1058,7 +1051,8 @@ async function protocolReport(env, ctx, m, h, params, options){
   const shown = {...draft, pendingQuestion:pending};
   if(picked.choices){
     shown.jobId = '';
-    return {reply:`Není jednoznačně aktivní zakázka. Zápis nikam neukládám.\n${lines(picked.choices, jobLine, '')}\n\n${protocolReplyText(null, draft)}`, concept:protocolConcept(draft, null, questions), context:{protocol:slimProtocol(shown)}};
+    const cards = jobCards(picked.choices).map(card=>({...card, pickLabel:'Použít tuhle'}));
+    return {reply:`Není jednoznačně aktivní zakázka. Zápis nikam neukládám. Vyberte jednu, sám jsem si nevybral.\n${lines(picked.choices, jobLine, '')}`, cards, concept:protocolConcept(draft, null, questions), context:{protocol:slimProtocol(shown)}};
   }
   if(picked.error||!picked.job) return {reply:`${picked.error||'Zakázku jsem nenašel. Nic jsem nepřiřadil.'}\n\n${protocolReplyText(null, draft)}`, concept:protocolConcept(draft, null, questions), context:{protocol:slimProtocol(shown)}};
   draft.jobId = picked.job.id;
@@ -1095,7 +1089,7 @@ async function commitProtocolReport(env, ctx, m, h, params){
   const result = await callJson(()=>handleServiceWork(write('/api/jobs/'+encodeURIComponent(params.jobId)+'/service','PUT', protocolBody(current, keptReport(current, {work:workToSave, materialItems:[...merged.values()]})), h._headers), env, ctx, m, h));
   if(!result.ok) return {reply:result.data.error||'Protokol se nepodařilo uložit. Nic dalšího jsem nezměnil.'};
   const saved = result.data.report?.materialItems||[];
-  return {reply:`Servisní protokol „${current.job.title}“ je uložený ke kontrole. Katalogové položky: ${saved.length}. Stejné množství není zapsané ještě jednou v textu materiálu.`, mutated:'jobs', context:{jobId:params.jobId, customerName:current.job.customerName||'', protocol:{jobId:params.jobId, work:params.work, materials:params.materials, asked:[], history:[]}}};
+  return {reply:`Servisní protokol „${current.job.title}“ je uložený ke kontrole. Katalogové položky: ${saved.length}. Stejné množství není zapsané ještě jednou v textu materiálu.`, cards:jobCards([current.job]), mutated:'jobs', context:{jobId:params.jobId, customerName:current.job.customerName||'', protocol:{jobId:params.jobId, work:params.work, materials:params.materials, asked:[], history:[]}}};
 }
 
 async function dictionaryEntries(env){
@@ -1403,7 +1397,7 @@ async function commitPlan(env, m, h, params){
   if(!first||params.terms.some(term=>!Array.isArray(term.people)||!term.people.length)) h.fail(400,'Doplňte pracovníka ke každému dni. Nic jsem neuložil.');
   const ids = [...new Set(params.terms.flatMap(term=>term.people))];
   const before = await env.DB.prepare('SELECT id FROM jobs WHERE id=? AND deleted=0').bind(id).first();
-  if(before) return {reply:`Zakázka „${params.title}“ už je uložená. Podruhé jsem ji nezaložil.`, mutated:'jobs', context:{jobId:id, customerName:params.customerName||''}};
+  if(before) return {reply:`Zakázka „${params.title}“ už je uložená. Podruhé jsem ji nezaložil.`, cards:[{type:'job', id, title:params.title||'Zakázka', subtitle:params.customerName||'', openLabel:'Otevřít zakázku'}], mutated:'jobs', context:{jobId:id, customerName:params.customerName||''}};
   const materialNote = (params.materials||[]).map(item=>'Materiál: '+item.name+' '+item.quantity+' '+item.unit).join('\n');
   const result = await callJson(()=>handleJobs(write('/api/jobs/'+id,'PUT',{
     version:0, title:params.title, jobType:'installation', status:'planned', incompleteReason:'',
@@ -1431,7 +1425,7 @@ async function commitPlan(env, m, h, params){
       h.fail(400, material.data.error||'Materiál se nepodařilo uložit. Zakázku jsem neponechal.');
     }
   }
-  return {reply:`Zakázka „${params.title}“ je jedna, s ${params.terms.length} termíny od ${first.date}${params.address?' na adrese '+params.address:''}. Materiál ${params.materials?.length?'je u zakázky uložený a neobjednaný':'se neobjednává'}.`, mutated:'jobs', context:{jobId:id, customerName:params.customerName||''}};
+  return {reply:`Zakázka „${params.title}“ je jedna, s ${params.terms.length} termíny od ${first.date}${params.address?' na adrese '+params.address:''}. Materiál ${params.materials?.length?'je u zakázky uložený a neobjednaný':'se neobjednává'}.`, cards:[{type:'job', id, title:params.title||'Zakázka', subtitle:[params.customerName, params.address].filter(Boolean).join(' · '), status:'planned', statusLabel:'plánovaná', openLabel:'Otevřít zakázku'}], mutated:'jobs', context:{jobId:id, customerName:params.customerName||''}};
 }
 
 async function createJob(env, m, h, params, today, tomorrow, options){

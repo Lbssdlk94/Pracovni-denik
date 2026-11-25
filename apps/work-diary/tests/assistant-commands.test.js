@@ -324,8 +324,8 @@ test('Defects, visits, realization days, photos and the garden dictionary stay c
   const queued = queueOfflineWrite([], parseAssistantCommand(SPOKEN_WORK, today));
   assert.equal(queued.queued, true);
   assert.equal(queued.queue.length, 1);
-  assert.match(queued.reply, /neukládám/);
-  assert.match(queued.reply, /potvrzení/);
+  assert.match(queued.reply, /schoval/);
+  assert.match(queued.reply, /Nic jsem nezapsal/);
   const again = queueOfflineWrite(queued.queue, parseAssistantCommand(SPOKEN_WORK, today));
   assert.equal(again.duplicate, true);
   assert.equal(again.queue.length, 1);
