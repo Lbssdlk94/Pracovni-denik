@@ -579,7 +579,7 @@ function dictationKey(name){
   if(/potrub/.test(folded)) return 'potrubi';
   if(/kolen/.test(folded)) return 'koleno';
   if(/\bt kus/.test(folded)) return 'tkus';
-  if(/trysk/.test(folded)) return 'tryska';
+  if(/trysk|trysek/.test(folded)) return 'tryska';
   if(/\bryh/.test(folded)) return 'ryha';
   if(/\bsekc/.test(folded)) return 'sekce';
   return '';
@@ -820,6 +820,145 @@ export function annotateProtocolMaterials(draft, items){
 function cloneDictation(draft){
   return JSON.parse(JSON.stringify(draft||{work:'', materials:[], asked:[], history:[]}));
 }
+function splitCountClauses(original){
+  return String(original||'').replace(/[?.!]+$/g,'').split(/\s*,\s*|\s+a\s+|\s+ale\s+|\s+nýbrž\s+/iu).map(part=>part.trim()).filter(Boolean);
+}
+function clauseLabel(part, piece){
+  if(piece.key && piece.key!=='catalog') return DICTATION_LABELS[piece.key] || piece.label;
+  const skip = new Set(['ne','neni','nejsou','na','jsou','byly','bylo','byl','byli','to','jen','asi','tak','kusu','kus','ks','metru','metry','metr','m','pytel','pytle','pytlu','pytly','litru','litry','litr']);
+  const words = String(part||'').replace(/[?.!,]+/g,'').split(/\s+/).filter(word=>{
+    const folded = foldCzech(word);
+    if(!folded || skip.has(folded) || DICTATION_UNITS[folded]) return false;
+    if(parseDictationNumber([folded])) return false;
+    return true;
+  });
+  const label = words.join(' ').trim();
+  if(!label) return piece.query;
+  return label.charAt(0).toLocaleUpperCase('cs')+label.slice(1);
+}
+function readCountClause(part){
+  const folded = foldCzech(part);
+  if(!folded) return null;
+  const negated = /^(ne|neni|nejsou)\b/.test(folded);
+  let body = normalizeDictationSlang(part).replace(/^(?:ne|není|nejsou|oprav(?:te|me)?|správně|vlastně|nakonec|množství|jsou to|byly to|bylo to|takže|ještě|přidej(?:te)?(?:\s+ještě)?|jsme|jsem|vyměnili|vyměnil|použili|použil|spotřebovali|spotřeboval|dali|dal|položili|položil|namontovali|namontoval)\s+/iu,'').trim();
+  body = body.replace(/\s+\bna\b\s+/giu,' ').replace(/^(?:jsme|jsem)\s+/iu,'').trim();
+  const piece = parseDictationPiece(body);
+  if(piece?.key && piece.quantity!=null && !piece.section && !piece.note) return {piece, label:clauseLabel(part, piece), negated, bare:false};
+  const words = foldCzech(body).split(' ').filter(Boolean);
+  const number = parseDictationNumber(words);
+  if(!number) return null;
+  const fillers = new Set(['ne','na','jen','asi','tak','to','jsou','byly','bylo','kusu','kus']);
+  const rest = words.slice(number.used).filter(word=>!DICTATION_UNITS[word] && !fillers.has(word));
+  if(rest.length) return null;
+  return {bare:true, quantity:number.value, negated};
+}
+function matchMaterialLine(draft, piece){
+  const lines = draft.materials||[];
+  if(piece.key && piece.key!=='catalog'){
+    const same = lines.filter(line=>line.key===piece.key || (line.key==='catalog' && dictationKey(`${line.query||''} ${line.label||''}`)===piece.key));
+    if(!same.length) return null;
+    if(same.length===1) return same[0];
+    const want = protocolTokens(piece.query);
+    const scored = same.map(line=>({line, hits:want.filter(token=>protocolTokens(line.query||'').includes(token)).length})).sort((a,b)=>b.hits-a.hits);
+    if(scored[0].hits>0 && scored[0].hits>(scored[1]?.hits||0)) return scored[0].line;
+    return {ambiguous:same};
+  }
+  const want = protocolTokens(piece.query||'');
+  if(!want.length) return null;
+  const scored = lines.map(line=>{
+    const have = protocolTokens(`${line.query||''} ${line.label||''}`);
+    const hits = want.filter(token=>have.includes(token)).length;
+    return {line, hits, coverage:hits/want.length};
+  }).filter(row=>row.hits>=1 && row.coverage>=0.6).sort((a,b)=>b.hits-a.hits||b.coverage-a.coverage);
+  if(!scored.length) return null;
+  if(scored.length>1 && scored[0].hits===scored[1].hits && scored[0].coverage===scored[1].coverage) return {ambiguous:scored.map(row=>row.line)};
+  return scored[0].line;
+}
+function quantityNote(work, lines){
+  const bits = lines.map(line=>{
+    const name = line.label || line.query || 'položka';
+    const unit = line.unit && line.unit!=='ks' ? ` ${line.unit}` : ' ks';
+    return `${line.quantity}${unit} ${name}`;
+  });
+  const sentence = `Upřesněné množství: ${bits.join(', ')}.`;
+  const base = String(work||'').replace(/\s*Upřesněné množství:.*$/u,'').trim();
+  return `${base} ${sentence}`.trim();
+}
+function applySpokenCounts(draft, original){
+  const folded = foldCzech(original);
+  if(!folded || folded.length>400) return null;
+  if(/^(kolik|kdo|jaka|jake|jaky|jak|kdy|kde|proc|ukaz|najdi|hledej|zkontrol|smaz|vytvor|zaloz)\b/.test(folded)) return null;
+  if(/\b(hodin|odprac|vykaz|dochaz|presun|prirad|zakazk|protokol|slovnik)\b/.test(folded)) return null;
+  const clauses = splitCountClauses(original);
+  const ops = [];
+  let pending = null;
+  for(const part of clauses){
+    const parsed = readCountClause(part);
+    if(!parsed){pending = null; continue;}
+    if(parsed.bare){
+      if(pending && !parsed.negated){
+        ops.push({piece:{...pending.piece, quantity:parsed.quantity, unit:pending.piece.unit}, label:pending.label});
+        pending = null;
+      }
+      continue;
+    }
+    if(parsed.negated){pending = parsed; continue;}
+    pending = null;
+    ops.push(parsed);
+  }
+  if(!ops.length){
+    const bare = clauses.map(readCountClause).filter(item=>item?.bare && !item.negated);
+    const quantified = (draft.materials||[]).filter(line=>line.quantity!=null && line.quantity!=='');
+    if(bare.length===1 && quantified.length===1) ops.push({piece:{key:quantified[0].key, query:quantified[0].query, label:quantified[0].label, quantity:bare[0].quantity, unit:quantified[0].unit, generic:quantified[0].generic!==false}, label:quantified[0].label||quantified[0].query});
+    else if(bare.length===1 && quantified.length>1) return {draft, clarify:`Množství ${bare[0].quantity} nemá jasnou položku. Řekněte kterou, nic jsem nezměnil.`};
+  }
+  if(!ops.length) return null;
+  const countish = /^(ne|oprav|spravne|vlastne|nakonec|mnozstvi|jsou|byly|bylo|takze|jeste|pridej)\b/.test(folded) || ops.length>=2 || clauses.length>=2 || /\b(na|kusu|ks|metru|metry|metr)\b/.test(folded);
+  if(!countish) return null;
+  const next = cloneDictation(draft);
+  const changed = [];
+  const noted = [];
+  let work = String(next.work||'');
+  for(const op of ops){
+    const found = matchMaterialLine(next, op.piece);
+    if(found?.ambiguous){
+      const names = [...new Set(found.ambiguous.map(line=>line.label||line.query).filter(Boolean))].join(', ');
+      return {draft, clarify:`„${op.label||op.piece.query}“ sedí na víc položek${names?` (${names})`:''}. Řekněte kterou, nic jsem nezměnil.`};
+    }
+    let line = found;
+    const before = line?{key:line.key, label:line.label, query:line.query, quantity:line.quantity, unit:line.unit}:null;
+    if(!line){
+      const added = draftMaterial(op.piece);
+      if(!added.unit) added.unit = op.piece.key==='potrubi'?'m':'ks';
+      if(op.piece.key==='catalog') added.label = op.label || added.label;
+      next.materials.push(added);
+      line = added;
+      noted.push(line);
+    }else if(Number(line.quantity)===Number(op.piece.quantity) && (!op.piece.unit || !line.unit || op.piece.unit===line.unit)){
+      continue;
+    }else{
+      const oldPhrase = dictationPhrase(before);
+      const phraseUnit = before.unit || '';
+      const newPhrase = dictationPhrase({...before, quantity:op.piece.quantity, unit:phraseUnit});
+      if(oldPhrase && newPhrase && oldPhrase!==newPhrase && work.includes(oldPhrase)) work = work.replace(oldPhrase, newPhrase);
+      else noted.push({...line, quantity:op.piece.quantity, unit:before.unit||op.piece.unit||'ks', label:line.label||op.label});
+      line.quantity = op.piece.quantity;
+      if(!line.unit) line.unit = op.piece.unit || (op.piece.key==='potrubi'?'m':'ks');
+      if(line.key==='catalog' && op.piece.key && op.piece.key!=='catalog'){
+        line.key = op.piece.key;
+        line.label = DICTATION_LABELS[op.piece.key] || line.label;
+        line.query = op.piece.query || line.query;
+      }
+      line.itemId = '';
+      line.itemVersion = 0;
+      if(line.status) line.status = '';
+    }
+    changed.push(line);
+  }
+  if(!changed.length) return null;
+  next.work = noted.length ? quantityNote(work, noted) : work;
+  return {draft:rememberDictation(draft, next)};
+}
 export function reviseServiceDraft(draft, text){
   if(!draft||typeof draft!=='object'||!Array.isArray(draft.materials)) return null;
   const original = String(text||'').trim();
@@ -848,7 +987,7 @@ export function reviseServiceDraft(draft, text){
   }
   if(/\bukaz\b/.test(folded)&&/protokol|navrh|zapis/.test(folded)) return {draft, show:true};
   const next = cloneDictation(draft);
-  if(/\bpridej jeste\b|\bpridej dalsi\b/.test(folded)){
+  if(/\bpridej jeste\b|\bpridej dalsi\b/.test(folded) && splitCountClauses(original).length<2){
     const line = findDictationLine(next, folded);
     if(!line) return null;
     const words = folded.split(' ').filter(Boolean);
@@ -865,7 +1004,7 @@ export function reviseServiceDraft(draft, text){
     line.quantity = Math.max(0, Math.round((line.quantity-number.value)*1000)/1000);
     return {draft:rememberDictation(draft, next)};
   }
-  if(/oprav mnozstvi|zmen mnozstvi|mnozstvi/.test(folded)&&/\bna\b/.test(folded)){
+  if((/oprav mnozstvi|zmen mnozstvi|mnozstvi/.test(folded)&&/\bna\b/.test(folded)) && splitCountClauses(original).length<2){
     const line = findDictationLine(next, folded);
     if(!line) return null;
     const words = folded.split(' ').filter(Boolean);
@@ -920,7 +1059,7 @@ export function reviseServiceDraft(draft, text){
     next.materials.splice(index, 1);
     return {draft:rememberDictation(draft, next)};
   }
-  return null;
+  return applySpokenCounts(draft, original);
 }
 
 export function parseDictionaryCommand(original){
@@ -1045,6 +1184,7 @@ export function interpretAssistant(input, today, context, kinds){
   }
   const meaning = understandUtterance(input, today, context);
   const locked = new Set(['jobs.depart','jobs.work','jobs.unplanned','jobs.personDay','navigation.address','customers.contact','jobs.reschedule','jobs.selection','inquiries.open','inquiries.count','inquiries.detail','inquiries.status','inquiries.convert']);
+  if(rules.intent==='protocol.report' && rules.params?.base) locked.add('protocol.report');
   if(meaning?.intent && (meaning.override || rules.intent==='unknown') && !locked.has(rules.intent)){
     return {intent:meaning.intent, params:meaning.params||{}, text:rules.text||String(input||'')};
   }

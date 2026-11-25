@@ -223,6 +223,41 @@ test('Protocol follow-ups edit the open draft and do not steal other intents', (
   assert.match(offline.reply, /neukládám/);
 });
 
+test('One sentence corrects several materials and can add another kind', ()=>{
+  const draft = parseServiceDictation('Použili jsme čtyři ventily, dva filtry, šest trysek a dvacet metrů potrubí.');
+  assert.deepEqual(draft.materials.map(line=>[line.key, line.quantity]), [
+    ['ventil', 4],
+    ['catalog', 2],
+    ['tryska', 6],
+    ['potrubi', 20]
+  ]);
+  const revised = reviseServiceDraft(draft, 'Ne dva filtry, tři, ventily na pět, trysky dvě a potrubí na deset metrů.');
+  assert.equal(revised.draft.materials.find(line=>line.key==='ventil').quantity, 5);
+  assert.equal(revised.draft.materials.find(line=>line.key==='catalog').quantity, 3);
+  assert.equal(revised.draft.materials.find(line=>line.key==='tryska').quantity, 2);
+  assert.equal(revised.draft.materials.find(line=>line.key==='potrubi').quantity, 10);
+  assert.equal(revised.draft.materials.find(line=>line.key==='potrubi').unit, 'm');
+  assert.match(revised.draft.work, /pět ventilů/);
+  assert.match(revised.draft.work, /tři filtry/);
+  assert.match(revised.draft.work, /dva trysky/);
+  assert.match(revised.draft.work, /deset metrů potrubí/);
+  assert.doesNotMatch(revised.draft.work, /čtyři ventily|dva filtry|šest trysek|dvacet metrů/);
+  const added = reviseServiceDraft(revised.draft, 'Kolena čtyři a lavalit jeden.');
+  assert.equal(added.draft.materials.find(line=>line.key==='koleno').quantity, 4);
+  assert.equal(added.draft.materials.find(line=>/lavalit/.test(line.query)).quantity, 1);
+  assert.equal(added.draft.materials.find(line=>line.key==='ventil').quantity, 5);
+  const ambiguous = parseServiceDictation('Použili jsme pět lavalit hrubý a dva lavalit jemný.');
+  const unclear = reviseServiceDraft(ambiguous, 'Lavalit na tři.');
+  assert.match(unclear.clarify, /víc položek/);
+  assert.equal(unclear.draft.materials[0].quantity, 5);
+  assert.equal(unclear.draft.materials[1].quantity, 2);
+  const spoken = contextualCommand(parseAssistantCommand('Ne čtyři ventily, tři a filtr jeden.', today), {protocol:draft, jobId:'job-1'});
+  assert.equal(spoken.intent, 'protocol.report');
+  assert.equal(spoken.params.base.materials.find(line=>line.key==='ventil').quantity, 4);
+  const hours = contextualCommand(parseAssistantCommand('Kolik hodin jsme dnes strávili na zakázce?', today), {protocol:draft, jobId:'job-1'});
+  assert.equal(hours.intent, 'jobs.hours');
+});
+
 test('Protocol catalogue match bills one exact item and never invents a row', ()=>{
   const items = [
     {id:'pe', version:1, name:'Potrubí PE 32 mm', sku:'PE32', unit:'m', active:true},

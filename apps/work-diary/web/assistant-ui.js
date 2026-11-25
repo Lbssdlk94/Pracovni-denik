@@ -1,4 +1,4 @@
-import {interpretAssistant} from './assistant-commands.js?v=inquiries-v1';
+import {interpretAssistant} from './assistant-commands.js?v=material-counts-v1';
 import {answerOffline, queueOfflineWrite} from './assistant-offline.js?v=inquiries-v1';
 import {peekCachedJobs} from './cloud.js?v=inquiries-v1';
 import {extractLocalCommand, extractLocalUnderstanding, localMinistral, desktopCanRunMinistral} from './assistant-local.js?v=assistant-intent-v1';
