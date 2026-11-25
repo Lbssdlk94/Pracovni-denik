@@ -28,7 +28,7 @@ struct APIJobDetailContent:View {
             }
             realizationGroup
             documentationGroup
-            informationGroup
+            if job["jobType"].string != "installation" { informationGroup }
         }
         .sheet(isPresented:$report){APIProtocolEditor(store:store,jobID:job.id)}
         .task(id:store.scope+job.id+store.revision.uuidString){await loadHandoffs()}
@@ -45,13 +45,13 @@ struct APIJobDetailContent:View {
             if let url=APIFormat.navigation(job["address"].string){
                 Link(destination:url){APIJobQuickLabel(title:"Navigovat",symbol:"location")}.diaryBubble()
             }
-            if store.enabled("drivePhotos") {
+            if store.enabled("drivePhotos") && job["jobType"].string != "installation" {
                 NavigationLink{photos}label:{APIJobQuickLabel(title:"Fotky",symbol:"camera")}.diaryBubble().accessibilityLabel("Fotodokumentace").accessibilityIdentifier("job-quick-photos")
             }
         }
     }
     private var realizationGroup:some View {
-        APIJobGroup(title:"Realizace") {
+        APIJobGroup(title: job["jobType"].string=="installation" ? "Práce" : "Práce") {
             if job["jobType"].string=="installation" {
                 NavigationLink{APIJobDiary(store:store,job:job).toolbar(.hidden,for:.tabBar)}label:{APIJobSettingsRow(title:"Deník realizace",symbol:"book.closed")}.accessibilityLabel("Deník realizace")
             }
@@ -65,11 +65,18 @@ struct APIJobDetailContent:View {
             if store.enabled("jobHandoffs") {
                 NavigationLink{handoffs}label:{APIJobSettingsRow(title:"Předání kolegům",symbol:"person.2",detail:handoff["handoffs"].isNull ? nil : "Počet: \(handoff["handoffs"].array.count)")}
             }
+            if job["jobType"].string=="installation" {
+                NavigationLink{customer}label:{APIJobSettingsRow(title:"Údaje zákazníka",symbol:"person.crop.rectangle",detail:job["customerName"].string)}
+                NavigationLink{APIJobSupplementary(job:job)}label:{APIJobSettingsRow(title:"Doplňující údaje",symbol:"info.circle")}
+                if store.manager && !store.isRolePreview {
+                    NavigationLink{APIJobRecordManagement(remove:remove)}label:{APIJobSettingsRow(title:"Správa záznamu",symbol:"gearshape")}
+                }
+            }
         }
     }
     private var documentationGroup:some View {
         APIJobGroup(title:"Dokumentace") {
-            if store.enabled("drivePhotos") {
+            if store.enabled("drivePhotos") && job["jobType"].string != "installation" {
                 NavigationLink{photos}label:{APIJobSettingsRow(title:"Fotodokumentace",symbol:"photo.on.rectangle")}
             }
             if store.enabled("defects"),!job["gardenId"].string.isEmpty {

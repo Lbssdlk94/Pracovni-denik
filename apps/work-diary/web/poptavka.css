@@ -1,0 +1,28 @@
+body{margin:0;background:var(--pd-background);color:var(--pd-text);font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+.poptavka{width:min(640px,100%);margin:0 auto;padding:24px 16px 48px}
+.poptavka-card{background:var(--pd-surface);border:1px solid var(--pd-gray);border-radius:var(--pd-radius-card);box-shadow:var(--pd-shadow-card);padding:20px 16px 24px}
+.poptavka-brand{display:flex;gap:12px;align-items:center;margin-bottom:18px}
+.poptavka-brand img{width:44px;height:44px}
+.poptavka-brand strong{display:block;color:var(--pd-forest);font-size:18px}
+.poptavka-brand small,.hint{color:var(--pd-muted);font-size:14px;line-height:1.45}
+h1{margin:0 0 8px;font-size:28px;line-height:1.15;color:var(--pd-forest)}
+fieldset{border:0;margin:0;padding:0}
+legend{font-weight:650;margin:16px 0 8px}
+.choices{display:grid;gap:8px}
+.choice{display:flex;gap:10px;align-items:center;min-height:48px;padding:10px 12px;border:1px solid var(--pd-gray);border-radius:var(--pd-radius-control);background:#fff}
+.choice:has(input:checked){border-color:var(--pd-forest);background:var(--pd-sage-soft)}
+label.field{display:grid;gap:6px;margin:12px 0;font-weight:600}
+input,select,textarea{width:100%;box-sizing:border-box;font:inherit;font-weight:450;font-size:16px;color:var(--pd-text);background:#fff;border:1px solid var(--pd-border-strong);border-radius:var(--pd-radius-control);padding:12px 14px}
+textarea{min-height:120px;resize:vertical}
+.suggest{display:grid;gap:6px;margin-top:-4px}
+.suggest button,.textish{border:0;background:transparent;color:var(--pd-forest);text-align:left;padding:8px 0;font:inherit;cursor:pointer}
+.row{display:grid;gap:8px}
+@media(min-width:640px){.row{grid-template-columns:1fr 140px}.poptavka-card{padding:28px 28px 32px}}
+.consent{display:flex;gap:10px;align-items:flex-start;margin:16px 0;font-size:14px;line-height:1.45}
+.consent input{width:22px;height:22px;margin-top:2px}
+button.primary{width:100%;min-height:52px;border:0;border-radius:var(--pd-radius-control);background:var(--pd-forest);color:#fff;font:inherit;font-weight:650;font-size:17px;cursor:pointer}
+button.primary:disabled{opacity:.55}
+.alert{background:var(--pd-danger-soft);color:var(--pd-danger);border-radius:14px;padding:12px 14px;margin:12px 0}
+.done{text-align:center;padding:12px 0 4px}
+.done strong{display:block;font-size:32px;letter-spacing:.04em;color:var(--pd-forest);margin:8px 0}
+.hp{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}

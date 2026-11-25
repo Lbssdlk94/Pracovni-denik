@@ -69,6 +69,14 @@ export function understandUtterance(original, today, context){
   if(saw.here && saw.step) return scoredIntent('assistant.clarify', 'Mám ukázat, co ještě chybí na této zakázce, nebo až následující výjezd? Nic jsem nezměnil.', {params:{topic:'current-step'}});
   const bareNext = saw.tokens.length<=2 && saw.tokens.some(word=>/^dals/.test(word)) && saw.tokens.some(word=>/^prac/.test(word)) && !saw.jobWord && !saw.place && !saw.question && !saw.self && !context?.jobId;
   if(bareNext) return scoredIntent('assistant.clarify', 'Další práce pro vás, nebo u konkrétního zákazníka? Pořadí bez toho nehádám.');
+  const motion = /\b(jedu|jedes|jede|jedem|jedeme|jedou|vyjizd\w*|vyrazim|vyrazime|vyrazit|vyrazte|odjizd\w*|presouvam\w*|presouvame|presouva)\b/.test(text)
+    || (/\b(jdu|pokracuj\w*|pokracujeme|pokracuju)\b/.test(text) && /\b(dals\w*|dale)\b/.test(text));
+  const motionAt = text.search(/\b(jedu|jedes|jede|jedem|jedeme|jedou|vyjizd\w*|vyrazim|vyrazime|vyrazit|vyrazte|odjizd\w*|presouvam\w*|presouvame|presouva|jdu|pokracuj\w*|pokracujeme|pokracuju)\b/);
+  const furtherAt = text.search(/\bdal\b/);
+  const further = /\b(dals\w*|dale)\b/.test(text) || (motionAt>=0 && furtherAt>motionAt);
+  if(motion && further && !saw.add && !/\b(kam|kde|jaka|jake|jaky|proc|kolik)\b/.test(text)){
+    return {intent:'jobs.depart', override:true, params:{next:true, query:''}};
+  }
   if(saw.next && (saw.work || /\bna rade\b/.test(text)) && !saw.add && !saw.here){
     if(/\bnavstev/.test(text)){
       const customer = namedAfter(text, /\bu\s+([a-z]{3,})/);
@@ -89,10 +97,11 @@ export function understandUtterance(original, today, context){
   if(/^(koncim|tady uz koncim|koncim tady)$/.test(text) || (/\bkoncim\b/.test(text) && !/\b(odchod|dochaz\w*|smen\w*|hotov\w*|zakazk\w*)\b/.test(text))){
     return scoredIntent('assistant.clarify', 'Mám ukončit jen vaši práci na zakázce? Odchod z docházky, kolegy ani celou zakázku tím nezavřu. Upřesněte, nic jsem neukončil.');
   }
-  if(/\b(navig\w*|ukaz adres\w*|otevri cestu)\b/.test(text)) return {intent:'navigation.address', override:false, params:{currentJobId:context?.jobId||''}};
-  if(/\b(zavolej|cislo|telefon)\b/.test(text)){
-    const query = namedAfter(text, /\b(?:zavolej|cislo|telefon)\s+(?:na\s+|k\s+)?([a-z]{3,})/);
-    return {intent:'customers.contact', override:false, params:{query:query||context?.customerName||''}};
+  if(/\b(navig\w*|ukaz adres\w*|ukaz cest\w*|otevri cestu|otevri mapu|spust navig\w*)\b/.test(text)) return {intent:'navigation.address', override:false, params:{currentJobId:context?.jobId||''}};
+  if(/\b(zavolej\w*|zavolat|vytoc\w*|brnk\w*|volej(?!bal)\w*|cislo|telefon)\b/.test(text)){
+    const query = namedAfter(text, /\b(?:zavolej\w*|zavolat|vytoc\w*|brnk\w*|volej\w*|cislo|telefon)\s+(?:na\s+|k\s+)?([a-z]{3,})/);
+    const generic = /^(tam|toho|tomu|jemu|cislo|cislem|telefon|telefonu|zakaznikovi|zakaznika|zakaznik)$/.test(query);
+    return {intent:'customers.contact', override:false, params:{query:generic?'':(query||context?.customerName||'')}};
   }
   if(/\b(vyfot\w*|fotk\w*|fotog\w*)\b/.test(text) && !/\bprotokol\b/.test(text)){
     const when = /\bpred\b/.test(text)?'before':/\bpo\b/.test(text)?'after':'gallery';

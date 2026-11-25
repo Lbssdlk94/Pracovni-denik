@@ -102,7 +102,8 @@ struct APIAttendanceView:View {
         }.padding(14).background(DiaryStyle.surface,in:RoundedRectangle(cornerRadius:22))
     }
     @ViewBuilder private func reviewSections(_ data:APIValue)->some View {
-        if store.manager,!data["pendingCorrections"].array.isEmpty{Section("Čeká na schválení") {ForEach(data["pendingCorrections"].array,id:\.id){c in VStack(alignment:.leading,spacing:8){Text(c["userName"].string).font(.headline);Text(c["reason"].string);HStack{Button("Schválit"){action=APIAttendanceActions.review(c,approve:true)};Button("Zamítnout"){action=APIAttendanceActions.review(c,approve:false)}}}}}}
+        if store.manager,!data["pendingCorrections"].array.isEmpty{Section("Čeká na schválení") {ForEach(data["pendingCorrections"].array,id:\.id){c in VStack(alignment:.leading,spacing:8){Text(c["userName"].string).font(.headline);Text(c["reason"].string);HStack{Button("Schválit"){action=APIAttendanceActions.review(c,approve:true)};Button("Zamítnout"){action=APIAttendanceActions.review(c,approve:false)};if c["createdBy"].string==store.userID || c["userId"].string==store.userID{Button("Stáhnout žádost"){action=APIAttendanceActions.withdraw(c)}}}}}}}
+        if !store.manager{let mine=data["pendingCorrections"].array.filter{$0["createdBy"].string==store.userID || $0["userId"].string==store.userID};if !mine.isEmpty{Section("Moje čekající žádosti"){ForEach(mine,id:\.id){c in VStack(alignment:.leading,spacing:8){Text(c["reason"].string);Text("Čeká na schválení").font(.caption);Button("Stáhnout žádost"){action=APIAttendanceActions.withdraw(c)}}}}}}
         if store.manager{Section{Button("Export měsíční docházky",systemImage:"square.and.arrow.up"){export=true}.disabled(data["detail"]["activitySchema"].int != 1).buttonStyle(.automatic).frame(minHeight:44)}}
     }
     private func load(refresh:Bool=false)async{await model.load(store:store,month:month,user:user,discipline:team ? discipline : "all",refresh:refresh)}

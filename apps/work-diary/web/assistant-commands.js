@@ -1,12 +1,13 @@
 // Rule-based Czech commands. No model, no network. The same function is used
 import {planWork, revisePlan} from './job-plan.js';
 import {understandUtterance} from './assistant-intent.js';
+import {parseWorkQuestion} from './job-selection.js';
 // by the worker and by tests. Later local or cloud models may only replace
 // this parser; they must still call the existing authorized actions.
 
 export const ASSISTANT_MODES = [
   {id:'basic', label:'Základní asistent', available:true, kind:'rules', detail:'Příkazy podle pravidel nad stávajícími daty. Bez AI a bez dalšího předplatného.'},
-  {id:'local', label:'V zařízení', available:true, kind:'local', detail:'Ministral 3B se stáhne do prohlížeče, asi 2,2 GB. Do aplikace ani na server se model nevkládá. Firemní údaje dál bere stávající asistent a zápis čeká na potvrzení.'},
+  {id:'local', label:'Ministral 3B', available:true, kind:'local', detail:'Na počítači se Ministral 3B stáhne do prohlížeče, asi 2,2 GB. Na mobilu je jen v aplikaci. Na server se model neposílá. Firemní údaje dál bere stávající asistent a zápis čeká na potvrzení.'},
   {id:'cloud', label:'Cloud', available:false, kind:'cloud', detail:'Nedostupné. Cloudový poskytovatel není zapojený a placené API se nevolá.'}
 ];
 
@@ -107,7 +108,22 @@ export function assistantSuggestions(){
     'Vytvoř servisní protokol.',
     'Kolik hodin jsem dnes odpracoval?',
     'Kteří zákazníci čekají na servis?',
-    'Vytvoř pracovní výkaz za tento měsíc.'
+    'Vytvoř pracovní výkaz za tento měsíc.',
+    'Jedu na další zakázku.',
+    'Jedu dál.',
+    'Vyjíždím na další práci.',
+    'Jedu k dalšímu zákazníkovi.',
+    'Zahaj práci.',
+    'Ukonči práci.',
+    'Naviguj tam.',
+    'Zavolej Novákovi.',
+    'Co ještě nemá termín?',
+    'Dej Nováka na čtvrtek.',
+    'Co má dnes Marek?',
+    'Máme nové poptávky?',
+    'Kdo čeká na cenovou nabídku?',
+    'Shrň poslední poptávku.',
+    'Převeď tuto poptávku na zakázku.'
   ];
 }
 
@@ -204,6 +220,150 @@ function clipField(value, max){
   return String(value||'').replace(/[?.!,]+$/g,'').trim().slice(0, max);
 }
 
+const MOVE_AT = /\b(jedu|jedes|jede|jedem|jedeme|jedou|vyjizd\w*|vyrazim|vyrazime|vyrazit|vyrazte|odjizd\w*|presouvam\w*|presouvame|presouva|jdu|pokracuj\w*|pokracujeme|pokracuju)\b/;
+const MOTION_RE = /\b(jedu|jedes|jede|jedem|jedeme|jedou|vyjizd\w*|vyrazim|vyrazime|vyrazit|vyrazte|odjizd\w*|presouvam\w*|presouvame|presouva)\b/;
+const GENERIC_PLACE = /^(zakaz\w*|prac\w*|tam|to|tohle|tuhle|tomu|tomuto|misto|adres\w*|vyjezd\w*|navstev\w*|cestu|cesta|ceste|dals\w*|dal|dale|nej|servis\w*|realiz\w*|domu|doma|dnes|zitra|tady|sem|tom|ni)$/;
+const PERSON_STOP = new Set(['dnes','dneska','zitra','zitrejsek','praci','prace','zakazku','zakazka','zakazky','navstevu','navstevy','ona','tym','vsichni','nekdo','tom','tam','servis','realizaci','tady','tuhle','ten','muj','moje','moji','sve','svoji','neco','vyjezd','plan','termin','praci','interval','intervalu']);
+
+function leavingNext(text){
+  if(/\bdals\w*\b|\bdale\b/.test(text)) return true;
+  const motionAt = text.search(MOVE_AT);
+  const further = text.search(/\bdal\b/);
+  return motionAt>=0 && further>motionAt;
+}
+function isMotion(text){
+  return MOTION_RE.test(text) || (/\b(jdu|pokracuj\w*|pokracujeme|pokracuju)\b/.test(text) && leavingNext(text));
+}
+function travelName(original){
+  const match = String(original||'').match(/\b(?:k|ke|na|do|za)\s+(?:pana|paní|pani|panu|pane\s+)?(\p{L}+)/iu);
+  if(!match) return '';
+  const folded = foldCzech(match[1]);
+  if(!folded || folded.length<3 || GENERIC_PLACE.test(folded) || weekdayMention(folded)) return '';
+  return softenName(match[1]);
+}
+function originalToken(original, folded){
+  const words = String(original||'').match(/\p{L}+/gu)||[];
+  return words.find(word=>foldCzech(word)===folded)||'';
+}
+function departPhrase(original, text){
+  const onRoad = /jsem na ceste/.test(text);
+  const motion = isMotion(text);
+  if(!onRoad && !motion) return null;
+  if(/\b(kam|kde|jaka|jake|jaky|kolik|hodin|odprac|vykaz|dochaz)\b/.test(text)) return null;
+  const name = travelName(original);
+  const next = leavingNext(text) && !name;
+  if(!onRoad && !next && !name) return null;
+  if(onRoad && !next && !name){
+    return {intent:'jobs.depart', params:{query:softenName(capture(original, [/k\s+(.+)/iu])), current:/\bteto\b|\btuhle\b|\baktualni\b|\bzakaznikovi\b/.test(text)}, text:original};
+  }
+  if(next) return {intent:'jobs.depart', params:{query:'', next:true}, text:original};
+  return {intent:'jobs.depart', params:{query:name, current:false}, text:original};
+}
+function workTarget(original){
+  const named = softenName(capture(original, [/\bu\s+(?:pana|paní|pani|panu|pane\s+)?(\p{L}+)/iu, /zakáz(?:ce|ku|ky)\s+(?:u\s+)?(\p{L}+)/iu]));
+  const folded = foldCzech(named);
+  if(!folded || GENERIC_PLACE.test(folded) || /^(teto|tuhle|aktualni|tom|to)$/.test(folded)) return {query:'', current:true};
+  return {query:named, current:false};
+}
+function workPhrase(original, text){
+  if(/\b(dochaz\w*|smen\w*|prichod\w*|odchod\w*|hodin\w*|odprac\w*|vykaz\w*|kolik|protokol)\b/.test(text)) return null;
+  if(/prace je hotov|zakazk\w*\s+(mame\s+)?(hotov|dokonc)|mame hotovo|je dokoncena/.test(text)) return null;
+  const closesJob = /\b(ukonci\w*|ukoncit)\b/.test(text) && /\bzakazk\w*\b/.test(text) && !/\bprac\w*\b/.test(text);
+  if(closesJob) return null;
+  const stop = (/\b(ukonci\w*|ukoncit)\b/.test(text) && /\b(prac\w*|interval\w*)\b/.test(text))
+    || (/\bkoncim s\b/.test(text) && /\bprac/.test(text))
+    || (/\bprestav\w*/.test(text) && /\bprac/.test(text))
+    || (/\bzavri\w*/.test(text) && /\binterval/.test(text))
+    || /\bkoncim prac/.test(text);
+  const start = !stop && (
+    (/\bzahaj\w*\b/.test(text) && /\b(prac\w*|mak\w*)\b/.test(text))
+    || (/\b(zacni|zacnem|zacinat|zaciname|zacinam)\b/.test(text) && /\b(prac\w*|mak\w*)\b/.test(text))
+    || /^(zacinam|zaciname|zahajuji|zahajime)$/.test(text)
+    || (/\bpoust\w*\b/.test(text) && /\bse\b/.test(text) && /\bdo\b/.test(text))
+    || (/\bjdu\b/.test(text) && /\b(delat|pracovat|makat)\b/.test(text))
+    || /\bberu se\b/.test(text)
+    || (/\bspoust\w*\b/.test(text) && /\bprac/.test(text))
+  );
+  if(!stop && !start) return null;
+  return {intent:'jobs.work', params:{action:stop?'stop':'start', ...workTarget(original)}, text:original};
+}
+function navigationPhrase(original, text){
+  if(!/\b(navig\w*|otevri mapu|ukaz cest\w*|ukaz adres\w*|otevri cestu|spust navig\w*)\b/.test(text)) return null;
+  const name = travelName(original);
+  return {intent:'navigation.address', params:{query:name, current:!name}, text:original};
+}
+function callPhrase(original, text){
+  if(!/\b(zavolej\w*|zavolat|vytoc\w*|brnk\w*|volej(?!bal)\w*)\b/.test(text)) return null;
+  if(/\bnezavol\w*\b/.test(text)) return null;
+  const raw = capture(original, [/(?:zavolej(?:te)?|zavolat|vytoč(?:te)?|volej(?:te)?|brnkni(?:te)?|brnkněte)\s+(?:na\s+|k\s+|číslo\s+|cislo\s+)?(.+)/iu]);
+  const folded = foldCzech(raw).replace(/^(pana|pani|panu|pane)\s+/,'');
+  const generic = !folded || /^(tam|to|mu|ji|jemu|ho|sem|tady|cislo|cislem|telefon|telefonu|zakaznikovi|zakaznika|zakaznik)$/.test(folded);
+  return {intent:'customers.contact', params:{query:generic?'':softenName(raw.replace(/^(pana|paní|pani|panu|pane)\s+/i,''))}, text:original};
+}
+function unplannedPhrase(original, text, kinds){
+  if(!/\b(termin\w*|naplan\w*)\b/.test(text)) return null;
+  if(!/\b(nema\w*|nemaj\w*|bez|ceka\w*|neni|nejsou|jeste|ktere|kdo|co|uka\w*|najdi)\b/.test(text) && !/bez termin/.test(text) && !/nenaplan/.test(text)) return null;
+  if(/\b(hodin|odprac|vykaz|kolik)\b/.test(text)) return null;
+  const work = parseWorkQuestion(original, kinds);
+  const legacyService = work?.kind==='service' && /bez termin/.test(text);
+  if(work?.kind && !legacyService) return null;
+  const type = /\bservis\w*\b/.test(text)?'service':/\brealizac\w*\b/.test(text)?'installation':/\bzamer\w*\b/.test(text)?'survey':'';
+  return {intent:'jobs.unplanned', params:{type}, text:original};
+}
+function personPhrase(original, text){
+  if(/\b(hodin|odprac|vykaz|dochaz|kolik|mame|mate|mas)\b/.test(text)) return null;
+  const match = text.match(/\b(?:co ma|co dela|kde je|kde bude)\b\s+(.+)/);
+  if(!match) return null;
+  const words = match[1].split(' ').filter(word=>word.length>=3 && !PERSON_STOP.has(word) && !weekdayMention(word));
+  const folded = words[0]||'';
+  if(!folded) return null;
+  const person = softenName(originalToken(original, folded)||folded);
+  if(!person) return null;
+  return {intent:'jobs.personDay', params:{person, when:/\bzitra|zitre/.test(text)?'tomorrow':'today'}, text:original};
+}
+function reschedulePhrase(original, text, today){
+  const verb = /\b(presun\w*|preloz\w*|dej|dejte|dejme|hod|hodim|hodime|hodte|posun\w*|naplanuj\w*|naplanovat)\b/.test(text);
+  const dayName = weekdayMention(text);
+  const relative = /\bzitra|zitre/.test(text)?'tomorrow':(/\bdnes\b/.test(text)?today:'');
+  if(!verb || (!dayName && !relative) || planWork(original, today)) return null;
+  let query = softenName(capture(original, [
+    /zakázku\s+(?:u\s+)?(.+?)\s+na\s+/iu,
+    /u\s+(.+?)\s+na\s+/iu,
+    /(?:přesuň(?:te)?|přelož(?:te)?|dej(?:te|me)?|hoď(?:te)?|hodím|hodíme|posuň(?:te)?|posunout|naplánuj(?:te|me)?|naplánovat)\s+(?:zakázku\s+)?(?:u\s+)?(.+?)\s+na\s+/iu
+  ]));
+  const foldedQuery = foldCzech(query);
+  if(!query || /^(to|tam|ji|ho|tu|tuhle|tuto|toto|zakazku|zakazka|termin|terminu)$/.test(foldedQuery)) query = '';
+  return {intent:'jobs.reschedule', params:{query, dueDate:dayName?nextWeekday(today, dayName):relative, weekday:dayName, current:!query}, text:original};
+}
+function inquiryPhrase(original, text){
+  const reply = /odpoved/.test(text) && /zakaznik/.test(text);
+  const missing = /zjistit/.test(text) && /zakaznik/.test(text);
+  const inquiry = /poptav/.test(text);
+  const quote = /nabid/.test(text) && /cek|rozhodnut|odesl|priprav/.test(text);
+  const uncalled = /\bnezavolali\b|\bnezavolano\b|jeste nezavol/.test(text);
+  const countNew = /\bkolik je novych\b/.test(text) && !/zakaz|hodin|dochaz|odprac|material|servis|navstev/.test(text);
+  if(!inquiry && !quote && !uncalled && !reply && !missing && !countNew) return null;
+  if(/dochaz|smen|hodin|odprac|vykaz/.test(text)) return null;
+  if(!inquiry && /ceka/.test(text) && /servis/.test(text) && /zakaz/.test(text)) return null;
+  const category = /oboji/.test(text)?'both':(/zavlah/.test(text) && /garden|zahrad/.test(text)?'both':(/zavlah/.test(text)?'irrigation':(/garden|zahrad/.test(text)?'garden':'')));
+  const number = (original.match(/P-\d{4}-\d{4}/i)||[])[0]||'';
+  const rawName = softenName(capture(original, [/poptávk\p{L}*\s+(?:od\s+|na\s+|pro\s+)?(\p{L}[\p{L}'-]{2,})/iu]));
+  const named = /^(zavlah\w*|garden\w*|zahrad\w*|oboji|nov\w*|servis\w*|realiz\w*|posledn\w*|tuto|tu)$/.test(foldCzech(rawName))?'':rawName;
+  const query = number || (/posledn|tuto|tohoto|tento/.test(text)?'':named);
+  if(inquiry && /\b(preved|prevest|prevest)\b|na zakazku/.test(text) && /poptav/.test(text)) return {intent:'inquiries.convert', params:{query}, text:original};
+  if(missing) return {intent:'inquiries.detail', params:{mode:'missing', query}, text:original};
+  if(reply) return {intent:'inquiries.detail', params:{mode:'reply', query}, text:original};
+  if(inquiry && /\b(shrn|shrnut|posledn)\b/.test(text)) return {intent:'inquiries.detail', params:{mode:'summary', query}, text:original};
+  if(inquiry && /\b(oznac|nastav|prepni|kontaktovan|prohlidk|zamitn|archivuj|prijmi)\b/.test(text)){
+    const status = /archiv/.test(text)?'archived':/zamit/.test(text)?'rejected':/prijat|prijmi/.test(text)?'accepted':/prohlid/.test(text)?'visit_set':/odeslan/.test(text)?'quote_sent':/rozhodnut/.test(text)?'awaiting':/nabid/.test(text)?'quote_prep':'contacted';
+    return {intent:'inquiries.status', params:{query, status}, text:original};
+  }
+  if(countNew || (inquiry && /\b(kolik|mame|mate|nejak)\b/.test(text) && !/\b(ukaz|otevri|kdo|kter)\b/.test(text))) return {intent:'inquiries.count', params:{category}, text:original};
+  const statuses = quote?['quote_prep','quote_sent','awaiting']:null;
+  const status = uncalled || (inquiry && /\bnov/.test(text))?'new':'';
+  return {intent:'inquiries.open', params:{category, status, statuses, query:uncalled?'':query}, text:original};
+}
+
 export function parseCustomerDraft(original){
   const phone = clipField((original.match(/(?:telefon|tel\.?)\s*(\+?[0-9][0-9 ()\-./]{2,40})/iu)||[])[1], 50);
   const email = clipField((original.match(/[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+/u)||[])[0], 254);
@@ -213,7 +373,7 @@ export function parseCustomerDraft(original){
   return {name, phone, email, address:parts[0]||'', city:clipField(parts.slice(1).join(', '), 120)};
 }
 
-export function parseAssistantCommand(input, today){
+export function parseAssistantCommand(input, today, kinds){
   const original = String(input||'').trim().slice(0,500);
   const text = foldCzech(original);
   const month = namedMonth(text, today);
@@ -224,14 +384,25 @@ export function parseAssistantCommand(input, today){
   if(parseDictionaryList(original)) return {intent:'dictionary.list', params:{}, text:original};
   if(/\b(smaz|odstran|vymaz|zrus zakaz|zrus protokol)\b/.test(text)) return {intent:'refused.destructive', params:{}, text:original};
   if(/^(napoveda|pomoc|co umis|co umite|jak fungujes)\b/.test(text)) return {intent:'help', params:{}, text:original};
-  if(/jsem na ceste/.test(text)) return {intent:'jobs.depart', params:{query:softenName(capture(original, [/k\s+(.+)/iu])), current:/\bteto\b|\bzakaznikovi\b/.test(text)}, text:original};
+  const inquiry = inquiryPhrase(original, text);
+  if(inquiry) return inquiry;
+  const depart = departPhrase(original, text);
+  if(depart) return depart;
+  const work = workPhrase(original, text);
+  if(work) return work;
+  const navigation = navigationPhrase(original, text);
+  if(navigation) return navigation;
+  const call = callPhrase(original, text);
+  if(call) return call;
+  const unplanned = unplannedPhrase(original, text, kinds);
+  if(unplanned) return unplanned;
+  const person = personPhrase(original, text);
+  if(person) return person;
   if(/\b(zacni|zacina|zapis prichod|prichod)\b/.test(text)&&/dochaz|smen|praci/.test(text)) return {intent:'attendance.arrive', params:{}, text:original};
   if(/\b(ukonci|ukoncit|odchod)\b/.test(text)&&/dochaz|smen|praci/.test(text)) return {intent:'attendance.leave', params:{}, text:original};
   if(/aktivni/.test(text)&&/dochaz|smen/.test(text)) return {intent:'attendance.active', params:{}, text:original};
-  if(/\b(presun|preloz)\b/.test(text)){
-    const dayName = weekdayMention(text);
-    return {intent:'jobs.reschedule', params:{query:softenName(capture(original, [/zakázku\s+(?:u\s+)?(.+?)\s+na\s+/iu, /u\s+(.+?)\s+na\s+/iu])), dueDate:dayName?nextWeekday(today, dayName):(/\bzitra|zitre/.test(text)?'tomorrow':''), weekday:dayName}, text:original};
-  }
+  const moved = reschedulePhrase(original, text, today);
+  if(moved) return moved;
   if(/\bprirad\b/.test(text)) return {intent:'jobs.assign', params:{person:softenName(capture(original, [/přiřaď\s+(\p{L}+)/iu])), query:softenName(capture(original, [/zakáz(?:ce|ku|ce)\s+(.+)/iu, /realizaci\s+(.+)/iu, /k\s+(.+)/iu]))}, text:original};
   if(/\b(oznac|nastav stav)\b/.test(text)&&/zakaz/.test(text)){
     const status = /nedokonc/.test(text)?'incomplete':/hotov|dokonc/.test(text)?'done':/probiha|v praci/.test(text)?'in_progress':/plan/.test(text)?'planned':'';
@@ -270,6 +441,8 @@ export function parseAssistantCommand(input, today){
   if(planWork(original, today)) return {intent:'jobs.plan', params:{text:original}, text:original};
   if(/realizac/.test(text) && /\b(strav|celkem|odprac|kolik)\b/.test(text) && !/\bod\s+\d/.test(text)) return {intent:'jobs.realizationHours', params:{}, text:original};
   if(/cekaj/.test(text) && /servis/.test(text) && /zakaz/.test(text)) return {intent:'customers.waitingService', params:{}, text:original};
+  const workQuestion = parseWorkQuestion(original, kinds);
+  if(workQuestion) return {intent:'jobs.selection', params:workQuestion, text:original};
   if(/\b(hodin|dochaz|smen|vykaz|odprac)/.test(text)){
     if(/zakaz/.test(text)){
       return {intent:'jobs.hours', params:{
@@ -406,7 +579,7 @@ function dictationKey(name){
   if(/potrub/.test(folded)) return 'potrubi';
   if(/kolen/.test(folded)) return 'koleno';
   if(/\bt kus/.test(folded)) return 'tkus';
-  if(/trysk/.test(folded)) return 'tryska';
+  if(/trysk|trysek/.test(folded)) return 'tryska';
   if(/\bryh/.test(folded)) return 'ryha';
   if(/\bsekc/.test(folded)) return 'sekce';
   return '';
@@ -647,6 +820,145 @@ export function annotateProtocolMaterials(draft, items){
 function cloneDictation(draft){
   return JSON.parse(JSON.stringify(draft||{work:'', materials:[], asked:[], history:[]}));
 }
+function splitCountClauses(original){
+  return String(original||'').replace(/[?.!]+$/g,'').split(/\s*,\s*|\s+a\s+|\s+ale\s+|\s+nýbrž\s+/iu).map(part=>part.trim()).filter(Boolean);
+}
+function clauseLabel(part, piece){
+  if(piece.key && piece.key!=='catalog') return DICTATION_LABELS[piece.key] || piece.label;
+  const skip = new Set(['ne','neni','nejsou','na','jsou','byly','bylo','byl','byli','to','jen','asi','tak','kusu','kus','ks','metru','metry','metr','m','pytel','pytle','pytlu','pytly','litru','litry','litr']);
+  const words = String(part||'').replace(/[?.!,]+/g,'').split(/\s+/).filter(word=>{
+    const folded = foldCzech(word);
+    if(!folded || skip.has(folded) || DICTATION_UNITS[folded]) return false;
+    if(parseDictationNumber([folded])) return false;
+    return true;
+  });
+  const label = words.join(' ').trim();
+  if(!label) return piece.query;
+  return label.charAt(0).toLocaleUpperCase('cs')+label.slice(1);
+}
+function readCountClause(part){
+  const folded = foldCzech(part);
+  if(!folded) return null;
+  const negated = /^(ne|neni|nejsou)\b/.test(folded);
+  let body = normalizeDictationSlang(part).replace(/^(?:ne|není|nejsou|oprav(?:te|me)?|správně|vlastně|nakonec|množství|jsou to|byly to|bylo to|takže|ještě|přidej(?:te)?(?:\s+ještě)?|jsme|jsem|vyměnili|vyměnil|použili|použil|spotřebovali|spotřeboval|dali|dal|položili|položil|namontovali|namontoval)\s+/iu,'').trim();
+  body = body.replace(/\s+\bna\b\s+/giu,' ').replace(/^(?:jsme|jsem)\s+/iu,'').trim();
+  const piece = parseDictationPiece(body);
+  if(piece?.key && piece.quantity!=null && !piece.section && !piece.note) return {piece, label:clauseLabel(part, piece), negated, bare:false};
+  const words = foldCzech(body).split(' ').filter(Boolean);
+  const number = parseDictationNumber(words);
+  if(!number) return null;
+  const fillers = new Set(['ne','na','jen','asi','tak','to','jsou','byly','bylo','kusu','kus']);
+  const rest = words.slice(number.used).filter(word=>!DICTATION_UNITS[word] && !fillers.has(word));
+  if(rest.length) return null;
+  return {bare:true, quantity:number.value, negated};
+}
+function matchMaterialLine(draft, piece){
+  const lines = draft.materials||[];
+  if(piece.key && piece.key!=='catalog'){
+    const same = lines.filter(line=>line.key===piece.key || (line.key==='catalog' && dictationKey(`${line.query||''} ${line.label||''}`)===piece.key));
+    if(!same.length) return null;
+    if(same.length===1) return same[0];
+    const want = protocolTokens(piece.query);
+    const scored = same.map(line=>({line, hits:want.filter(token=>protocolTokens(line.query||'').includes(token)).length})).sort((a,b)=>b.hits-a.hits);
+    if(scored[0].hits>0 && scored[0].hits>(scored[1]?.hits||0)) return scored[0].line;
+    return {ambiguous:same};
+  }
+  const want = protocolTokens(piece.query||'');
+  if(!want.length) return null;
+  const scored = lines.map(line=>{
+    const have = protocolTokens(`${line.query||''} ${line.label||''}`);
+    const hits = want.filter(token=>have.includes(token)).length;
+    return {line, hits, coverage:hits/want.length};
+  }).filter(row=>row.hits>=1 && row.coverage>=0.6).sort((a,b)=>b.hits-a.hits||b.coverage-a.coverage);
+  if(!scored.length) return null;
+  if(scored.length>1 && scored[0].hits===scored[1].hits && scored[0].coverage===scored[1].coverage) return {ambiguous:scored.map(row=>row.line)};
+  return scored[0].line;
+}
+function quantityNote(work, lines){
+  const bits = lines.map(line=>{
+    const name = line.label || line.query || 'položka';
+    const unit = line.unit && line.unit!=='ks' ? ` ${line.unit}` : ' ks';
+    return `${line.quantity}${unit} ${name}`;
+  });
+  const sentence = `Upřesněné množství: ${bits.join(', ')}.`;
+  const base = String(work||'').replace(/\s*Upřesněné množství:.*$/u,'').trim();
+  return `${base} ${sentence}`.trim();
+}
+function applySpokenCounts(draft, original){
+  const folded = foldCzech(original);
+  if(!folded || folded.length>400) return null;
+  if(/^(kolik|kdo|jaka|jake|jaky|jak|kdy|kde|proc|ukaz|najdi|hledej|zkontrol|smaz|vytvor|zaloz)\b/.test(folded)) return null;
+  if(/\b(hodin|odprac|vykaz|dochaz|presun|prirad|zakazk|protokol|slovnik)\b/.test(folded)) return null;
+  const clauses = splitCountClauses(original);
+  const ops = [];
+  let pending = null;
+  for(const part of clauses){
+    const parsed = readCountClause(part);
+    if(!parsed){pending = null; continue;}
+    if(parsed.bare){
+      if(pending && !parsed.negated){
+        ops.push({piece:{...pending.piece, quantity:parsed.quantity, unit:pending.piece.unit}, label:pending.label});
+        pending = null;
+      }
+      continue;
+    }
+    if(parsed.negated){pending = parsed; continue;}
+    pending = null;
+    ops.push(parsed);
+  }
+  if(!ops.length){
+    const bare = clauses.map(readCountClause).filter(item=>item?.bare && !item.negated);
+    const quantified = (draft.materials||[]).filter(line=>line.quantity!=null && line.quantity!=='');
+    if(bare.length===1 && quantified.length===1) ops.push({piece:{key:quantified[0].key, query:quantified[0].query, label:quantified[0].label, quantity:bare[0].quantity, unit:quantified[0].unit, generic:quantified[0].generic!==false}, label:quantified[0].label||quantified[0].query});
+    else if(bare.length===1 && quantified.length>1) return {draft, clarify:`Množství ${bare[0].quantity} nemá jasnou položku. Řekněte kterou, nic jsem nezměnil.`};
+  }
+  if(!ops.length) return null;
+  const countish = /^(ne|oprav|spravne|vlastne|nakonec|mnozstvi|jsou|byly|bylo|takze|jeste|pridej)\b/.test(folded) || ops.length>=2 || clauses.length>=2 || /\b(na|kusu|ks|metru|metry|metr)\b/.test(folded);
+  if(!countish) return null;
+  const next = cloneDictation(draft);
+  const changed = [];
+  const noted = [];
+  let work = String(next.work||'');
+  for(const op of ops){
+    const found = matchMaterialLine(next, op.piece);
+    if(found?.ambiguous){
+      const names = [...new Set(found.ambiguous.map(line=>line.label||line.query).filter(Boolean))].join(', ');
+      return {draft, clarify:`„${op.label||op.piece.query}“ sedí na víc položek${names?` (${names})`:''}. Řekněte kterou, nic jsem nezměnil.`};
+    }
+    let line = found;
+    const before = line?{key:line.key, label:line.label, query:line.query, quantity:line.quantity, unit:line.unit}:null;
+    if(!line){
+      const added = draftMaterial(op.piece);
+      if(!added.unit) added.unit = op.piece.key==='potrubi'?'m':'ks';
+      if(op.piece.key==='catalog') added.label = op.label || added.label;
+      next.materials.push(added);
+      line = added;
+      noted.push(line);
+    }else if(Number(line.quantity)===Number(op.piece.quantity) && (!op.piece.unit || !line.unit || op.piece.unit===line.unit)){
+      continue;
+    }else{
+      const oldPhrase = dictationPhrase(before);
+      const phraseUnit = before.unit || '';
+      const newPhrase = dictationPhrase({...before, quantity:op.piece.quantity, unit:phraseUnit});
+      if(oldPhrase && newPhrase && oldPhrase!==newPhrase && work.includes(oldPhrase)) work = work.replace(oldPhrase, newPhrase);
+      else noted.push({...line, quantity:op.piece.quantity, unit:before.unit||op.piece.unit||'ks', label:line.label||op.label});
+      line.quantity = op.piece.quantity;
+      if(!line.unit) line.unit = op.piece.unit || (op.piece.key==='potrubi'?'m':'ks');
+      if(line.key==='catalog' && op.piece.key && op.piece.key!=='catalog'){
+        line.key = op.piece.key;
+        line.label = DICTATION_LABELS[op.piece.key] || line.label;
+        line.query = op.piece.query || line.query;
+      }
+      line.itemId = '';
+      line.itemVersion = 0;
+      if(line.status) line.status = '';
+    }
+    changed.push(line);
+  }
+  if(!changed.length) return null;
+  next.work = noted.length ? quantityNote(work, noted) : work;
+  return {draft:rememberDictation(draft, next)};
+}
 export function reviseServiceDraft(draft, text){
   if(!draft||typeof draft!=='object'||!Array.isArray(draft.materials)) return null;
   const original = String(text||'').trim();
@@ -675,7 +987,7 @@ export function reviseServiceDraft(draft, text){
   }
   if(/\bukaz\b/.test(folded)&&/protokol|navrh|zapis/.test(folded)) return {draft, show:true};
   const next = cloneDictation(draft);
-  if(/\bpridej jeste\b|\bpridej dalsi\b/.test(folded)){
+  if(/\bpridej jeste\b|\bpridej dalsi\b/.test(folded) && splitCountClauses(original).length<2){
     const line = findDictationLine(next, folded);
     if(!line) return null;
     const words = folded.split(' ').filter(Boolean);
@@ -692,7 +1004,7 @@ export function reviseServiceDraft(draft, text){
     line.quantity = Math.max(0, Math.round((line.quantity-number.value)*1000)/1000);
     return {draft:rememberDictation(draft, next)};
   }
-  if(/oprav mnozstvi|zmen mnozstvi|mnozstvi/.test(folded)&&/\bna\b/.test(folded)){
+  if((/oprav mnozstvi|zmen mnozstvi|mnozstvi/.test(folded)&&/\bna\b/.test(folded)) && splitCountClauses(original).length<2){
     const line = findDictationLine(next, folded);
     if(!line) return null;
     const words = folded.split(' ').filter(Boolean);
@@ -747,7 +1059,7 @@ export function reviseServiceDraft(draft, text){
     next.materials.splice(index, 1);
     return {draft:rememberDictation(draft, next)};
   }
-  return null;
+  return applySpokenCounts(draft, original);
 }
 
 export function parseDictionaryCommand(original){
@@ -864,14 +1176,16 @@ export function contextualCommand(command, context){
   return command;
 }
 
-export function interpretAssistant(input, today, context){
-  const rules = contextualCommand(parseAssistantCommand(input, today), context);
+export function interpretAssistant(input, today, context, kinds){
+  const rules = contextualCommand(parseAssistantCommand(input, today, kinds), context);
   const folded = foldCzech(String(input||''));
   if(rules.intent==='refused.destructive' && context?.protocol && /\bradek|radku\b/.test(folded)){
     return {intent:'protocol.report', params:{text:String(input||''), base:context.protocol}, text:String(input||'')};
   }
   const meaning = understandUtterance(input, today, context);
-  if(meaning?.intent && (meaning.override || rules.intent==='unknown')){
+  const locked = new Set(['jobs.depart','jobs.work','jobs.unplanned','jobs.personDay','navigation.address','customers.contact','jobs.reschedule','jobs.selection','inquiries.open','inquiries.count','inquiries.detail','inquiries.status','inquiries.convert']);
+  if(rules.intent==='protocol.report' && rules.params?.base) locked.add('protocol.report');
+  if(meaning?.intent && (meaning.override || rules.intent==='unknown') && !locked.has(rules.intent)){
     return {intent:meaning.intent, params:meaning.params||{}, text:rules.text||String(input||'')};
   }
   return rules;

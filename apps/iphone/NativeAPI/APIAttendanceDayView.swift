@@ -6,7 +6,7 @@ struct APIAttendanceDayView:View {
     let day:APIAttendanceDay,data:APIValue
     var action:((APIDomainAction)->Void)?=nil
     @State private var localAction:APIDomainAction?
-    private var writable:Bool{store.writer && !store.isRolePreview && (store.manager || day.userID==store.userID)}
+    private var writable:Bool{!store.isRolePreview && (store.manager || day.userID==store.userID && (store.writer || store.role=="reader"))}
     private var corrections:[APIValue]{(data["detail"]["corrections"].isNull ? data["corrections"] : data["detail"]["corrections"]).array.filter{c in day.shifts.contains{$0.id==c["shiftId"].string}}}
     var body:some View {
         let kinds=["work","travel","break","other","unallocated"],totals=kinds.map{kind in (kind,day.slices.filter{$0.kind==kind}.reduce(0){$0+$1.milliseconds})}.filter{$0.1>0}
@@ -50,7 +50,7 @@ struct APIAttendanceDayView:View {
                             if store.manager{APIDataPairs(value:shift["startPosition"],labels:["latitude":"Zeměpisná šířka","longitude":"Zeměpisná délka","accuracy":"Přesnost (m)"]);APIDataPairs(value:shift["endPosition"],labels:["latitude":"Odchod – šířka","longitude":"Odchod – délka"])}
                             Text("GPS příchodu: "+shift["startGpsStatus"].string);Text("GPS odchodu: "+shift["endGpsStatus"].string)
                         }
-                        if writable{Button("Navrhnout opravu"){show(APIAttendanceActions.correction(shift,remove:false))};Button("Požádat o smazání",role:.destructive){show(APIAttendanceActions.correction(shift,remove:true))}}
+                        if writable{Button("Navrhnout opravu"){show(APIAttendanceActions.correction(shift,remove:false))};if store.manager{Button("Smazat záznam",role:.destructive){show(APIAttendanceActions.managerDelete(shift))}}else{Button("Požádat o smazání",role:.destructive){show(APIAttendanceActions.correction(shift,remove:true))}}}
                     }
                 }
             }
@@ -78,7 +78,7 @@ struct APIAttendanceCorrectionRow:View {
     private func stamp(_ key:String)->String{value[key].isNull ? "Nezapsáno" : APIAttendanceView.date(value[key])+" "+APIAttendanceView.time(value[key])}
     var body:some View{VStack(alignment:.leading,spacing:5){
         Text(value["reason"].string).font(.headline)
-        Text(value["status"].string=="approved" ? "Schváleno" : value["status"].string=="rejected" ? "Zamítnuto" : "Čeká na schválení")
+        Text(value["status"].string=="approved" ? "Schváleno" : value["status"].string=="rejected" ? "Zamítnuto" : value["status"].string=="withdrawn" ? "Staženo" : "Čeká na schválení")
         Text("Původně: "+stamp("oldStartAt")+" – "+stamp("oldEndAt")).font(.caption)
         Text("Návrh: "+stamp("startAt")+" – "+stamp("endAt")).font(.caption)
         Text("Autor: "+value["createdBy"].string+" · "+stamp("createdAt")).font(.caption)

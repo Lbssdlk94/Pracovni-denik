@@ -1,4 +1,4 @@
-import {createJobTimeClient} from './job-time-client.js?v=person-hours-v1';
+import {createJobTimeClient} from './job-time-client.js?v=time-rights-v1';
 import {createDirectoryCache,directoryPath,DIRECTORY_CACHE_KEY} from './directory-cache.js?v=offline-directory-v1';
 import {createScopedReadCache} from './scoped-read-cache.js?v=fast-read-v1';
 import {createJobDiaryClient} from './job-diary-client.js?v=diary-members-v1';
@@ -44,8 +44,8 @@ export const warmJobMonths=()=>workspaceBlocked?Promise.resolve():jobListCache.w
 export async function request(path,options={}){
  if(workspaceBlocked)throw workspaceResetError();
  const route=path.split('?')[0],method=(options.method||'GET').toUpperCase();
- const changesJobs=method!=='GET'&&method!=='HEAD'&&/^\/api\/(?:jobs|customers|gardens|subscriptions|tariffs|members|features|local-accounts|workspace\/members)(?:\/|$)/.test(route);
- if(method!=='GET'&&method!=='HEAD'&&(/^\/api\/(?:customers|gardens|members|features|local-accounts|workspace\/members)(?:\/|$)/.test(route)||/^\/api\/jobs(?:\/[-\w]{1,100})?$/.test(route)))await directoryCache.invalidate();
+ const changesJobs=method!=='GET'&&method!=='HEAD'&&/^\/api\/(?:jobs|customers|gardens|inquiries|subscriptions|tariffs|members|features|local-accounts|workspace\/members)(?:\/|$)/.test(route);
+ if(method!=='GET'&&method!=='HEAD'&&(/^\/api\/(?:customers|gardens|inquiries|members|features|local-accounts|workspace\/members)(?:\/|$)/.test(route)||/^\/api\/jobs(?:\/[-\w]{1,100})?$/.test(route)))await directoryCache.invalidate();
  if(changesJobs)readCache.invalidate();
  if(changesJobs)jobListCache.beginChange();
  if(route==='/api/jobs'&&method==='GET')return jobListCache.request(path,options);
@@ -59,7 +59,7 @@ async function serverRequest(path,options={}){
   const {timeoutMs,jobCacheRefresh,forceNetwork,...fetchOptions}=options;
   const started=performance.now();let failure;
   try{return await readFromServer(path,{...fetchOptions,headers,credentials:'same-origin',cache:'no-store'},async response=>{
-    if(!response.ok){const data=await response.json().catch(()=>({error:'Přihlášení vypršelo. Přihlaste se jménem a heslem.'}));const error=new Error(data.error||'Operace se nepodařila.');error.status=response.status;error.code=data.code;error.preview=data.preview;error.email=data.email;throw error;}
+    if(!response.ok){const data=await response.json().catch(()=>({error:'Přihlášení vypršelo. Přihlaste se jménem a heslem.'}));const error=new Error(data.error||'Operace se nepodařila.');error.status=response.status;error.code=data.code;error.links=data.links;error.preview=data.preview;error.email=data.email;throw error;}
     const value=await response.json();if(epoch!==workspaceEpoch||workspaceBlocked)throw workspaceResetError();rememberWorkspaceIds(value);if((path==='/api/auth/login'&&typeof value.mustChange==='boolean')||path==='/api/auth/password'||path==='/api/access-logout')announceSessionChange();return value;
   },timeoutMs??(options.method&&options.method!=='GET'?60000:15000),{retries:1});}
   catch(error){failure=error;if(transientConnectionError(error))window.dispatchEvent(new CustomEvent('communication-retry-needed'));throw error;}

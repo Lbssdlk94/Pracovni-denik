@@ -17,7 +17,7 @@
   .nav-kicker,.nav-account{display:none!important}
   #assistant-root:not(.is-open){display:none}
   .nav-assistant{display:flex!important}
-  #overview:has(#field-today :is(.field-today-card,.field-today-choices,.field-today-rest)) .overview-links,
+  #overview:has(#field-today) .overview-attendance{display:none}
   #overview:has(#field-today :is(.field-today-card,.field-today-choices,.field-today-rest)) .overview-next-heading,
   #overview:has(#field-today :is(.field-today-card,.field-today-choices,.field-today-rest)) #overview-visits,
   #overview:has(#field-today :is(.field-today-card,.field-today-choices,.field-today-rest)) .overview-more-links,

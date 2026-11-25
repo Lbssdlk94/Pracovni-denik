@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseAssistantCommand, contextualCommand, assistantModeInfo, ASSISTANT_MODES, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, foldCzech, nextWeekday, parseMaterialAddition, planMaterialLines, weekdayDate, weekSpan, parseServiceDictation, reviseServiceDraft, matchProtocolQuery, annotateProtocolMaterials, serviceDraftQuestions, applyAssistantDictionary, followUpDate, mentionedWorkDate} from '../web/assistant-commands.js';
+import {desktopCanRunMinistral} from '../web/assistant-local.js';
 import {answerOffline, queueOfflineWrite} from '../web/assistant-offline.js';
 
 const today = '2026-11-21';
@@ -113,12 +114,24 @@ test('Synonyms, destructive refusals and mode registry stay local', ()=>{
   assert.equal(assistantModeInfo('local').available, true);
   assert.equal(assistantModeInfo('cloud').available, false);
   assert.match(assistantModeInfo('local').detail, /2,2 GB/);
+  assert.match(assistantModeInfo('local').detail, /jen v aplikaci/);
   assert.match(assistantModeInfo('cloud').detail, /není zapojený/);
   assert.deepEqual(ASSISTANT_PROVIDERS.filter(item=>item.available).map(item=>item.id), ['basic','ministral-3b']);
   assert.ok(ASSISTANT_PROVIDERS.some(item=>item.id==='ministral-3b'&&item.available===true));
   assert.ok(ASSISTANT_PROVIDERS.some(item=>item.id==='qwen'&&item.available===false));
   assert.ok(ASSISTANT_PROVIDERS.some(item=>item.id==='apple-foundation'&&item.available===false));
   assert.deepEqual(KNOWLEDGE_KINDS.map(item=>item.available), [false, false, false]);
+});
+
+test('Ministral 3B runs in a desktop browser and not on a phone', ()=>{
+  const media = flags=>query=>({matches:flags[query]===true});
+  const desktop = {'(min-width:761px)':true, '(hover:hover) and (pointer:fine)':true};
+  const phone = {'(min-width:761px)':true, '(hover:hover) and (pointer:fine)':false};
+  const narrow = {'(min-width:761px)':false, '(hover:hover) and (pointer:fine)':true};
+  assert.equal(desktopCanRunMinistral(media(desktop)), true);
+  assert.equal(desktopCanRunMinistral(media(phone)), false);
+  assert.equal(desktopCanRunMinistral(media(narrow)), false);
+  assert.equal(desktopCanRunMinistral(null), false);
 });
 
 test('Offline answers stay inside the stored snapshot', ()=>{
@@ -208,6 +221,41 @@ test('Protocol follow-ups edit the open draft and do not steal other intents', (
   const offline = answerOffline(parseAssistantCommand(SPOKEN_WORK, today), {jobs:[], today});
   assert.equal(offline.missing, true);
   assert.match(offline.reply, /neukládám/);
+});
+
+test('One sentence corrects several materials and can add another kind', ()=>{
+  const draft = parseServiceDictation('Použili jsme čtyři ventily, dva filtry, šest trysek a dvacet metrů potrubí.');
+  assert.deepEqual(draft.materials.map(line=>[line.key, line.quantity]), [
+    ['ventil', 4],
+    ['catalog', 2],
+    ['tryska', 6],
+    ['potrubi', 20]
+  ]);
+  const revised = reviseServiceDraft(draft, 'Ne dva filtry, tři, ventily na pět, trysky dvě a potrubí na deset metrů.');
+  assert.equal(revised.draft.materials.find(line=>line.key==='ventil').quantity, 5);
+  assert.equal(revised.draft.materials.find(line=>line.key==='catalog').quantity, 3);
+  assert.equal(revised.draft.materials.find(line=>line.key==='tryska').quantity, 2);
+  assert.equal(revised.draft.materials.find(line=>line.key==='potrubi').quantity, 10);
+  assert.equal(revised.draft.materials.find(line=>line.key==='potrubi').unit, 'm');
+  assert.match(revised.draft.work, /pět ventilů/);
+  assert.match(revised.draft.work, /tři filtry/);
+  assert.match(revised.draft.work, /dva trysky/);
+  assert.match(revised.draft.work, /deset metrů potrubí/);
+  assert.doesNotMatch(revised.draft.work, /čtyři ventily|dva filtry|šest trysek|dvacet metrů/);
+  const added = reviseServiceDraft(revised.draft, 'Kolena čtyři a lavalit jeden.');
+  assert.equal(added.draft.materials.find(line=>line.key==='koleno').quantity, 4);
+  assert.equal(added.draft.materials.find(line=>/lavalit/.test(line.query)).quantity, 1);
+  assert.equal(added.draft.materials.find(line=>line.key==='ventil').quantity, 5);
+  const ambiguous = parseServiceDictation('Použili jsme pět lavalit hrubý a dva lavalit jemný.');
+  const unclear = reviseServiceDraft(ambiguous, 'Lavalit na tři.');
+  assert.match(unclear.clarify, /víc položek/);
+  assert.equal(unclear.draft.materials[0].quantity, 5);
+  assert.equal(unclear.draft.materials[1].quantity, 2);
+  const spoken = contextualCommand(parseAssistantCommand('Ne čtyři ventily, tři a filtr jeden.', today), {protocol:draft, jobId:'job-1'});
+  assert.equal(spoken.intent, 'protocol.report');
+  assert.equal(spoken.params.base.materials.find(line=>line.key==='ventil').quantity, 4);
+  const hours = contextualCommand(parseAssistantCommand('Kolik hodin jsme dnes strávili na zakázce?', today), {protocol:draft, jobId:'job-1'});
+  assert.equal(hours.intent, 'jobs.hours');
 });
 
 test('Protocol catalogue match bills one exact item and never invents a row', ()=>{
@@ -311,8 +359,8 @@ test('Defects, visits, realization days, photos and the garden dictionary stay c
   const queued = queueOfflineWrite([], parseAssistantCommand(SPOKEN_WORK, today));
   assert.equal(queued.queued, true);
   assert.equal(queued.queue.length, 1);
-  assert.match(queued.reply, /neukládám/);
-  assert.match(queued.reply, /potvrzení/);
+  assert.match(queued.reply, /schoval/);
+  assert.match(queued.reply, /Nic jsem nezapsal/);
   const again = queueOfflineWrite(queued.queue, parseAssistantCommand(SPOKEN_WORK, today));
   assert.equal(again.duplicate, true);
   assert.equal(again.queue.length, 1);
