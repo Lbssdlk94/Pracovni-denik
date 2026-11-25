@@ -133,14 +133,15 @@ function ensureAssistantScrollGuard(){
   document.addEventListener('touchstart', event=>{assistantTouchY = event.touches?.[0]?.clientY||0;}, {passive:true});
   document.addEventListener('touchmove', event=>{
     if(!document.body.classList.contains('assistant-open')||!mobileAssistant()) return;
-    const scroller = event.target.closest?.('.assistant-log, .assistant-stage, .assistant-popover');
+    const scroller = event.target.closest?.('.assistant-concept-scroll, .assistant-log, .assistant-detail, .assistant-stage, .assistant-popover');
     const view = window.visualViewport;
     if(view && view.offsetTop>1) return;
     if(!scroller){event.preventDefault(); return;}
+    if(scroller.scrollHeight<=scroller.clientHeight+1) return;
     const dy = (event.touches?.[0]?.clientY||0) - assistantTouchY;
     const atTop = scroller.scrollTop<=0;
     const atBottom = scroller.scrollTop+scroller.clientHeight>=scroller.scrollHeight-1;
-    if(scroller.scrollHeight<=scroller.clientHeight+1||(dy>0&&atTop)||(dy<0&&atBottom)) event.preventDefault();
+    if((dy>0&&atTop)||(dy<0&&atBottom)) event.preventDefault();
   }, {passive:false});
 }
 function applyBubble(root){
@@ -296,14 +297,15 @@ function render(host, session, paint, api){
     const known = findCard(type, id);
     activate({type, id, title:known.title||button.querySelector('strong')?.textContent||'', openLabel:known.openLabel}, false, api, paint);
   });
-  const collapse = minimized=>()=>{remember(); runtime.open=false; runtime.minimized=minimized; const bubble=host.closest('#assistant-root'); if(bubble) applyBubble(bubble);};
+  const collapse = minimized=>()=>{remember(); runtime.open=false; runtime.minimized=minimized; runtime.mobileTab='chat'; runtime.menuOpen=false; runtime.historyOpen=false; const bubble=host.closest('#assistant-root'); if(bubble) applyBubble(bubble); else document.body.classList.remove('assistant-open');};
   host.querySelector('[data-close-assistant]')?.addEventListener('click', collapse(false));
   host.querySelector('[data-minimize]')?.addEventListener('click', collapse(true));
   host.querySelector('[data-back-result]')?.addEventListener('click', ()=>{runtime.detail=null;paint();});
   host.querySelector('[data-close-detail]')?.addEventListener('click', ()=>{runtime.detail=null;paint();});
   host.querySelector('[data-full-profile]')?.addEventListener('click', ()=>{const card=runtime.detail?.card;if(card) activate(card, true, api, paint);});
   host.querySelectorAll('[data-confirm]').forEach(button=>button.onclick=()=>ask('', api, paint, button.dataset.confirm, null, null, conceptPayload(current())));
-  host.querySelectorAll('[data-cancel]').forEach(button=>button.onclick=()=>ask('', api, paint, null, button.dataset.cancel));
+  host.querySelectorAll('[data-discard-concept]').forEach(button=>button.onclick=()=>dropConcept(api, paint, button.dataset.discardConcept||''));
+  host.querySelectorAll('[data-cancel]').forEach(button=>button.onclick=()=>dropConcept(api, paint, button.dataset.cancel||''));
   host.querySelector('[data-stop]')?.addEventListener('click', ()=>{runtime.generation+=1;runtime.busy=false;localMinistral().cancel();paint();});
   bindConcept(host, session, paint);
   const split = host.querySelector('[data-split]');
@@ -402,11 +404,46 @@ function dayHeading(value){
   return new Intl.DateTimeFormat('cs-CZ',{day:'numeric', month:'numeric'}).format(date);
 }
 function ensureDraft(thread){
-  if(!thread||thread.draftConcept) return thread;
+  if(!thread||thread.draftConcept||thread.conceptDismissed) return thread;
   const last = [...(thread.items||[])].reverse().find(item=>item.concept);
   if(last?.concept) thread.draftConcept = JSON.parse(JSON.stringify(last.concept));
   thread.conceptTouched = thread.conceptTouched||{};
   return thread;
+}
+function discardConcept(thread){
+  if(!thread) return;
+  thread.draftConcept = null;
+  thread.conceptTouched = {};
+  thread.conceptDismissed = true;
+  thread.resultNotice = '';
+  for(const item of thread.items||[]){
+    if(item.concept) delete item.concept;
+    if(item.confirm) delete item.confirm;
+  }
+  if(thread.context&&typeof thread.context==='object'){
+    const next = {...thread.context};
+    delete next.protocol;
+    thread.context = next;
+  }
+  runtime.mobileTab = 'chat';
+  runtime.resultFresh = false;
+  runtime.detail = null;
+}
+function dropConcept(api, paint, cancelId){
+  const session = api.getSession();
+  discardConcept(current());
+  persist(session);
+  const id = String(cancelId||'');
+  if(id && navigator.onLine!==false){ask('', api, paint, null, id); return;}
+  push(session, 'assistant', 'Koncept je zahozený. Nic se neuložilo.');
+  paint();
+}
+function conceptTitle(title, confirm){
+  return `<header class="assistant-sheet-title"><h2>${esc(title)}</h2><span class="assistant-pill is-concept">Koncept</span><button type="button" class="assistant-discard" data-discard-concept="${esc(confirm?.id||'')}">Zahodit</button></header>`;
+}
+function conceptActions(confirm, saveLabel){
+  const id = esc(confirm?.id||'');
+  return `<div class="assistant-concept-actions"><button type="button" data-discard-concept="${id}">Zrušit</button><button type="button" class="yes" data-confirm="${id}" ${confirm?'':'disabled'}>${saveLabel}</button></div>`;
 }
 function conceptPayload(thread){
   if(!thread?.draftConcept) return null;
@@ -427,13 +464,12 @@ function noteStage(thread){
   const concept = thread.draftConcept;
   const confirm = [...(thread.items||[])].reverse().find(item=>item.confirm)?.confirm;
   const lines = (concept.lines||[]).map(item=>`<li>${esc(item)}</li>`).join('');
-  return `<div class="assistant-concept-sheet">
-    <header class="assistant-sheet-title"><h2>${esc(concept.title||'Návrh')}</h2><span class="assistant-pill is-concept">Koncept</span></header>
+  return `<div class="assistant-concept-sheet"><div class="assistant-concept-scroll">
+    ${conceptTitle(concept.title||'Návrh', confirm)}
     <p>${esc(concept.summary||'')}</p>
     ${lines?`<ul>${lines}</ul>`:''}
     ${concept.capture?`<label class="assistant-clip">Fotoaparát nebo galerie<input data-capture type="file" accept="image/jpeg,image/png,image/heic,image/heif,.jpg,.jpeg,.png,.heic,.heif"></label><p>Snímek se nahraje k zakázce. Co je na něm, neposuzuji. K protokolu se připojí až po dalším potvrzení.</p>`:''}
-    <div class="assistant-concept-actions"><button type="button" data-cancel="${esc(confirm?.id||'')}" ${confirm?'':'disabled'}>Zrušit</button><button type="button" class="yes" data-confirm="${esc(confirm?.id||'')}" ${confirm?'':'disabled'}>Uložit návrh</button></div>
-  </div>`;
+  </div>${conceptActions(confirm, 'Uložit návrh')}</div>`;
 }
 function protocolStage(thread){
   const concept = thread.draftConcept;
@@ -450,16 +486,15 @@ function protocolStage(thread){
     const buttons = key?`<span class="assistant-next"><button type="button" data-quick="Odpověď na ${key}: ano">Ano</button><button type="button" data-quick="Odpověď na ${key}: ne">Ne</button><button type="button" data-quick="Odpověď na ${key}: přeskočit">Přeskočit</button></span>`:'';
     return `<li>${esc(item)}${buttons}</li>`;
   }).join('');
-  return `<div class="assistant-concept-sheet">
-    <header class="assistant-sheet-title"><h2>Servisní protokol</h2><span class="assistant-pill is-concept">Koncept</span></header>
+  return `<div class="assistant-concept-sheet"><div class="assistant-concept-scroll">
+    ${conceptTitle('Servisní protokol', confirm)}
     <p>${esc(concept.jobTitle||'Zakázka není vybraná')}${place?' · '+esc(place):''}</p>
     <label class="assistant-notes">Provedené práce<textarea data-concept-field="work" aria-label="Provedené práce">${esc(concept.work||'')}</textarea></label>
     <section><h3>${layers()} Spotřebovaný materiál</h3>${materials||'<p>Z diktátu nevidím materiál.</p>'}</section>
     ${required?`<section><h3>Potřebuji upřesnit</h3><ul>${required}</ul></section>`:''}
     ${optional?`<section><h3>Není povinné</h3><ul>${optional}</ul></section>`:''}
     ${thread.resultNotice?`<p class="assistant-warning">${esc(thread.resultNotice)}</p>`:''}
-    <div class="assistant-concept-actions"><button type="button" data-cancel="${esc(confirm?.id||'')}" ${confirm?'':'disabled'}>Zrušit</button><button type="button" class="yes" data-confirm="${esc(confirm?.id||'')}" ${confirm?'':'disabled'}>Uložit do protokolu</button></div>
-  </div>`;
+  </div>${conceptActions(confirm, 'Uložit do protokolu')}</div>`;
 }
 function conceptStage(thread){
   const concept = thread.draftConcept;
@@ -479,8 +514,8 @@ function conceptStage(thread){
       <button type="button" class="assistant-trash" data-drop-material="${index}" aria-label="Odebrat materiál">${trash()}</button>
     </div>`).join('');
   const warning = thread.resultNotice||'';
-  return `<div class="assistant-concept-sheet">
-    <header class="assistant-sheet-title"><h2>Nová zakázka</h2><span class="assistant-pill is-concept">Koncept</span></header>
+  return `<div class="assistant-concept-sheet"><div class="assistant-concept-scroll">
+    ${conceptTitle('Nová zakázka', confirm)}
     <div class="assistant-concept-grid">
       <label>Zákazník *<span class="assistant-control">${personIcon()}<input data-concept-field="customerName" value="${esc(concept.customerName||'')}" aria-label="Zákazník"></span></label>
       <label>Adresa<span class="assistant-control"><input data-concept-field="address" value="${esc(concept.address||'')}" aria-label="Adresa"></span></label>
@@ -491,8 +526,7 @@ function conceptStage(thread){
     <section><h3>${layers()} Materiál</h3>${materials}<button type="button" class="assistant-add" data-add-material>${plus()} Přidat materiál</button></section>
     <label class="assistant-notes">Poznámky<textarea data-concept-field="notes" placeholder="Doplňující poznámka">${esc(concept.notes||'')}</textarea></label>
     ${warning?`<p class="assistant-warning">${esc(warning)}</p>`:''}
-    <div class="assistant-concept-actions"><button type="button" data-cancel="${esc(confirm?.id||'')}" ${confirm?'':'disabled'}>Zrušit</button><button type="button" class="yes" data-confirm="${esc(confirm?.id||'')}" ${confirm?'':'disabled'}>Uložit zakázku</button></div>
-  </div>`;
+  </div>${conceptActions(confirm, 'Uložit zakázku')}</div>`;
 }
 function personName(value){return typeof value==='string'?value:value?.name||'';}
 function clockValue(value){
@@ -614,6 +648,7 @@ function syncProtocol(thread){
 }
 function adoptConcept(thread, concept){
   if(!concept) return;
+  thread.conceptDismissed = false;
   const touched = thread.conceptTouched||{};
   const sameKind = (thread.draftConcept?.kind||'')===(concept.kind||'');
   if(thread.draftConcept&&sameKind&&Object.keys(touched).length){
@@ -877,12 +912,14 @@ async function ask(text, api, paint, confirmId, cancelId, file, concept){
     const data = await api.db.request('/api/assistant',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({text:commandText, mode:runtime.mode==='local'?'local':'basic', ...(understanding?{understanding}:{}), ...(thread.context?{context:thread.context}:{}), ...(file?{file}:{}), ...(confirmId?{confirmId}:{}), ...(cancelId?{cancelId}:{}), ...(concept?{concept}:{})})});
     if(!alive()) return false;
     push(session,'assistant', data.reply||'Hotovo.', {confirm:data.confirm||null, suggestions:data.suggestions||[], cards:data.cards||[], concept:data.concept||null, context:data.context||thread.context});
-    if(data.concept) adoptConcept(current(), data.concept);
-    if(data.cards?.length&&!data.concept){runtime.mobileTab='result';runtime.resultFresh=true;}
+    if(cancelId){discardConcept(current()); persist(session);}
+    else if(data.concept) adoptConcept(current(), data.concept);
+    if(!cancelId&&data.cards?.length&&!data.concept){runtime.mobileTab='result';runtime.resultFresh=true;}
     if(data.mutated){const live=current(); if(live){live.draftConcept=null;live.conceptTouched={};} runtime.detail=null; api.onChanged?.(data.mutated);}
     return true;
   }catch(error){
     if(!alive()) return false;
+    if(cancelId){discardConcept(current()); push(session,'assistant','Koncept je zahozený. Nic se neuložilo.'); return false;}
     const offline = !navigator.onLine||error?.status===0||/fetch|network|Failed/i.test(error?.message||'');
     const kept = current()?.draftConcept?' Rozpracovaný koncept zůstává v zařízení. Až se připojení vrátí, můžete ho upravit nebo uložit znovu.':'';
     push(session,'assistant', (offline?'Potřebná data nejsou v zařízení. Připojte se a příkaz zopakujte. Rozpracované změny deníku zůstávají beze změny.':(error?.message||'Asistent teď neodpověděl.'))+kept);

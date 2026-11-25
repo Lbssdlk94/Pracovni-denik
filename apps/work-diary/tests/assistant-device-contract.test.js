@@ -25,3 +25,15 @@ test('Safari keyboard inset and iPhone assistant status are source contracts, no
   assert.match(project, /MARKETING_VERSION: 0\.8\.10/);
   assert.doesNotMatch(swift, /\]=\./);
 });
+
+test('A stuck concept can be dropped on the phone without a live confirm', ()=>{
+  const ui = readFileSync('web/assistant-ui.js','utf8');
+  const css = readFileSync('web/assistant.css','utf8');
+  assert.match(ui, /data-discard-concept/);
+  assert.match(ui, /conceptDismissed/);
+  assert.match(ui, /Koncept je zahozený\. Nic se neuložilo\./);
+  assert.match(ui, /function discardConcept/);
+  assert.doesNotMatch(ui, /data-cancel="\$\{esc\(confirm\?\.id\|\|''\)\}" \$\{confirm\?'':'disabled'\}>Zrušit/);
+  assert.match(css, /\.assistant-concept-scroll/);
+  assert.match(css, /#assistant-page \.assistant-concept-actions button\{flex:1/);
+});
