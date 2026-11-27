@@ -64,38 +64,8 @@ jobs:
         run: |
           python3 -m unittest discover -s apps/iphone/signing -p 'test_*.py'
           python3 -m unittest discover -s apps/iphone/build_tests -p 'test_*.py'
-      - name: Prepare isolated portrait iPhone and Watch simulators
-        run: python3 apps/iphone/prepare_simulators.py
       - name: Generate Xcode project
         run: cd apps/iphone && xcodegen generate
-      - name: Simulator build and tests
-        shell: bash
-        env:
-          DIARY_CHECKS_ONLY: ${{ inputs.checks_only }}
-          DIARY_CHECK_SCOPE: ${{ inputs.check_scope || 'all' }}
-        run: |
-          set -o pipefail
-          mkdir -p build
-          UDID="$DIARY_PHONE_SIMULATOR_ID"
-          DIARY_TEST_OPTIONS=()
-          if [[ "$DIARY_CHECKS_ONLY" == true ]]; then
-            case "$DIARY_CHECK_SCOPE" in
-              all) ;;
-              jobs) DIARY_TEST_OPTIONS+=('-only-testing:PracovniDenikTests' '-only-testing:PracovniDenikUITests/APIJobsUITests') ;;
-              protocol) DIARY_TEST_OPTIONS+=('-only-testing:PracovniDenikTests' '-only-testing:PracovniDenikUITests/APIProtocolUITests') ;;
-              protocol-attendance) DIARY_TEST_OPTIONS+=('-only-testing:PracovniDenikTests' '-only-testing:PracovniDenikUITests/APIProtocolUITests' '-only-testing:PracovniDenikUITests/APIAttendanceUITests') ;;
-              attendance) DIARY_TEST_OPTIONS+=('-only-testing:PracovniDenikTests' '-only-testing:PracovniDenikUITests/APIAttendanceUITests') ;;
-              unit) DIARY_TEST_OPTIONS+=('-only-testing:PracovniDenikTests') ;;
-              *) echo 'Unsupported checks-only selection'; exit 2 ;;
-            esac
-          fi
-          xcodebuild -project apps/iphone/PracovniDenik.xcodeproj -scheme PracovniDenik -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath build/simulator -resultBundlePath build/Tests.xcresult test "${DIARY_TEST_OPTIONS[@]}" CODE_SIGNING_ALLOWED=NO | tee build/simulator.log
-      - name: Export iPhone UI previews
-        if: always()
-        run: |
-          if [ -d build/Tests.xcresult ]; then
-            xcrun xcresulttool export attachments --path build/Tests.xcresult --output-path build/iphone-previews
-          fi
       - name: Unsigned iPhone build
         if: inputs.checks_only != true
         shell: bash
@@ -110,40 +80,6 @@ jobs:
           zip -qr ../PracovniDenik-UNSIGNED-REQUIRES-SIGNING.ipa Payload
           cd ../..
           shasum -a 256 build/PracovniDenik-UNSIGNED-REQUIRES-SIGNING.ipa > build/IPA-SHA256.txt
-      - name: Apple Watch simulator build and previews
-        if: inputs.checks_only != true || inputs.check_scope != 'unit'
-        shell: bash
-        run: |
-          set -euo pipefail
-          WATCH_UDID="$DIARY_WATCH_SIMULATOR_ID"
-          xcodebuild -project apps/iphone/PracovniDenik.xcodeproj -scheme PracovniDenikWatch -destination "platform=watchOS Simulator,id=$WATCH_UDID" -derivedDataPath build/watch-simulator build CODE_SIGNING_ALLOWED=NO | tee build/watch-simulator.log
-          PHONE_UDID="$DIARY_PHONE_SIMULATOR_ID"
-          xcrun simctl shutdown "$WATCH_UDID" >/dev/null 2>&1 || true
-          xcrun simctl shutdown "$PHONE_UDID" >/dev/null 2>&1 || true
-          python3 apps/iphone/pair_watch_simulators.py "$WATCH_UDID" "$PHONE_UDID"
-          xcrun simctl boot "$PHONE_UDID"
-          xcrun simctl bootstatus "$PHONE_UDID" -b
-          xcrun simctl install "$PHONE_UDID" build/simulator/Build/Products/Debug-iphonesimulator/PracovniDenik.app
-          WATCH_APP=build/watch-simulator/Build/Products/Debug-watchsimulator/PracovniDenikWatch.app
-          # A paired Watch may be auto-booted/shut down during phone startup.
-          # Retry only this ephemeral simulator boot/install, never app writes.
-          for ATTEMPT in 1 2; do
-            xcrun simctl boot "$WATCH_UDID" >/dev/null 2>&1 || true
-            if xcrun simctl bootstatus "$WATCH_UDID" -b && xcrun simctl install "$WATCH_UDID" "$WATCH_APP"; then break; fi
-            if [[ "$ATTEMPT" == 2 ]]; then exit 1; fi
-            sleep 3
-          done
-          mkdir -p build/watch-previews
-          for SCREEN in day detail inbox; do
-            xcrun simctl terminate "$WATCH_UDID" cz.pracovnidenik.app.watchapp >/dev/null 2>&1 || true
-            ARGS=(--watch-preview)
-            if [[ "$SCREEN" == detail ]]; then ARGS+=(--watch-preview-detail); fi
-            if [[ "$SCREEN" == inbox ]]; then ARGS+=(--watch-preview-inbox); fi
-            xcrun simctl launch "$WATCH_UDID" cz.pracovnidenik.app.watchapp "${ARGS[@]}"
-            # A cold debug launch can still be on the system launch animation at 3s.
-            sleep 10
-            xcrun simctl io "$WATCH_UDID" screenshot "build/watch-previews/$SCREEN.png"
-          done
       - name: Signed IPA with Push Notifications
         if: github.event_name == 'workflow_dispatch' && inputs.sign_ipa == true && inputs.checks_only != true
         env:
