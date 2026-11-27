@@ -37,7 +37,14 @@ struct APIResourceList: View {
             if !cursor.isEmpty { Button("Načíst další") { Task { await load(more:true) } }.frame(minHeight:44) }
         }.listStyle(.insetGrouped).scrollContentBackground(.hidden).background(DiaryStyle.background)
             .navigationTitle(resource.title).navigationBarTitleDisplayMode(.inline).searchable(text:$query,prompt:"Hledat")
-            .toolbar { if resource.entity.canCreate && resource.editable(store) { ToolbarItem(placement:.topBarTrailing) { Button { create() } label:{Image(systemName:"plus")}.accessibilityLabel("Přidat záznam") } } }
+            .toolbar {
+                if store.manager && !store.isRolePreview && [.customers, .materials].contains(resource.entity) {
+                    ToolbarItem(placement: .topBarLeading) {
+                        NavigationLink { APISpreadsheetImport(store: store, materials: resource.entity == .materials) }
+                        label: { Label("Import tabulky", systemImage: "square.and.arrow.down") }
+                    }
+                }
+                if resource.entity.canCreate && resource.editable(store) { ToolbarItem(placement:.topBarTrailing) { Button { create() } label:{Image(systemName:"plus")}.accessibilityLabel("Přidat záznam") } } }
             .task(id:store.scope+store.revision.uuidString+(serverSearch || resource.entity == .materials ? query : "")) { await load() }.refreshable { await store.resume(refreshViews:false);await load() }
     }
     func create() {
@@ -236,7 +243,7 @@ struct APIEntityDetail: View {
     private var customer: some View {
         VStack(spacing:18) {
             DisclosureGroup("Kontakt a adresa") {
-                APIReadFields(value:record,fields:resource.fields.filter{["name","email","phones","addresses","contactNotes"].contains($0.id)})
+                APIReadFields(value:record,fields:resource.fields.filter{["name","contactKind","contacts","email","phones","addresses","contactNotes"].contains($0.id)})
                 ForEach(Array(record["phones"].array.enumerated()),id:\.offset){_,p in if let url=URL(string:"tel:"+p["number"].string.filter{"+0123456789".contains($0)}){Link("Zavolat "+p["number"].string,destination:url).frame(minHeight:44)}}
             }.diaryCard()
             link("Zahrady",.gardens,seed:.object(["customerId":.s(record.id)]))
