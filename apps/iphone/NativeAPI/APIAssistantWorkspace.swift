@@ -125,6 +125,10 @@ struct APIAssistantWorkspace: View {
     @State private var history = false
     @State private var pickedPhoto: PhotosPickerItem?
     @State private var showCamera = false
+    @State private var cards: [APIValue] = []
+    @State private var suggestions: [String] = []
+    @State private var selectedJob: APIValue = .null
+    @State private var openJob = false
     private var wide: Bool { size == .regular }
     private var concept: APIValue {
         get { memory.active.concept }
@@ -148,6 +152,11 @@ struct APIAssistantWorkspace: View {
         }
         .background(DiaryStyle.background)
         .safeAreaInset(edge: .bottom, spacing: 0) { if !wide { composer } }
+        .onChange(of: memory.activeID) { _, _ in cards = []; suggestions = [] }
+        .sheet(isPresented: $openJob) {
+            NavigationStack { APIEntityDetail(store: store, resource: APIResource(entity: .jobs), initial: selectedJob)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Zavřít") { openJob = false } } } }
+        }
         .sheet(isPresented: $history) { historySheet }
         .onChange(of: store.online) { _, online in if online { Task { await flushPending() } } }
         .task { if store.online { await flushPending() } }
@@ -195,6 +204,18 @@ struct APIAssistantWorkspace: View {
                             .padding(.horizontal, 10).padding(.vertical, 7)
                             .background(item.mine ? DiaryStyle.soft : Color.clear, in: RoundedRectangle(cornerRadius: 14))
                             .id(item.id)
+                    }
+                    ForEach(cards.filter { $0["type"].string == "job" && !$0.id.isEmpty }, id: \.id) { card in
+                        Button { selectedJob = card; openJob = true } label: {
+                            VStack(alignment: .leading) { Label(card.title, systemImage: "list.clipboard"); Text(card["subtitle"].string).font(.caption) }
+                        }.buttonStyle(.bordered)
+                    }
+                    ForEach(Array(suggestions.enumerated()), id: \.offset) { _, suggestion in
+                        Button(suggestion) { memory.setDraft(suggestion); focused = true }.buttonStyle(.bordered)
+                    }
+                    if concept.isNull && !memory.active.confirmID.isEmpty {
+                        Button("Potvrdit návrh") { Task { await confirm() } }.buttonStyle(.borderedProminent).disabled(busy || !store.online)
+                        Button("Zrušit návrh") { Task { await cancelConcept() } }.disabled(busy || !store.online)
                     }
                 }.padding(.horizontal, 12).padding(.vertical, 8)
             }
@@ -402,6 +423,9 @@ struct APIAssistantWorkspace: View {
                 memory.setTab("result")
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             }
+            cards = response["cards"].array
+            suggestions = response["suggestions"].array.map(\.string).filter { !$0.isEmpty }
+            if response["concept"].isNull && !response["confirm"]["id"].string.isEmpty { memory.setConcept(.null); memory.setTab("chat") }
             memory.setConfirm(response["confirm"]["id"].string)
         } catch {
             if !store.online { memory.enqueuePending(text) }
@@ -455,7 +479,10 @@ struct APIAssistantWorkspace: View {
             let response = try await store.write("/api/assistant", method: "POST", body: .object(["confirmId": .s(id), "concept": concept, "mode": .s("basic")]))
             memory.append(response["reply"].string, mine: false)
             memory.setNotice("")
-            if !response["mutated"].isNull {
+            if !response["confirm"]["id"].string.isEmpty {
+                memory.setConfirm(response["confirm"]["id"].string)
+                memory.setConcept(response["concept"])
+            } else if !response["mutated"].isNull {
                 memory.setConcept(.null)
                 memory.setConfirm("")
                 if !response["context"].isNull { memory.setContext(response["context"]) }
@@ -471,7 +498,11 @@ struct APIAssistantWorkspace: View {
     private func cancelConcept() async {
         let id = memory.active.confirmID
         guard !id.isEmpty else { return }
-        _ = try? await store.write("/api/assistant", method: "POST", body: .object(["cancelId": .s(id), "mode": .s("basic")]))
+        guard !busy else { return }
+        busy = true
+        defer { busy = false }
+        do { _ = try await store.write("/api/assistant", method: "POST", body: .object(["cancelId": .s(id), "mode": .s("basic")])) }
+        catch { memory.setNotice(error.localizedDescription); return }
         memory.setConcept(.null)
         memory.setConfirm("")
         memory.setContext(.null)

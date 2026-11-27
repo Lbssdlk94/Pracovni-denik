@@ -91,5 +91,9 @@ struct APINoticeContent:View {
     @ObservedObject var store:APIStore
     let notice:APIValue
     @State private var problem:String?
-    var body:some View{VStack(alignment:.leading,spacing:14){Text(notice["title"].string).font(.title2.bold());Text(notice["body"].string);if notice["kind"].string.hasPrefix("job") || notice["kind"].string.contains("service"){NavigationLink("Otevřít související zakázku"){APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:.object(["id":notice["resourceId"],"title":.s("Zakázka")]))}};Button("Označit přečtené"){Task{do{_=try await store.write("/api/notifications/read",method:"POST",body:.object(["ids":.array([.s(notice.id)])]))}catch{problem=error.localizedDescription}}};if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}}.diaryCard()}
+    var body:some View{VStack(alignment:.leading,spacing:14){Text(notice["title"].string).font(.title2.bold());Text(notice["body"].string)
+        if store.manager && !store.isRolePreview && notice["kind"].string.hasPrefix("inquiry") {
+            NavigationLink("Otevřít poptávku") { APIInquiryFromNotice(store: store, id: notice["resourceId"].string) }
+        }
+        if notice["kind"].string.hasPrefix("job") || notice["kind"].string.contains("service"){NavigationLink("Otevřít související zakázku"){APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:.object(["id":notice["resourceId"],"title":.s("Zakázka")]))}};Button("Označit přečtené"){Task{do{_=try await store.write("/api/notifications/read",method:"POST",body:.object(["ids":.array([.s(notice.id)])]))}catch{problem=error.localizedDescription}}};if let problem{Text(problem).foregroundStyle(DiaryStyle.warning)}}.diaryCard()}
 }

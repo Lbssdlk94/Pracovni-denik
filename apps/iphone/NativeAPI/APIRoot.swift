@@ -70,7 +70,7 @@ struct APILogin:View {
     var body:some View {
         NavigationStack{ScrollView{VStack(alignment:.leading,spacing:22){Image("DiaryMark").resizable().frame(width:72,height:72).clipShape(RoundedRectangle(cornerRadius:18));Text("Pracovní deník").font(.largeTitle.bold());Text("Přihlaste se firemním účtem.").foregroundStyle(.secondary)
             VStack(spacing:15){Picker("Firma",selection:$company){ForEach(EndpointPolicy.installations, id: \.1) { name, host in Text(name).tag(host) }}.pickerStyle(.menu)
-                if company == EndpointPolicy.cloudflareHost {
+                if company == EndpointPolicy.cloudflareHost && store.needsCloudflareAccess {
                     Button("Ověřit přístup ke Cloudflare"){ verifyingCloudflare=true }
                         .frame(minHeight:44).disabled(store.busy)
                 }

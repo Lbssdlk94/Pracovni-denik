@@ -147,6 +147,7 @@ struct APIOfficeList: View {
     @State private var records: [APIValue] = []
     @State private var options: APIValue = .null
     @State private var finance: APIValue = .null
+    @State private var absences: [APIValue] = []
     @State private var query = ""
     @State private var problem = ""
     @State private var loading = true
@@ -158,6 +159,27 @@ struct APIOfficeList: View {
     }
     var body: some View {
         List {
+            if !absences.isEmpty {
+                DisclosureGroup("Schválené volno v příštích 30 dnech") {
+                    ForEach(absences, id: \.id) { absence in
+                        VStack(alignment: .leading) {
+                            Text(absence.title)
+                            let start = Date(timeIntervalSince1970: absence["startAt"].double / 1000)
+                            let end = Date(timeIntervalSince1970: absence["endAt"].double / 1000)
+                            Text(start.formatted(date: .abbreviated, time: .shortened) + " – " + end.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            if !finance["pendingExpenses"].array.isEmpty {
+                Section("Výdaje ke schválení") {
+                    ForEach(finance["pendingExpenses"].array, id: \.id) { expense in
+                        NavigationLink {
+                            APIOfficeDetail(store: store, kind: .purchase, initial: .object(["id": .s(expense.id), "data": expense]), options: options, finance: finance)
+                        } label: { LabeledContent(expense.title, value: OfficeFormat.money(expense["actualMinor"])) }
+                    }
+                }
+            }
             if kind == .recurring {
                 Button("Připravit doklady na " + month) { prepare = true }.disabled(loading || !store.online)
             }
@@ -206,6 +228,10 @@ struct APIOfficeList: View {
             if kind.team {
                 let result = try await store.get(kind.base + "?kind=" + kind.rawValue + (kind == .money ? "&month=" + month : ""), refresh: true)
                 records = result["records"].array
+                if kind == .leave && store.manager {
+                    let path = "/api/team-office/availability?from=" + store.today + "&to=" + DiaryDate.shifted(store.today, days: 30)
+                    absences = try await store.get(path, refresh: true)["absences"].array
+                }
             } else {
                 finance = try await store.get(kind.base + (store.manager ? "?month=" + month : "?view=advances"), refresh: true)
                 records = finance["items"].array.filter { $0["kind"].string == kind.rawValue && (linkedJob.isNull || $0["jobId"].string == linkedJob.id) }

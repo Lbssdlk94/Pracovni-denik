@@ -8,6 +8,7 @@ final class APIStore: ObservableObject {
     @Published var error: String?
     @Published var authenticated = false
     @Published var needsPasswordChange = false
+    @Published var needsCloudflareAccess = false
     @Published var busy = false
     @Published var syncing = false
     @Published private var editCount=0
@@ -67,7 +68,9 @@ final class APIStore: ObservableObject {
     init(fixture: Bool = false, transport: APITransport? = nil) {
         self.fixture = fixture
         let saved=URL(string:UserDefaults.standard.string(forKey:"native-api-installation") ?? "")
-        let origin = !fixture && saved.map{EndpointPolicy.isDiary($0)} == true ? saved! : EndpointPolicy.home
+        let hasPreviousHome = UserDefaults.standard.string(forKey: "native-api-last-scope:" + EndpointPolicy.home.host!) != nil
+        let firstInstallation = hasPreviousHome || fixture ? EndpointPolicy.home : URL(string: "https://" + EndpointPolicy.cloudflareHost + "/")!
+        let origin = !fixture && saved.map{EndpointPolicy.isDiary($0)} == true ? saved! : firstInstallation
         self.transport = transport ?? APITransport(origin:origin,fixture:fixture)
         if !fixture {
             monitor.pathUpdateHandler = { [weak self] path in Task { @MainActor in
@@ -103,8 +106,9 @@ final class APIStore: ObservableObject {
     }
     func restore() async {
         guard !busy, !authenticated else { return }; busy = true; defer { busy = false }
-        do { try bind(await transport.request("/api/me")); online = true; error = nil; await sync();if !fixture{scheduleJobMonths();scheduleDirectory()} }
+        do { try bind(await transport.request("/api/me")); needsCloudflareAccess = false; online = true; error = nil; await sync();if !fixture{scheduleJobMonths();scheduleDirectory()} }
         catch let e as APIError {
+            needsCloudflareAccess = e.code == "cloudflare_access_required"
             if e.code == "password_change_required" { needsPasswordChange = true }
             else if e.isTransient, let last = UserDefaults.standard.string(forKey:"native-api-last-scope:" + transport.origin.host!), let local = try? APIVault(scope:last), local.offlineAllowed() {
                 vault = local; activeScope = last; me = local.state.session; authenticated = true; online = false; updateOutbox()
@@ -129,7 +133,11 @@ final class APIStore: ObservableObject {
             needsPasswordChange = result["mustChange"].bool
             if !needsPasswordChange { try bind(await transport.request("/api/me")); await sync() }
             error = nil
-        } catch { self.error = error.localizedDescription }
+            needsCloudflareAccess = false
+        } catch {
+            needsCloudflareAccess = (error as? APIError)?.code == "cloudflare_access_required"
+            self.error = error.localizedDescription
+        }
     }
     func changePassword(username: String, current: String, password: String) async throws {
         try requireLiveRole()
