@@ -58,3 +58,12 @@ Repozitář popisuje každou firmu jako samostatnou instalaci s vlastní databá
 ## Bezpečnostní hranice
 
 Dosud se vytvořily pouze dvě GitHub větve a tento plán. Nebyla změněna větev `main`, žádný produkční deployment, databáze, R2 bucket, DNS, uživatelský účet ani heslo. Žádná provozní záloha nebyla stažena ani obnovena.
+
+
+## Nově zjištěná větev asistenta
+
+Při kontrole 27. 11. 2026 byla nalezena větev `assistant-zaklad` na commitu `6b6fd97b6ebf5866641c1d768e1a99f54de2b87c`. Je o 8 commitů napřed oproti `main`; merge ani pull request do `main` nebyl nalezen. Záložní větev a tato migrační větev proto zatím obsahují původní stav z `main`, nikoli tyto novější funkce.
+
+Větev přidává asistenta ve webové a iOS aplikaci, lokální rozpoznávání českých příkazů, čtení přes současné API, plánování zakázek a docházku, práci s katalogovým materiálem a import zákazníků/materiálu z CSV. Podle commit popisů zápisy čekají na výslovné potvrzení a audit. Změny zahrnují `apps/work-diary/worker/assistant.js`, `web/assistant-*.js`, testy a iOS obrazovku.
+
+Před jakýmkoli buildem určeným pro Cloudflare je třeba rozhodnout, zda se tato větev nejdřív zkontroluje a začlení. Nasazení z původního `main` by funkce asistenta neobsahovalo. Tato kontrola byla read-only; větev `assistant-zaklad` nebyla upravena ani sloučena.
