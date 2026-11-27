@@ -9,6 +9,24 @@
 }
 @media(max-width:760px){.planning-fields{gap:8px}.explicit-planning{padding:10px}.planning-fields input{min-height:44px}.handoff-summary{font-size:12px;max-width:100%;white-space:normal}.planning-backlog{display:none}}
 
+.duration-picker{grid-column:1 / -1;display:grid;gap:8px;min-width:0}
+.duration-picker .duration-label{font-size:12px;font-weight:650}
+.duration-choices{display:flex;flex-wrap:wrap;gap:6px}
+.duration-choice{min-height:40px;padding:7px 12px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--ink);font:inherit;font-size:13px;font-weight:650;cursor:pointer}
+.duration-choice[aria-pressed=true]{background:#e7f6ee;border-color:#1f7a45;color:#146c3a}
+.duration-custom{display:flex;gap:8px}
+.duration-custom[hidden]{display:none}
+.duration-custom .field{flex:1;margin:0}
+.duration-end{margin:0;font-size:13px;font-weight:650;color:#1f7a45}
+.duration-end:empty{display:none}
+.duration-end.is-warning{color:#8c5a26}
+.job-term-row .duration-picker{margin:4px 0 8px}
+@media(max-width:760px){.duration-choice{min-height:44px}}
+@media(prefers-color-scheme:dark){
+  .job-term-row .duration-choice{background:#1c2120;color:#f2f5f3;border-color:#2d3532}
+  .job-term-row .duration-choice[aria-pressed=true]{background:#1a3d2e;color:#d7f3e4;border-color:#1f7a45}
+}
+
 [data-device-expand]{display:none}@media(min-width:1024px){.main:has(#jobs.manager-planning)>.planning-device-compact{padding:8px 14px;margin:0 0 10px}.main:has(#jobs.manager-planning)>.planning-device-compact>:not(.device-permissions-head){display:none}.planning-device-compact .device-permissions-head{align-items:center;gap:12px}.planning-device-compact .device-permissions-head>div{flex:1}.planning-device-compact .device-permissions-head .eyebrow{display:none}.planning-device-compact #device-permissions-title{font-size:14px;margin:0}.planning-device-compact [data-device-expand]{display:inline-block;font-size:12px}}
 
 @media(min-width:1024px){.manager-planning .jobs-list{margin:0}.manager-planning .jobs-timeline{margin-top:0}.manager-planning .jobs-timeline-toolbar>.mini-empty{max-width:100%}.main:has(#jobs.manager-planning)>.planning-device-compact{padding:2px 12px}.manager-planning #jobs-filters .field{min-width:0}}

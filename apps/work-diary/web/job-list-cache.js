@@ -1,7 +1,8 @@
 import {pragueToday,moveJobMonth} from './job-schedule.js?v=workspace-roles-v1';
 import {compareWorkJobs} from './job-workflow-model.js?v=workspace-roles-v1';
+import {phaseMatches} from './job-selection.js';
 
-export const JOB_CACHE_KEY='job-list-cache-completion-v1';
+export const JOB_CACHE_KEY='job-list-cache-completion-v2';
 export const jobCacheMonths=(now=new Date())=>{const month=pragueToday(now).slice(0,7);return [month,moveJobMonth(month,-1),moveJobMonth(month,1)];};
 export const jobCacheScope=session=>session?.user?JSON.stringify([session.user.id,session.user.role,session.permissions,session.features,session.installation?.id,session.workspace?.workspaceId,session.workspace?.authorizationVersion,session.workspace?.disciplines,session.workspace?.selectedDiscipline,session.rolePreview?.selectedRole]):null;
 const empty=()=>({entries:[],months:[]});
@@ -10,28 +11,45 @@ const sortedPath=url=>{url.searchParams.sort();return url.pathname+'?'+url.searc
 const clone=value=>structuredClone(value);
 const summary=job=>{const {gardenNotes,customerContact,...row}=job;return {...row,...customerContact?{customerContact:{id:customerContact.id,name:customerContact.name}}:{}};};
 const validDay=day=>/^\d{4}-\d{2}-\d{2}$/.test(day)&&Number.isFinite(Date.parse(day))&&new Date(day+'T12:00:00Z').toISOString().slice(0,10)===day;
+// One job may be planned on nonconsecutive dates. The calendar expands its
+// occurrences, without duplicating the actual job or its protocol.
+export function jobCalendarDates(job){
+ const dates=Array.isArray(job?.schedule?.dates)?job.schedule.dates:[];
+ return [...new Set([job?.dueDate,...dates].filter(day=>typeof day==='string'&&validDay(day)))].sort();
+}
+export function jobOccursOn(job, day){return jobCalendarDates(job).includes(day);}
+
 function query(path,now){
  const url=new URL(path,'https://cache.invalid');if(url.pathname!=='/api/jobs')return null;
  const p=url.searchParams,months=jobCacheMonths(now);
- if([...p.keys()].some(k=>!['month','day','from','to','state','type','q','assignee','order','protocol','discipline','cursor'].includes(k))||p.get('order')!=='schedule')return null;
+ if([...p.keys()].some(k=>!['month','day','from','to','state','type','q','assignee','order','protocol','discipline','cursor','phase'].includes(k))||p.get('order')!=='schedule')return null;
  const month=p.get('month'),from=p.get('from'),to=p.get('to');
  if(month&&!months.includes(month)||!month&&!(from&&to&&months.includes(from.slice(0,7))&&months.includes(to.slice(0,7))&&validDay(from)&&validDay(to)&&to>=from&&Date.parse(to)-Date.parse(from)<=6*86400000))return null;
  if(month&&(from||to)||!month&&p.get('day'))return null;
- const state=p.get('state')||'active',type=p.get('type')||'',protocol=p.get('protocol')||'',day=p.get('day')||'';
- if(!['active','all','planned','on_way','in_progress','done','incomplete'].includes(state)||type&&!['service','installation','survey'].includes(type)||protocol&&!['missing','draft','ready','unfinished'].includes(protocol)||day&&day!=='undated'&&(!validDay(day)||!day.startsWith(month+'-'))||p.get('q')?.length>100)return null;
- return {url,key:sortedPath(url),months:month?[month]:[...new Set([from.slice(0,7),to.slice(0,7)])],state,type,protocol,day,from,to};
+ const state=p.get('state')||'active',type=p.get('type')||'',protocol=p.get('protocol')||'',day=p.get('day')||'',phase=p.get('phase')||'';
+ if(!['active','all','planned','on_way','in_progress','done','incomplete'].includes(state)||type&&!/^[a-z][a-z0-9-]{0,40}$/.test(type)||phase&&!['open','waiting','scheduled','active','done','open_done','cancelled','archived','open_cancelled','open_archived'].includes(phase)||protocol&&!['missing','draft','ready','unfinished'].includes(protocol)||day&&day!=='undated'&&(!validDay(day)||!day.startsWith(month+'-'))||p.get('q')?.length>100)return null;
+ return {url,key:sortedPath(url),months:month?[month]:[...new Set([from.slice(0,7),to.slice(0,7)])],state,type,protocol,day,from,to,phase};
 }
 export function deriveCachedJobs(info,snapshots){
  if(info.url.searchParams.has('cursor')||snapshots.length!==info.months.length)return null;
  const selected=snapshots[0]?.discipline,requested=info.url.searchParams.get('discipline');if(requested&&selected&&selected!=='all'&&requested!==selected)return null;
  const p=info.url.searchParams,search=ascii((p.get('q')||'').trim()),assignee=p.get('assignee'),discipline=p.get('discipline');
  let rows=[...new Map(snapshots.flatMap(s=>s.jobs).map(job=>[job.id,job])).values()].filter(job=>
-  (info.state==='all'||info.state==='active'&&job.status!=='done'||job.status===info.state)&&(!info.type||job.jobType===info.type)&&
+  (info.phase?phaseMatches(job,info.phase):(info.state==='all'||info.state==='active'&&job.status!=='done'||job.status===info.state))&&(!info.type||job.jobType===info.type)&&
   (!info.protocol||job.status==='done'&&(info.protocol==='unfinished'?['missing','draft'].includes(job.protocolStatus||'missing'):(job.protocolStatus||'missing')===info.protocol))&&
   (!assignee||job.assignedTo===assignee||(job.assignedTos||[]).includes(assignee))&&(!discipline||discipline==='all'||!job.discipline||job.discipline===discipline)&&
-  (!search||[job.title,job.description,job.address,job.customerName].some(v=>ascii(v).includes(search)))&&(!info.from||job.dueDate>=info.from&&job.dueDate<=info.to));
+  (!search||[job.title,job.description,job.address,job.customerName].some(v=>ascii(v).includes(search)))&&(!info.from||jobCalendarDates(job).some(day=>day>=info.from&&day<=info.to)));
  let calendar;
- if(!info.from){const counts=new Map();for(const j of rows)counts.set(j.dueDate,(counts.get(j.dueDate)||0)+1);calendar={days:[...counts].filter(([day])=>day).sort().map(([date,count])=>({date,count})),undatedCount:counts.get('')||0};if(info.day)rows=rows.filter(j=>j.dueDate===(info.day==='undated'?'':info.day));}
+ if(!info.from){
+  const counts=new Map();let undatedCount=0;
+  for(const job of rows){
+   const dates=jobCalendarDates(job).filter(day=>info.months.includes(day.slice(0,7)));
+   if(!dates.length&&!job.dueDate)undatedCount++;
+   for(const day of dates)counts.set(day,(counts.get(day)||0)+1);
+  }
+  calendar={days:[...counts].sort().map(([date,count])=>({date,count})),undatedCount};
+  if(info.day)rows=rows.filter(job=>info.day==='undated'?!job.dueDate:jobOccursOn(job,info.day));
+ }
  if(rows.length>500)return null; // Large result sets retain real server cursors.
  return {jobs:rows.sort(compareWorkJobs),nextCursor:null,...(calendar?{calendar}:{})};
 }
@@ -51,7 +69,7 @@ export function createJobListCache({read,change,send,getSession,online=()=>true,
   await update(state=>({entries:[],months:state.months.map(entry=>{
    if(entry.scope!==who)return entry;
    const replacements=new Set(rows.map(j=>j.id));let jobs=entry.jobs.filter(j=>j.id!==removed&&!replacements.has(j.id));
-   jobs.push(...rows.filter(j=>(!j.dueDate||j.dueDate.startsWith(entry.month+'-'))&&(!entry.discipline||entry.discipline==='all'||!j.discipline||j.discipline===entry.discipline)).map(summary));
+   jobs.push(...rows.filter(j=>(!j.dueDate||jobCalendarDates(j).some(day=>day.startsWith(entry.month+'-')))&&(!entry.discipline||entry.discipline==='all'||!j.discipline||j.discipline===entry.discipline)).map(summary));
    return {...entry,jobs,dirty:true};
   })}));
  }

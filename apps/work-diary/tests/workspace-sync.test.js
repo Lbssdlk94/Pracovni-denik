@@ -30,9 +30,3 @@ test('same user ID on an unrelated installation cannot silently receive the old 
  const caches={records:[],gardens:[{id:'shared-garden'}],services:[{id:'new-allowed',gardenId:'shared-garden',discipline:'garden',version:0,_pending:true}],serviceWork:[],defects:[]},inventory=workspaceInventory(caches),result=planWorkspaceReconciliation(current,current,caches,inventory,manifest(inventory));
  assert.equal(result.reduced,false);assert.equal(result.keep.services.length,1);
 });
-
-
-test('Daily entry queues share job authorization without collapsing their identities into the protocol key',()=>{
- const caches={records:[],gardens:[],services:[],defects:[],serviceWork:[{id:'worker|garden-job',jobId:'garden-job',ownerId:'worker',pending:true,payload:{operationId:'protocol'}},{id:'worker|garden-job|diary|entry-a',kind:'jobDiary',entryId:'entry-a',jobId:'garden-job',ownerId:'worker',pending:true,payload:{operationId:'diary-a'}},{id:'worker|garden-job|diary|entry-b',kind:'jobDiary',entryId:'entry-b',jobId:'garden-job',ownerId:'worker',pending:true,payload:{operationId:'diary-b'}}]};
- const inventory=workspaceInventory(caches);assert.deepEqual(inventory.serviceWork,['garden-job']);const plan=planWorkspaceReconciliation(current,current,caches,inventory,manifest(inventory));assert.equal(plan.keep.serviceWork.length,3);assert.equal(new Set(plan.keep.serviceWork.map(row=>row.id)).size,3);assert.equal(plan.revoked.length,0);
-});

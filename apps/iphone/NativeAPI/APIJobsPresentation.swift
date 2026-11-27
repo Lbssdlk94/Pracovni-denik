@@ -38,9 +38,45 @@ enum APIJobsPresentation {
         return value
     }
     static func normalize(_ text:String)->String{text.folding(options:[.diacriticInsensitive,.caseInsensitive],locale:Locale(identifier:"cs_CZ")).trimmingCharacters(in:.whitespacesAndNewlines)}
+    static func scheduleDates(_ job:APIValue)->[String]{
+        var found:[String]=[]
+        func add(_ value:String){if value.range(of:#"^\d{4}-\d{2}-\d{2}$"#,options:.regularExpression) != nil,!found.contains(value){found.append(value)}}
+        add(job["dueDate"].string)
+        for item in job["schedule"]["dates"].array{add(item.string)}
+        for item in job["terms"].array{add(item["date"].string.isEmpty ? item.string : item["date"].string)}
+        return found
+    }
+    static func workPhase(_ job:APIValue)->String{
+        if !job["workPhase"].string.isEmpty{return job["workPhase"].string}
+        if job["archived"].bool || !job["archivedAt"].string.isEmpty{return "archived"}
+        if job["deleted"].bool || job["cancelled"].bool{return "cancelled"}
+        let status=job["status"].string
+        if status=="done"{return "done"}
+        if status=="incomplete"{return "incomplete"}
+        if status=="in_progress" || status=="on_way"{return "active"}
+        if status=="planned"{
+            let known=job.object["dueDate"] != nil || job.object["terms"] != nil || job.object["schedule"] != nil
+            if !known{return "scheduled"}
+            return scheduleDates(job).isEmpty ? "waiting" : "scheduled"
+        }
+        return "other"
+    }
+    static func phaseMatches(_ job:APIValue,_ phase:String)->Bool{
+        let current=workPhase(job)
+        switch phase{
+        case "open":return ["waiting","scheduled","active"].contains(current)
+        case "open_done":return ["waiting","scheduled","active","done"].contains(current)
+        case "open_cancelled":return ["waiting","scheduled","active","cancelled"].contains(current)
+        case "open_archived":return ["waiting","scheduled","active","archived"].contains(current)
+        case "active":return current=="active"
+        default:return current==phase
+        }
+    }
+    static func statusText(_ job:APIValue)->String{workPhase(job)=="waiting" ? "Čeká na naplánování" : APIFormat.status(job["status"].string)}
     static func matches(_ job:APIValue,filters:APIJobsFilters,period:APIJobsPeriod,query:String,now:Date,selected:String?=nil,rangeStart:String?=nil,rangeEnd:String?=nil,normalizedSearch:String?=nil,personalActiveID:String="")->Bool{
         let status=job["status"].string,due=job["dueDate"].string
-        if filters.state=="approval"{guard APIJobsGroup.of(job) == .approval else{return false}}
+        if filters.state.hasPrefix("phase-"){guard phaseMatches(job,String(filters.state.dropFirst(6))) else{return false}}
+        else if filters.state=="approval"{guard APIJobsGroup.of(job) == .approval else{return false}}
         else if filters.state != "all",status != filters.state{return false}
         if !filters.worker.isEmpty,job["assignedTo"].string != filters.worker,!job["assignedTos"].array.contains(.s(filters.worker)){return false}
         if !filters.type.isEmpty,job["jobType"].string != filters.type{return false}
@@ -73,7 +109,9 @@ enum APIJobsPresentation {
     }
     private struct SortRow{let job:APIValue;let schedule:[String];let customer:String}
     static func paths(filters:APIJobsFilters,period:APIJobsPeriod,mine:Bool,manager:Bool,userID:String,now:Date)->[String]{
-        var q=[URLQueryItem(name:"state",value:filters.state=="approval" ? "all" : filters.state),URLQueryItem(name:"order",value:"schedule")]
+        let phase=filters.state.hasPrefix("phase-") ? String(filters.state.dropFirst(6)) : ""
+        var q=[URLQueryItem(name:"state",value:phase.isEmpty ? (filters.state=="approval" ? "all" : filters.state) : "all"),URLQueryItem(name:"order",value:"schedule")]
+        if !phase.isEmpty{q.append(URLQueryItem(name:"phase",value:phase))}
         let worker = !manager || mine ? userID : filters.worker
         if !worker.isEmpty{q.append(URLQueryItem(name:"assignee",value:worker))}
         for (key,value) in [("type",filters.type),("protocol",filters.protocolState),("attention",filters.attention),("discipline",filters.discipline=="all" ? "" : filters.discipline)] where !value.isEmpty{q.append(URLQueryItem(name:key,value:value))}
@@ -93,7 +131,7 @@ enum APIJobsPresentation {
         // An installation can continue across days and months. These are the same
         // authorized list endpoint, not a new status or a second time ledger.
         if period == .today{
-            for state in ["in_progress","on_way"] where filters.state=="all" || filters.state==state{
+            for state in ["in_progress","on_way"] where phase.isEmpty && (filters.state=="all" || filters.state==state){
                 var c=URLComponents(string:path([]))!;c.queryItems=c.queryItems?.map{$0.name=="state" ? URLQueryItem(name:"state",value:state) : $0};result.append(c.string!)
             }
         }

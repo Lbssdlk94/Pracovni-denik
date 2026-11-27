@@ -8,6 +8,40 @@ import {jobRankSql,protocolStateSql,jobAttempts} from './job-workflow.js';
 import {validateWorkSchedule,inspectWorkSchedule,handlePlanningSettings} from './planning.js';
 import {handleJobGeocode,jobGeocode} from './job-map.js';
 import {jobAssignedIds,jobAssignment} from './assignments.js';
+import {phaseClause, workPhase, statusLabel} from '../web/job-selection.js';
+import {readJobKinds} from './job-kinds.js';
+async function jobTermRows(env, jobId){
+ try{
+  const rows=await env.DB.prepare('SELECT term_date,start_time,end_time,assigned_users,status,note FROM job_terms WHERE job_id=? ORDER BY sort_order,term_date').bind(jobId).all();
+  let intervals=[];
+  try{intervals=(await env.DB.prepare("SELECT user_name,start_at,end_at FROM job_time_intervals WHERE job_id=? AND end_at IS NOT NULL AND kind='work'").bind(jobId).all()).results||[];}catch{intervals=[];}
+  const day=ms=>new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Prague'}).format(new Date(ms));
+  return (rows.results||[]).map(row=>{
+   const same=intervals.filter(item=>day(item.start_at)===row.term_date);
+   const byName=new Map();
+   for(const item of same) byName.set(item.user_name,(byName.get(item.user_name)||0)+(item.end_at-item.start_at));
+   const worked=[...byName].map(([name,ms])=>({name,ms}));
+   return {date:row.term_date,start:row.start_time,end:row.end_time,people:JSON.parse(row.assigned_users||'[]'),status:row.status,note:row.note,workedMs:worked.reduce((sum,item)=>sum+item.ms,0),worked};
+  });
+ }catch{return [];}
+}
+async function withSchedules(env, jobs){
+ if(!jobs.length) return jobs;
+ try{
+  const rows=await env.DB.prepare(`SELECT job_id,term_date,status FROM job_terms WHERE job_id IN (${jobs.map(()=>'?').join(',')}) ORDER BY sort_order,term_date`).bind(...jobs.map(job=>job.id)).all();
+  const grouped=new Map();
+  for(const row of rows.results||[]){const item=grouped.get(row.job_id)||[];item.push(row);grouped.set(row.job_id,item);}
+  return jobs.map(job=>{
+   const item=grouped.get(job.id)||[];
+   const dates=[...new Set([...(job.dueDate?[job.dueDate]:[]),...item.map(row=>row.term_date)])].filter(date=>/^\d{4}-\d{2}-\d{2}$/.test(date||''));
+   const phased={...job,schedule:{...(job.schedule||{}),dates}};
+   const base={...job,workPhase:workPhase(phased),workPhaseLabel:statusLabel(phased),...(item.length?{schedule:{...(job.schedule||{}),dates}}:{})};
+   if(item.length<2) return base;
+   const next=item.find(row=>row.status!=='done')?.term_date||'';
+   return {...base,schedule:{days:item.length,done:item.filter(row=>row.status==='done').length,next,dates}};
+  });
+ }catch{return jobs.map(job=>({...job,workPhase:workPhase(job),workPhaseLabel:statusLabel(job)}));}
+}
 // Every read and write is scoped on the server; client filters are only presentation.
 export async function handleJobs(request,env,m,h){
  const {all,one,execute,body,fail,json,validId,cleanText,expectedVersion}=h,url=new URL(request.url),path=url.pathname,method=request.method;
@@ -31,32 +65,48 @@ export async function handleJobs(request,env,m,h){
   if(cursor){validId(cursor);clauses.push('j.id>?');args.push(cursor);}const rows=await all(env.DB,select.replace('SELECT j.*,','SELECT j.*,('+missingAssignee+') AS planning_missing_assignee,')+' WHERE '+clauses.join(' AND ')+' ORDER BY j.id LIMIT 101',...args),list=rows.slice(0,100);return json({jobs:list.map(r=>({...record(r),planningMissingAssignee:!!r.planning_missing_assignee})),total:count.total,counts:{unplanned:count.unplanned,clarify:count.total-count.unplanned-count.incomplete,incomplete:count.incomplete},nextCursor:rows.length>100?list.at(-1).id:null});
  }
  if(path==='/api/jobs'&&method==='GET'){
-  const after=url.searchParams.get('after')||'',jobType=url.searchParams.get('type')||'',state=url.searchParams.get('state')||'active',q=cleanText(url.searchParams.get('q')||'',100),assignee=url.searchParams.get('assignee')||'',order=url.searchParams.get('order')||'created',month=url.searchParams.get('month')||'',day=url.searchParams.get('day')||'',from=url.searchParams.get('from')||'',to=url.searchParams.get('to')||'',protocol=url.searchParams.get('protocol')||'';
+  const after=url.searchParams.get('after')||'',jobType=url.searchParams.get('type')||'',state=url.searchParams.get('state')||'active',phase=url.searchParams.get('phase')||'',q=cleanText(url.searchParams.get('q')||'',100),assignee=url.searchParams.get('assignee')||'',order=url.searchParams.get('order')||'created',month=url.searchParams.get('month')||'',day=url.searchParams.get('day')||'',from=url.searchParams.get('from')||'',to=url.searchParams.get('to')||'',protocol=url.searchParams.get('protocol')||'';
   if(!['created','schedule'].includes(order)||month&&(!/^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test(month)||order!=='schedule')||day&&(!month||day!=='undated'&&(!calendarDate(day)||!day.startsWith(month+'-'))))fail(400,'Vyberte platný měsíc a den kalendáře.');
   if((from||to)&&(!calendarDate(from)||!calendarDate(to)||to<from||Date.parse(to)-Date.parse(from)>6*86400000||month||day||order!=='schedule'))fail(400,'Vyberte platné období nejvýše sedmi dnů.');
   if(after&&(!calendarDate(after)||order!=='schedule'||month||day||from||to))fail(400,'Vyberte platný začátek následujících návštěv.');
-  if(jobType&&!['service','installation','survey'].includes(jobType))fail(400,'Vyberte platný druh zakázky.');
-  if(!['active','all','planned','on_way','in_progress','done','incomplete'].includes(state))fail(400,'Neplatný filtr zakázek.');
+  const termsReady=!!(await one(env.DB,"SELECT 1 AS ok FROM sqlite_master WHERE type='table' AND name='job_terms'"));
+  const phaseSql=phase?phaseClause(phase,termsReady):'';
+  if(phase&&!phaseSql)fail(400,'Neplatný filtr stavu práce.');
+  const kinds=await readJobKinds(env);
+  if(jobType&&!kinds.some(kind=>kind.id===jobType))fail(400,'Vyberte platný druh zakázky.');
+  if(!phase&&!['active','all','planned','on_way','in_progress','done','incomplete'].includes(state))fail(400,'Neplatný filtr zakázek.');
   if(protocol&&!['unfinished','missing','draft','ready'].includes(protocol))fail(400,'Neplatný filtr protokolu.');
   if(assignee){validId(assignee);if(!manager&&assignee!==m.user_id)fail(403,'Můžete zobrazit pouze vlastní zakázky.');}
   const cacheSnapshot=url.searchParams.get('cacheSnapshot')==='1',listRevision=cacheSnapshot?((await one(env.DB,"SELECT version FROM settings WHERE key='job-planner-revision'"))?.version||0):null;
-  const clauses=['j.deleted=0',scope],args=[m.user_id];
+  const clauses=phase?[scope]:['j.deleted=0',scope],args=[m.user_id];
   const disciplineFilter=url.searchParams.get('discipline');if(m._workspace&&disciplineFilter&&disciplineFilter!=='all'){clauses.push('j.discipline=?');args.push(disciplineFilter);}
   const attention=url.searchParams.get('attention');if(attention){const f=dashboardJobFilter(attention,new Date().toLocaleDateString('sv-SE',{timeZone:'Europe/Prague'}));if(!f)fail(400,'Neplatný filtr pozornosti.');clauses.push(f.sql);args.push(...f.args);}
   if(protocol){clauses.push("j.status='done'");clauses.push(protocol==='unfinished'?"("+protocolStateSql+") IN ('missing','draft')":"("+protocolStateSql+")=?");if(protocol!=='unfinished')args.push(protocol);}
   if(jobType){clauses.push('j.job_type=?');args.push(jobType);}
-  if(state==='active')clauses.push("j.status<>'done'");else if(state!=='all'){clauses.push('j.status=?');args.push(state);}
+  if(phaseSql)clauses.push(phaseSql);
+  else if(state==='active')clauses.push("j.status<>'done'");else if(state!=='all'){clauses.push('j.status=?');args.push(state);}
   if(assignee){clauses.push('(j.assigned_to=? OR EXISTS(SELECT 1 FROM json_each(j.assigned_users) selected WHERE selected.value=?))');args.push(assignee,assignee);}
   if(q){clauses.push("(j.title LIKE ? ESCAPE '\\' OR j.description LIKE ? ESCAPE '\\' OR j.address LIKE ? ESCAPE '\\' OR j.customer_name LIKE ? ESCAPE '\\')");const pattern='%'+q.replace(/[\\%_]/g,'\\$&')+'%';args.push(pattern,pattern,pattern,pattern);}
   if(after){clauses.push('j.due_date>=?');args.push(after);}
-  let calendar;if(from){clauses.push('j.due_date BETWEEN ? AND ?');args.push(from,to);}
+  const termBetween=termsReady?' OR EXISTS(SELECT 1 FROM job_terms term WHERE term.job_id=j.id AND term.term_date BETWEEN ? AND ?)':'';
+  let calendar;if(from){clauses.push('(j.due_date BETWEEN ? AND ?'+termBetween+')');args.push(from,to);if(termsReady)args.push(from,to);}
   if(month){
-   clauses.push("(j.due_date BETWEEN ? AND ? OR j.due_date='')");args.push(month+'-01',month+'-31');
+   const start=month+'-01',end=month+'-31';
+   clauses.push("(j.due_date BETWEEN ? AND ? OR j.due_date=''"+termBetween+')');args.push(start,end);if(termsReady)args.push(start,end);
    const counts=await all(env.DB,'SELECT j.due_date AS date,COUNT(*) AS count FROM jobs j LEFT JOIN service_reports pr ON pr.job_id=j.id WHERE '+clauses.join(' AND ')+' GROUP BY j.due_date',...args);
-   calendar={days:counts.filter(c=>c.date),undatedCount:counts.find(c=>!c.date)?.count||0};
-   if(day){clauses.push('j.due_date=?');args.push(day==='undated'?'':day);}
+   const days=new Map(counts.filter(c=>c.date).map(c=>[c.date,c.count]));
+   if(termsReady){const extra=await all(env.DB,'SELECT term.term_date AS date,COUNT(DISTINCT term.job_id) AS count FROM job_terms term JOIN jobs j ON j.id=term.job_id LEFT JOIN service_reports pr ON pr.job_id=j.id WHERE '+clauses.join(' AND ')+' AND term.term_date<>j.due_date AND term.term_date BETWEEN ? AND ? GROUP BY term.term_date',...args,start,end);for(const row of extra)days.set(row.date,(days.get(row.date)||0)+row.count);}
+   calendar={days:[...days].map(([date,count])=>({date,count})),undatedCount:counts.find(c=>!c.date)?.count||0};
+   if(day){if(day==='undated'||!termsReady){clauses.push('j.due_date=?');args.push(day==='undated'?'':day);}else{clauses.push('(j.due_date=? OR EXISTS(SELECT 1 FROM job_terms term WHERE term.job_id=j.id AND term.term_date=?))');args.push(day,day);}}
   }
-  const statusKey=jobRankSql,dateKey="CASE WHEN j.due_date='' THEN '9999-99-99' ELSE j.due_date END",timeKey="CASE WHEN j.planned_start<>'' THEN j.planned_start WHEN j.start_time='' THEN '24:00' ELSE j.start_time END",filter=encodeURIComponent(JSON.stringify([state,assignee,q,month,day,...(attention?[attention]:[]),...(jobType?[jobType]:[]),...(from?[from,to]:[]),...(after?[after]:[]),protocol,url.searchParams.get('discipline')||'',m._workspace?.authorizationVersion||0,'work-order-v3']));
+  let selection=null;
+  if(phase){
+    const dated=termsReady?"(j.due_date<>'' OR EXISTS(SELECT 1 FROM job_terms term WHERE term.job_id=j.id AND term.term_date<>''))":"j.due_date<>''";
+    const countFrom=protocol?'jobs j LEFT JOIN service_reports pr ON pr.job_id=j.id':'jobs j';
+    const count=await one(env.DB,`SELECT COUNT(*) total,COUNT(DISTINCT CASE WHEN IFNULL(j.customer_id,'')<>'' THEN j.customer_id ELSE 'job:'||j.id END) customers,COALESCE(SUM(CASE WHEN j.deleted=0 AND j.status='planned' AND NOT ${dated} THEN 1 ELSE 0 END),0) waiting,COALESCE(SUM(CASE WHEN j.deleted=0 AND j.status='planned' AND ${dated} THEN 1 ELSE 0 END),0) scheduled,COALESCE(SUM(CASE WHEN j.deleted=0 AND j.status IN ('on_way','in_progress') THEN 1 ELSE 0 END),0) active,COALESCE(SUM(CASE WHEN j.deleted=0 AND j.status='done' THEN 1 ELSE 0 END),0) done FROM ${countFrom} WHERE `+clauses.join(' AND '),...args);
+    selection={total:count.total,customers:count.customers,counts:{waiting:count.waiting,scheduled:count.scheduled,active:count.active,done:count.done},phase,jobType:jobType||''};
+  }
+  const statusKey=jobRankSql,dateKey="CASE WHEN j.due_date='' THEN '9999-99-99' ELSE j.due_date END",timeKey="CASE WHEN j.planned_start<>'' THEN j.planned_start WHEN j.start_time='' THEN '24:00' ELSE j.start_time END",filter=encodeURIComponent(JSON.stringify([state,phase,assignee,q,month,day,...(attention?[attention]:[]),...(jobType?[jobType]:[]),...(from?[from,to]:[]),...(after?[after]:[]),protocol,url.searchParams.get('discipline')||'',m._workspace?.authorizationVersion||0,'work-order-v4']));
   const cursor=url.searchParams.get('cursor');if(cursor){let c;try{if(cursor.length>3000)throw Error();c=JSON.parse(atob(cursor));}catch{fail(400,'Neplatná stránka zakázek.');}if(!c)fail(400,'Neplatná stránka zakázek.');validId(c.id);
    if(order==='schedule'){
     if(c.order!=='schedule'||c.filter!==filter||![0,1,2,3].includes(c.completed)||!calendarDate(c.date)&&c.date!=='9999-99-99'||!clock(c.time)&&c.time!=='24:00')fail(400,'Řazení se změnilo nebo stránka není platná. Obnovte seznam zakázek.');
@@ -66,13 +116,14 @@ export async function handleJobs(request,env,m,h){
   const ordering=order==='schedule'?`${statusKey},${dateKey},${timeKey},j.id`:'j.created_at DESC,j.id DESC';
   const rows=await all(env.DB,select+' WHERE '+clauses.join(' AND ')+' ORDER BY '+ordering+' LIMIT 101',...args),more=rows.length>100,list=rows.slice(0,100),last=list.at(-1);
   const listRevisionAfter=cacheSnapshot?((await one(env.DB,"SELECT version FROM settings WHERE key='job-planner-revision'"))?.version||0):null;
-  return json({...cacheSnapshot?{listRevision:listRevision===listRevisionAfter?listRevision:null}:{},jobs:list.map(record),nextCursor:more?btoa(JSON.stringify(order==='schedule'?{order,filter,completed:last.status==='in_progress'?0:last.status==='incomplete'?2:last.status==='done'?3:1,date:last.due_date||'9999-99-99',time:last.planned_start||last.start_time||'24:00',id:last.id}:{at:last.created_at,id:last.id})):null,...(calendar?{calendar}:{})});
+  const jobs=await withSchedules(env,list.map(row=>{const job=record(row);if(row.deleted)job.deleted=1;return job;}));
+  return json({...cacheSnapshot?{listRevision:listRevision===listRevisionAfter?listRevision:null}:{},jobs,...(selection?{selection}:{}),nextCursor:more?btoa(JSON.stringify(order==='schedule'?{order,filter,completed:last.status==='in_progress'?0:last.status==='incomplete'?2:last.status==='done'?3:1,date:last.due_date||'9999-99-99',time:last.planned_start||last.start_time||'24:00',id:last.id}:{at:last.created_at,id:last.id})):null,...(calendar?{calendar}:{})});
  }
  const match=path.match(/^\/api\/jobs\/([-a-zA-Z0-9_]{1,100})(\/(?:status|departure|geocode|completion|completion-target))?$/);if(!match)fail(404,'Zakázka nebyla nalezena.');
  const id=match[1],statusOnly=match[2]==='/status',departure=match[2]==='/departure';
  const find=()=>one(env.DB,select+' WHERE j.id=? AND j.deleted=0 AND '+scope,id,m.user_id);
  if(match[2]==='/geocode')return await handleJobGeocode(request,env,m,h,()=>one(env.DB,select+' WHERE j.id=? AND j.deleted=0 AND '+managerGate,id,m.user_id));
- if(method==='GET'&&!statusOnly&&!departure&&!['/completion','/completion-target'].includes(match[2])){const row=await find();if(!row)fail(404,'Zakázka nebyla nalezena.');return json({job:{...record(row),attempts:await jobAttempts(env,id)}});}
+ if(method==='GET'&&!statusOnly&&!departure&&!['/completion','/completion-target'].includes(match[2])){const row=await find();if(!row)fail(404,'Zakázka nebyla nalezena.');const terms=await jobTermRows(env,id),job={...record(row),attempts:await jobAttempts(env,id),terms};return json({job:{...job,workPhase:workPhase(job),workPhaseLabel:statusLabel(job)}});}
  if(['/completion','/completion-target'].includes(match[2])){const result=await handleJobCompletion(request,env,m,id,h);const row=await find();if(!row)fail(404,'Zakázka již není dostupná.');return json({job:record(row),...result});}
  if(departure&&method==='POST'){
   const old=await find();if(!old)fail(404,'Zakázka nebyla nalezena.');if(!['owner','administrator','admin','worker'].includes(m.role))fail(403,'Odjezd může zaznamenat přiřazený pracovník nebo správce.');
@@ -101,14 +152,14 @@ export async function handleJobs(request,env,m,h){
   if(!result.meta.changes)fail(409,'Zakázku mezitím změnil správce nebo kolega. Obnovte seznam.');const row=await find();if(!row)fail(404,'Zakázka už vám není přiřazená.');return json({job:record(row)});
  }
  if(!statusOnly&&!departure&&['PUT','DELETE'].includes(method)){
-  checkManager();const b=await body(request,16000);checkKeys(b,method==='DELETE'?['version']:['version','discipline','title','jobType','customerId','customerAddressId','customerName','city','description','address','gardenId','assignedTo','assignedTos','dueDate','startTime','endTime','status','incompleteReason','defectIds','plannedStart','estimatedMinutes','arrivalWindowStart','arrivalWindowEnd','legacyTimeMeaning','allowOverlaps','previewRevision']);
+  checkManager();const b=await body(request,16000);checkKeys(b,method==='DELETE'?['version']:['version','discipline','title','jobType','customerId','customerAddressId','customerName','city','description','address','gardenId','assignedTo','assignedTos','dueDate','startTime','endTime','status','incompleteReason','defectIds','plannedStart','estimatedMinutes','arrivalWindowStart','arrivalWindowEnd','legacyTimeMeaning','allowOverlaps','previewRevision','terms']);
   const version=expectedVersion(b.version),old=await one(env.DB,'SELECT * FROM jobs WHERE id=?',id);
   if(old?.deleted)fail(409,'Tato zakázka už byla smazána.',{code:'job_deleted'});if((old?.version||0)!==version)fail(409,'Zakázku mezitím změnil správce nebo kolega. Obnovte seznam.');
   if(method==='DELETE'){
    if(!old)fail(404,'Zakázka nebyla nalezena.');if(await one(env.DB,'SELECT 1 FROM job_time_intervals WHERE job_id=? AND end_at IS NULL',id))fail(409,'Nejdříve ukončete otevřenou pracovní dobu zakázky.');const result=await execute(env.DB,'UPDATE jobs SET deleted=1,version=version+1,updated_at=?,updated_by=? WHERE id=? AND version=? AND deleted=0 AND '+managerGate,Date.now(),m.user_id,id,version,m.user_id);if(!result.meta.changes)fail(409,'Zakázku se nepodařilo smazat. Obnovte seznam a ověřte oprávnění.');return json({ok:true});
   }
   const discipline=workspaceWriteDiscipline(m,b,old,fail);
-  const jobType=b.jobType??old?.job_type??'service';if(!['service','installation','survey'].includes(jobType))fail(400,'Vyberte druh Servis, Realizace nebo Zaměření.');
+  const jobType=b.jobType??old?.job_type??'service';if(!(await readJobKinds(env)).some(kind=>kind.id===jobType))fail(400,'Vyberte druh práce z číselníku zakázek.');
   const customerId=Object.hasOwn(b,'customerId')?(b.customerId===null?null:validId(b.customerId)):(old?.customer_id||null);
   const customerAddressId=customerId?(Object.hasOwn(b,'customerAddressId')?(b.customerAddressId===null?null:validId(b.customerAddressId)):(old?.customer_id===customerId?old?.customer_address_id||null:null)):null;
   if(!customerId&&b.customerAddressId!=null)fail(400,'Nejdříve vyberte zákazníka pro tuto adresu.');
@@ -146,6 +197,35 @@ export async function handleJobs(request,env,m,h){
   for(const did of defectIds){const eid=crypto.randomUUID(),gate="EXISTS(SELECT 1 FROM jobs WHERE id=? AND version=? AND garden_id=? AND service_operation=? AND updated_by=? AND deleted=0) AND EXISTS(SELECT 1 FROM members WHERE user_id=? AND role IN ('owner','administrator','admin'))",args=[id,version+1,gardenId,linkOperation,m.user_id,m.user_id];
    jobStatements.push(env.DB.prepare(`INSERT OR IGNORE INTO garden_defect_events(id,defect_id,actor_id,actor_name,at,hash,record) SELECT ?,?,?,?,?,?,? WHERE ${gate} AND NOT EXISTS(SELECT 1 FROM garden_defect_jobs WHERE defect_id=? AND job_id=?)`).bind(eid,did,m.user_id,m.name,now,'link',JSON.stringify({kind:'repair_link',jobId:id}),...args,did,id));
    jobStatements.push(env.DB.prepare(`INSERT OR IGNORE INTO garden_defect_jobs(defect_id,job_id,created_at,created_by) SELECT ?,?,?,? WHERE ${gate} AND EXISTS(SELECT 1 FROM garden_defects WHERE id=? AND garden_id=?)`).bind(did,id,now,m.user_id,...args,did,gardenId));
+  }
+  if(b.terms!==undefined){
+    if(!Array.isArray(b.terms)||b.terms.length>14)fail(400,'Zakázka může mít nejvýše 14 termínů.');
+    const seen=new Set(),normalized=[];
+    for(const term of b.terms){
+      if(!term||typeof term!=='object'||Array.isArray(term))fail(400,'Neplatný termín.');
+      const date=typeof term.date==='string'?term.date:'';
+      if(!calendarDate(date)||seen.has(date))fail(400,'Každý termín musí mít vlastní platné datum.');
+      seen.add(date);
+      const start=clock(term.start)?term.start:'07:00',end=clock(term.end)?term.end:'15:00';
+      if(end<=start)fail(400,'Konec termínu musí být po začátku.');
+      const people=Array.isArray(term.people)?term.people:[];
+      if(people.length>20||people.some(person=>typeof person!=='string'||!/^[-a-zA-Z0-9_]{1,100}$/.test(person))||new Set(people).size!==people.length)fail(400,'Neplatný pracovník termínu.');
+      normalized.push({date,start,end,people,status:['planned','done'].includes(term.status)?term.status:'planned',note:cleanText(term.note||'',300)});
+    }
+    if(normalized.length&&!b.allowOverlaps){
+      const marks=normalized.map(()=>'?').join(',');
+      let existing=[];
+      try{existing=await all(env.DB,`SELECT j.title,t.term_date,t.start_time,t.end_time,t.assigned_users FROM job_terms t JOIN jobs j ON j.id=t.job_id WHERE j.deleted=0 AND j.status<>'done' AND j.id<>? AND t.term_date IN (${marks})`,id,...normalized.map(term=>term.date));}catch{existing=[];}
+      const hits=[];
+      for(const term of normalized) for(const row of existing){
+        if(row.term_date!==term.date||term.end<=row.start_time||row.end_time<=term.start) continue;
+        const theirs=JSON.parse(row.assigned_users||'[]');
+        if(term.people.some(person=>theirs.includes(person))) hits.push({kind:'overlap',otherTitle:row.title,date:term.date,startTime:row.start_time,endTime:row.end_time});
+      }
+      if(hits.length){const revision=(await one(env.DB,"SELECT version FROM settings WHERE key='job-planner-revision'"))?.version||0;fail(409,'Zkontrolujte kolize jednotlivých termínů.',{code:'job_schedule_warning',preview:{revision,overlaps:hits.slice(0,8),warnings:[]}});}
+    }
+    jobStatements.push(env.DB.prepare('DELETE FROM job_terms WHERE job_id=? AND EXISTS(SELECT 1 FROM jobs WHERE id=? AND version=? AND updated_by=? AND deleted=0)').bind(id,id,version+1,m.user_id));
+    normalized.forEach((term,index)=>jobStatements.push(env.DB.prepare('INSERT INTO job_terms(id,job_id,term_date,start_time,end_time,assigned_users,status,note,sort_order) SELECT ?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM jobs WHERE id=? AND version=? AND updated_by=? AND deleted=0)').bind(id+':'+term.date,id,term.date,term.start,term.end,JSON.stringify(term.people),term.status,term.note,index,id,version+1,m.user_id)));
   }
   const kind=old&&old.status!==status?(status==='in_progress'?'work':['done','incomplete'].includes(status)?'stop':null):null,time=kind&&(kind==='stop'||h.timeTracking&&h.features?.attendance!==false)?await timeLegacyStatements(env,m,old,kind,fail):[];
   result=(await timeBatch(env,[...time,...jobStatements,...(time.length?[timeAssertApplied(env,id,m.user_id,linkOperation)]:[])],fail))[time.length];if(time.length)myTime=await timeState(env,m.user_id,m);

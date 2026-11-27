@@ -23,14 +23,15 @@ enum APIJobMonthCache {
     static func parameters(_ path:String,today:String)->[String:String]?{
         guard let url=URLComponents(string:path),url.path=="/api/jobs" else{return nil}
         let p=Dictionary((url.queryItems ?? []).map{($0.name,$0.value ?? "")},uniquingKeysWith:{$1})
-        let allowed:Set<String>=["state","order","month","day","type","protocol","q","assignee","discipline"]
+        let allowed:Set<String>=["state","order","month","day","type","protocol","q","assignee","discipline","phase"]
         guard Set(p.keys).isSubset(of:allowed),p["order"]=="schedule",let month=p["month"],months(containing:today).contains(month),["all","active","planned","on_way","in_progress","done","incomplete"].contains(p["state"] ?? "active") else{return nil}
         if let day=p["day"],day != "undated"{
             let f=DateFormatter();f.locale=Locale(identifier:"en_US_POSIX");f.calendar=Calendar(identifier:.gregorian);f.timeZone=TimeZone(identifier:"Europe/Prague");f.dateFormat="yyyy-MM-dd";f.isLenient=false
             guard day.hasPrefix(month+"-"),day.count==10,let date=f.date(from:day),f.string(from:date)==day else{return nil}
         }
         if (p["q"] ?? "").count>100{return nil}
-        if let type=p["type"],!type.isEmpty,!["service","installation","survey"].contains(type){return nil}
+        if let phase=p["phase"],!phase.isEmpty,!["open","waiting","scheduled","active","done","open_done","cancelled","archived","open_cancelled","open_archived"].contains(phase){return nil}
+        if let type=p["type"],!type.isEmpty,type.range(of:#"^[a-z][a-z0-9-]{0,40}$"#,options:.regularExpression)==nil{return nil}
         if let proto=p["protocol"],!proto.isEmpty,!["missing","draft","ready","unfinished"].contains(proto){return nil}
         return p
     }
@@ -48,7 +49,8 @@ enum APIJobMonthCache {
             let discipline=p["discipline"] ?? ""
             if !discipline.isEmpty && discipline != "all" && !job["discipline"].string.isEmpty && job["discipline"].string != discipline{return false}
             let status=job["status"].string,protocolState=job["protocolStatus"].string.isEmpty ? "missing" : job["protocolStatus"].string
-            guard requested=="all" || requested=="active" && status != "done" || status==requested else{return false}
+            if let phase=p["phase"],!phase.isEmpty{guard APIJobsPresentation.phaseMatches(job,phase) else{return false}}
+            else{guard requested=="all" || requested=="active" && status != "done" || status==requested else{return false}}
             guard kind.isEmpty || job["jobType"].string==kind else{return false}
             guard assignee.isEmpty || job["assignedTo"].string==assignee || job["assignedTos"].array.contains(.s(assignee)) else{return false}
             if !proto.isEmpty{
@@ -57,14 +59,19 @@ enum APIJobMonthCache {
             }
             return search.isEmpty || ["title","description","address","customerName"].contains{ascii(job[$0].string).contains(search)}
         }
-        let counts=Dictionary(grouping:rows,by:{$0["dueDate"].string})
-        if let day=p["day"],!day.isEmpty{rows=rows.filter{$0["dueDate"].string==(day=="undated" ? "" : day)}}
+        var counts:[String:Int]=[:]
+        for job in rows {
+            var dates=Set(job["schedule"]["dates"].array.map(\.string).filter{!$0.isEmpty})
+            if dates.isEmpty {dates.insert(job["dueDate"].string)}
+            for date in dates where date.isEmpty || date.hasPrefix((p["month"] ?? "")+"-") {counts[date, default:0]+=1}
+        }
+        if let day=p["day"],!day.isEmpty{rows=rows.filter{job in day=="undated" ? job["dueDate"].string.isEmpty : job["dueDate"].string==day || job["schedule"]["dates"].array.contains{$0.string==day} || job["terms"].array.contains{$0["date"].string==day}}}
         guard rows.count<=500 else{return nil} // Preserve server pagination for large results.
         func rank(_ j:APIValue)->Int{j["status"].string=="in_progress" ? 0 : j["status"].string=="incomplete" ? 2 : j["status"].string=="done" ? 3 : 1}
         func order(_ j:APIValue)->[String]{[j["dueDate"].string.isEmpty ? "9999-99-99" : j["dueDate"].string,j["plannedStart"].string.isEmpty ? (j["startTime"].string.isEmpty ? "24:00" : j["startTime"].string) : j["plannedStart"].string,j.id]}
         rows.sort{rank($0)==rank($1) ? order($0).lexicographicallyPrecedes(order($1)) : rank($0)<rank($1)}
-        let days=counts.keys.filter{!$0.isEmpty}.sorted().map{day in APIValue.object(["date":.s(day),"count":.n(counts[day]!.count)])}
-        return .object(["jobs":.array(rows),"nextCursor":.null,"calendar":.object(["days":.array(days),"undatedCount":.n(counts[""]?.count ?? 0)]),"_jobCache":.object(["at":.number(snapshot.savedAt.timeIntervalSince1970*1000),"offline":.bool(offline),"stale":.bool(snapshot.dirty || now.timeIntervalSince(snapshot.savedAt)>=60)])])
+        let days=counts.keys.filter{!$0.isEmpty}.sorted().map{day in APIValue.object(["date":.s(day),"count":.n(counts[day] ?? 0)])}
+        return .object(["jobs":.array(rows),"nextCursor":.null,"calendar":.object(["days":.array(days),"undatedCount":.n(counts[""] ?? 0)]),"_jobCache":.object(["at":.number(snapshot.savedAt.timeIntervalSince1970*1000),"offline":.bool(offline),"stale":.bool(snapshot.dirty || now.timeIntervalSince(snapshot.savedAt)>=60)])])
     }
 }
 

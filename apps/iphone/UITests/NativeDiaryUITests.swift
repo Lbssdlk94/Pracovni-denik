@@ -24,7 +24,7 @@ final class NativeDiaryUITests: XCTestCase {
         let jobs = XCTAttachment(screenshot: app.screenshot()); jobs.name = "SwiftUI-zakazky"; jobs.lifetime = .keepAlways; add(jobs)
         customer.tap()
         XCTAssertTrue(app.navigationBars["Detail zakázky"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.staticTexts["Práce 09:00 · 60 min"].exists)
+        XCTAssertTrue(app.staticTexts["Práce 09:00 · 1 hodina"].exists)
         XCTAssertTrue(app.staticTexts["Příjezd 10:00–11:00"].exists)
         app.swipeUp()
         XCTAssertTrue(app.staticTexts["Ventil čeká na výměnu"].waitForExistence(timeout: 10))

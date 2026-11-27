@@ -1,0 +1,140 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {api} from '../worker/api.js';
+import {environment, people, request} from './fixtures.mjs';
+
+const prague = ms => new Intl.DateTimeFormat('en-CA', {timeZone:'Europe/Prague'}).format(new Date(ms));
+const addDays = (iso, days) => {
+  const [year, month, day] = iso.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+};
+function workWindow(now){
+  for(let back = 3; back <= 20; back++){
+    const startAt = now - back * 3600000, endAt = startAt + 20 * 60 * 1000, later = endAt + 30 * 60 * 1000;
+    if(later < now && now - startAt < 86400000 && prague(startAt) === prague(later)) return {startAt, endAt};
+  }
+  throw new Error('Nepodařilo se zvolit pracovní interval v jednom kalendářním dni.');
+}
+
+test('Multi-day job stays on every planned calendar day, one finished day does not close it, and work time can be added, bounded, or removed', async()=>{
+  const env = environment();
+  const ctx = {waitUntil(task){return task.catch(()=>{});}};
+  const call = async(path, person = people.owner, method = 'GET', data) => {
+    const response = await api(request(path, person, method, data), env, ctx);
+    return {status:response.status, ...await response.json()};
+  };
+  try{
+    assert.equal((await call('/api/me')).status, 200);
+    assert.equal((await call('/api/invitations', people.owner, 'POST', {email:people.worker.email, role:'worker'})).status, 200);
+    assert.equal((await call('/api/me', people.worker)).status, 200);
+    const {startAt, endAt} = workWindow(Date.now()), day = prague(startAt);
+    const dates = [day, addDays(day, 1), addDays(day, 3), addDays(day, 4)], gap = addDays(day, 2);
+    const id = 'multi-day-job';
+    const terms = dates.map((date, index) => ({date, start:index === 3 ? '08:00' : '07:00', end:index === 3 ? '12:00' : '15:00', people:[people.owner.id, people.worker.id], note:index === 3 ? 'Kratší den' : '', status:'planned'}));
+    const created = await call('/api/jobs/' + id, people.owner, 'PUT', {version:0, title:'Realizace závlahy', jobType:'installation', status:'planned', dueDate:dates[0], assignedTo:people.owner.id, assignedTos:[people.owner.id, people.worker.id], terms});
+    assert.equal(created.status, 200, JSON.stringify(created));
+    const listed = async date => call('/api/jobs?order=schedule&state=all&month=' + date.slice(0, 7) + '&day=' + date);
+    for(const date of dates){
+      const page = await listed(date);
+      assert.equal(page.status, 200, JSON.stringify(page));
+      assert.equal(page.jobs.filter(job => job.id === id).length, 1, date);
+      assert.equal(page.jobs.find(job => job.id === id).schedule.days, 4, date);
+      assert.ok(page.calendar.days.some(item => item.date === date && item.count >= 1), date);
+    }
+    const absent = await listed(gap);
+    assert.equal(absent.jobs.filter(job => job.id === id).length, 0, gap);
+    assert.equal(absent.calendar.days.some(item => item.date === gap), false);
+    const doneTerms = terms.map((term, index) => index === 0 ? {...term, status:'done'} : term);
+    const finished = await call('/api/jobs/' + id, people.owner, 'PUT', {version:created.job.version, title:'Realizace závlahy', jobType:'installation', status:'planned', dueDate:dates[0], assignedTo:people.owner.id, assignedTos:[people.owner.id, people.worker.id], terms:doneTerms});
+    assert.equal(finished.status, 200, JSON.stringify(finished));
+    assert.equal(finished.job.status, 'planned');
+    const detail = await call('/api/jobs/' + id);
+    assert.equal(detail.job.terms.find(term => term.date === dates[0]).status, 'done');
+    assert.equal(detail.job.terms.filter(term => term.status === 'planned').length, 3);
+    assert.equal((await listed(dates[3])).jobs.find(job => job.id === id).schedule.done, 1);
+    const renamed = await call('/api/jobs/' + id, people.owner, 'PUT', {version:finished.job.version, title:'Realizace závlahy – Bambošová', jobType:'installation', status:'planned', dueDate:dates[0], assignedTo:people.owner.id, assignedTos:[people.owner.id, people.worker.id]});
+    assert.equal(renamed.status, 200, JSON.stringify(renamed));
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM job_terms WHERE job_id=?').get(id).n, 4);
+    const workerVersion = time => time.states.find(state => state.userId === people.worker.id).version;
+    const started = await call('/api/jobs/' + id + '/time/actions', people.worker, 'POST', {operationId:'day-start', action:'work', at:startAt, workers:[{userId:people.worker.id, version:0}]});
+    assert.equal(started.status, 200, JSON.stringify(started));
+    const stopped = await call('/api/jobs/' + id + '/time/actions', people.worker, 'POST', {operationId:'day-stop', action:'stop', at:endAt, workers:[{userId:people.worker.id, version:workerVersion(started)}]});
+    assert.equal(stopped.status, 200, JSON.stringify(stopped));
+    assert.equal(stopped.job.status, 'in_progress');
+    const row = stopped.intervals.find(interval => interval.endAt !== null);
+    assert.equal(row.startAt, startAt);
+    assert.equal(row.endAt, endAt);
+    const worked = await call('/api/jobs/' + id);
+    assert.equal(worked.job.status, 'in_progress');
+    assert.equal(worked.job.terms.find(term => term.date === dates[0]).status, 'done');
+    assert.equal(worked.job.terms.find(term => term.date === day).workedMs, endAt - startAt);
+    assert.equal(worked.job.terms.filter(term => term.date !== day).every(term => term.workedMs === 0), true);
+    const endOnly = row.endAt + 30 * 60 * 1000;
+    const endProposal = {operationId:'end-only', intervalId:row.id, userId:people.worker.id, version:row.version, kind:'work', startAt:row.startAt, endAt:endOnly, reason:'Opravit jen konec'};
+    let proposal = await call('/api/jobs/' + id + '/time/proposals', people.worker, 'POST', endProposal);
+    assert.equal(proposal.status, 200, JSON.stringify(proposal));
+    assert.equal(proposal.intervals.find(interval => interval.id === row.id).startAt, row.startAt);
+    assert.equal(proposal.intervals.find(interval => interval.id === row.id).endAt, row.endAt);
+    assert.equal((await call('/api/jobs/' + id + '/time/reviews/end-only', people.worker, 'POST', {operationId:'end-denied', decision:'approve'})).status, 403);
+    const endApproved = await call('/api/jobs/' + id + '/time/reviews/end-only', people.owner, 'POST', {operationId:'end-approved', decision:'approve'});
+    assert.equal(endApproved.status, 200, JSON.stringify(endApproved));
+    const movedEnd = endApproved.intervals.find(interval => interval.id === row.id);
+    assert.equal(movedEnd.startAt, row.startAt);
+    assert.equal(movedEnd.endAt, endOnly);
+    const startOnly = movedEnd.startAt + 15 * 60 * 1000;
+    proposal = await call('/api/jobs/' + id + '/time/proposals', people.owner, 'POST', {operationId:'start-only', intervalId:movedEnd.id, userId:people.worker.id, version:movedEnd.version, kind:'work', startAt:startOnly, endAt:movedEnd.endAt, reason:'Opravit jen začátek'});
+    assert.equal(proposal.status, 200, JSON.stringify(proposal));
+    const startApproved = await call('/api/jobs/' + id + '/time/reviews/start-only', people.owner, 'POST', {operationId:'start-approved', decision:'approve'});
+    assert.equal(startApproved.status, 200, JSON.stringify(startApproved));
+    const movedStart = startApproved.intervals.find(interval => interval.id === row.id);
+    assert.equal(movedStart.startAt, startOnly);
+    assert.equal(movedStart.endAt, endOnly);
+    const openAt = Date.now() - 30000;
+    const opened = await call('/api/jobs/' + id + '/time/actions', people.worker, 'POST', {operationId:'open-again', action:'work', at:openAt, workers:[{userId:people.worker.id, version:workerVersion(startApproved)}]});
+    assert.equal(opened.status, 200, JSON.stringify(opened));
+    const openRow = opened.intervals.find(interval => interval.endAt === null);
+    const openRemove = await call('/api/jobs/' + id + '/time/proposals', people.worker, 'POST', {operationId:'remove-open', intervalId:openRow.id, userId:people.worker.id, version:openRow.version, remove:true, reason:'Smazat běžící práci'});
+    assert.equal(openRemove.status, 409, JSON.stringify(openRemove));
+    assert.match(openRemove.error, /ukončete|běží/);
+    const blockedDelete = await call('/api/jobs/' + id, people.owner, 'DELETE', {version:opened.job.version});
+    assert.equal(blockedDelete.status, 409, JSON.stringify(blockedDelete));
+    assert.match(blockedDelete.error, /otevřenou pracovní dobu/);
+    const closed = await call('/api/jobs/' + id + '/time/actions', people.worker, 'POST', {operationId:'open-stop', action:'stop', at:openAt + 10000, workers:[{userId:people.worker.id, version:workerVersion(opened)}]});
+    assert.equal(closed.status, 200, JSON.stringify(closed));
+    const second = closed.intervals.find(interval => interval.id !== row.id && interval.endAt !== null);
+    const missing = await call('/api/jobs/' + id + '/time/proposals', people.owner, 'POST', {operationId:'remove-missing', intervalId:'missing-interval', userId:people.worker.id, version:0, remove:true, reason:'Neexistuje'});
+    assert.equal(missing.status, 409, JSON.stringify(missing));
+    const rejected = await call('/api/jobs/' + id + '/time/proposals', people.worker, 'POST', {operationId:'remove-second', intervalId:second.id, userId:people.worker.id, version:second.version, remove:true, reason:'Omyl, ale zamítnout'});
+    assert.equal(rejected.status, 200, JSON.stringify(rejected));
+    assert.equal(JSON.parse(rejected.reviews.find(item => item.id === 'remove-second').proposed).remove, true);
+    assert.equal((await call('/api/jobs/' + id + '/time/reviews/remove-second', people.worker, 'POST', {operationId:'remove-denied', decision:'approve'})).status, 403);
+    const rejection = await call('/api/jobs/' + id + '/time/reviews/remove-second', people.owner, 'POST', {operationId:'remove-rejected', decision:'reject'});
+    assert.equal(rejection.status, 200, JSON.stringify(rejection));
+    assert.ok(rejection.intervals.some(interval => interval.id === second.id));
+    const fresh = rejection.intervals.find(interval => interval.id === row.id);
+    const removed = await call('/api/jobs/' + id + '/time/proposals', people.owner, 'POST', {operationId:'remove-first', intervalId:fresh.id, userId:people.worker.id, version:fresh.version, remove:true, reason:'Chybně zapsaná doba'});
+    assert.equal(removed.status, 200, JSON.stringify(removed));
+    const removal = await call('/api/jobs/' + id + '/time/reviews/remove-first', people.owner, 'POST', {operationId:'remove-approved', decision:'approve'});
+    assert.equal(removal.status, 200, JSON.stringify(removal));
+    assert.equal(removal.intervals.some(interval => interval.id === row.id), false);
+    assert.ok(removal.intervals.some(interval => interval.id === second.id));
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM attendance_shifts').get().n, 1);
+    assert.ok(removal.history.some(event => event.after_value && JSON.parse(event.after_value).remove === true));
+    const afterRemoval = await call('/api/jobs/' + id);
+    assert.equal(afterRemoval.job.terms.find(term => term.date === prague(second.startAt)).workedMs, second.endAt - second.startAt);
+    assert.equal((await call('/api/jobs/' + id, people.worker, 'DELETE', {version:afterRemoval.job.version})).status, 403);
+    const deleted = await call('/api/jobs/' + id, people.owner, 'DELETE', {version:afterRemoval.job.version});
+    assert.equal(deleted.status, 200, JSON.stringify(deleted));
+    assert.equal((await call('/api/jobs/' + id)).status, 404);
+    for(const date of [...dates, gap]) assert.equal((await listed(date)).jobs.filter(job => job.id === id).length, 0, date);
+    const ui = readFileSync('web/job-time-ui.js', 'utf8');
+    const swift = readFileSync('../iphone/NativeAPI/APIJobTime.swift', 'utf8');
+    assert.match(ui, /Navrhnout smazání/);
+    assert.match(ui, /data-time-remove/);
+    assert.match(ui, /remove:true/);
+    assert.match(swift, /Navrhnout smazání/);
+    assert.match(swift, /body\["remove"\] = \.bool\(true\)/);
+    assert.doesNotMatch(swift, /\]=\./);
+  }finally{env.sqlite.close();}
+});

@@ -18,7 +18,15 @@ export function projectJobTime(snapshot,records,jobId){
   });
  }
  result.states=result.states.map(s=>({...s,...states.get(s.userId)}));result.summary=timeSummary(result.intervals,Date.now(),!!result.canManageCosts);result.pending=records.filter(r=>r.kind==='jobTimeAction'&&r.jobId===jobId&&r.pending).map(r=>({id:r.id,payload:r.payload,error:r.error,blocked:r.blocked,conflict:r.conflict}));
- return result;
+ return concealForeignTime(result);
+}
+function concealForeignTime(result){
+ const userId=result.job?.myTime?.userId,see=result.canSeeCrew===true||(result.canSeeCrew==null&&!!(result.canManage||result.canManageCosts));
+ if(see||!userId)return result;
+ result.intervals=(result.intervals||[]).filter(i=>i.userId===userId);
+ if(result.reviews)result.reviews=result.reviews.filter(r=>r.user_id===userId||r.created_by===userId);
+ result.states=(result.states||[]).map(s=>s.userId===userId?s:{...s,active:null,timeVisible:false});
+ result.summary=timeSummary(result.intervals,Date.now(),false);result.canSeeCrew=false;delete result.rates;delete result.history;return result;
 }
 export function createJobTimeClient({all,change,send,request,getSession,isLocked,isPreview,checkWrite}){
  const binding=()=>{const s=getSession();return JSON.stringify([s?.user?.id,s?.user?.role,s?.workspace?.authorizationVersion,s?.workspace?.selectedDiscipline,!!isPreview()]);},assertBinding=who=>{if(who!==binding())throw Object.assign(Error('Přístup se změnil. Otevřete pracovní dobu znovu.'),{status:403,code:'job_time_access_changed'});};

@@ -9,6 +9,8 @@ struct APIRoot:View {
     @State private var outbox=false
     @State private var inbox=false
     @State private var followUp:APIPhoneFollowUp?
+    @State private var assistant=false
+    @StateObject private var assistantMemory=APIAssistantMemory()
     var body:some View {
         ZStack{
             if store.needsPasswordChange{APIPasswordView(store:store,mandatory:true)}
@@ -22,6 +24,9 @@ struct APIRoot:View {
                 }.id(store.presentationID)
             }else{APILogin(store:store)}
             if scenePhase != .active{DiaryStyle.background.ignoresSafeArea().overlay{Text("Pracovní deník").font(.title2.bold())}}
+            if store.authenticated && !store.needsPasswordChange {
+                VStack { Spacer(); HStack { Spacer(); Button { assistant=true } label: { Image(systemName:"sparkles").font(.title2).frame(width:56, height:56).background(DiaryStyle.accent, in:Circle()).foregroundStyle(.white) }.accessibilityLabel("Pracovní asistent").padding(.trailing, 16).padding(.bottom, 72) } }
+            }
         }.tint(DiaryStyle.accent)
             .safeAreaInset(edge:.top,spacing:0){VStack(spacing:0){if store.authenticated && store.isRolePreview{APIRolePreviewBanner(store:store)};if store.authenticated && !store.isRolePreview && (!store.online || !store.outbox.isEmpty){Button{outbox=true}label:{HStack{Image(systemName:store.online ? "arrow.triangle.2.circlepath" : "wifi.slash");Text(store.online ? "\(store.outbox.count) neodeslaných změn" : "Offline · změny zůstávají v iPhonu").font(.caption);Spacer();Image(systemName:"chevron.right")}.padding(12).background(DiaryStyle.soft)}}}}
             .safeAreaInset(edge:.bottom){if store.authenticated,let error=store.error {Text(error).font(.caption).padding(8).background(.regularMaterial).onTapGesture{store.error=nil}}}
@@ -36,6 +41,7 @@ struct APIRoot:View {
             .sheet(isPresented:$inbox){NavigationStack{APIResourceList(store:store,resource:APIResource(entity:.notifications))}}
             .sheet(item:$followUp,onDismiss:{watch.clearFollowUp()}){request in Group{if request.action=="protocol"{APIProtocolEditor(store:store,jobID:request.job.id,completing:true)}else if request.action=="travelSms"{APIDepartureEditor(store:store,job:request.job,composeOnly:true)}else{NavigationStack{APIEntityDetail(store:store,resource:APIResource(entity:.jobs),initial:request.job)}}}}
             .sheet(isPresented:$outbox){NavigationStack{APIOutboxView(store:store)}}
+            .fullScreenCover(isPresented:$assistant){APIAssistantWorkspace(store:store, memory:assistantMemory)}
             .sheet(isPresented:$push.showSettings){NativePushSettings(push:push)}
             .sheet(isPresented:$watch.showSettings){WatchPhoneSettings()}
             .onChange(of:push.inboxRequest){_,_ in openInbox()}

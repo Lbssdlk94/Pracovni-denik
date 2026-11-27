@@ -63,3 +63,13 @@ test('Startup presence is scoped to the current member and follows arrival and d
  set('2026-10-14T14:00:00Z');await punch(env,'startup-end','departure',{shiftId:'startup-arrival',version:1});assert.equal((await(await call(env,'/api/me')).json()).attendance.active,false);
  await punch(env,'startup-again');await call(env,'/api/features',people.owner,'PUT',{features:{...DEFAULT_FEATURES,attendance:false},version:0});assert.equal((await(await call(env,'/api/me')).json()).attendance.active,false);
 }));
+
+test('Only managers receive current staff presence, independently of the selected month or employee',()=>clock(async set=>{
+ const env=await setup();await punch(env,'presence-worker');
+ const arrival=Date.now();const ownerArrival=await call(env,'/api/attendance/punch',people.owner,'POST',{mutationId:'presence-owner',kind:'arrival',gpsStatus:'disabled'});assert.equal(ownerArrival.status,200);
+ for(const role of ['owner','admin']){const r=await(await call(env,'/api/attendance?month=2026-09&userId='+people[role].id,people[role])).json();assert.deepEqual(r.presence,[{userId:people.worker.id,userName:people.worker.email,startAt:arrival}]);assert.equal(r.presenceAsOf,Date.now());}
+ env.sqlite.prepare("UPDATE members SET role='administrator' WHERE user_id=?").run(people.admin.id);
+ assert.equal((await(await call(env,month,people.admin)).json()).presence.length,1);
+ for(const person of [people.worker,people.reader]){const r=await(await call(env,month,person)).json();assert.equal(r.presence,undefined);assert.equal((await call(env,month+'&userId=all',person)).status,403);}
+ set('2026-10-14T08:00:00Z');await punch(env,'presence-end','departure',{shiftId:'presence-worker',version:1});assert.deepEqual((await(await call(env,month,people.owner)).json()).presence,[]);
+}));

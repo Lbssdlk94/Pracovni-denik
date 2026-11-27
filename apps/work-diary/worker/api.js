@@ -1,3 +1,5 @@
+import {handleOfficeFinance} from './office-finance.js';
+import {handleTeamOffice} from './team-office.js';
 import {handleDashboard} from './dashboard.js';
 import {validateRolePreviewRequest,denyRolePreviewMutation} from './role-preview.js';
 import {passwordOnly,handleLocalPublicAuth,handleLocalSelf,handleLocalAccounts} from './local-auth.js';
@@ -37,6 +39,7 @@ import {handleJobDiary} from './job-diary.js';
 import {handleServiceWork} from './service-work.js';
 import {handleServiceReminders} from './service-reminders.js';
 import {handleApprovedImport} from './approved-import.js';
+import {handleCustomerDirectoryImport} from './customer-directory-import.js';
 import {handleCustomers} from './customers.js';
 import {handleNotifications,dispatchNotifications} from './notifications.js';
 import {handleDrive,nativeDriveMember} from './drive.js';
@@ -44,6 +47,7 @@ import {handleJobPhotos} from './job-photos.js';
 import {handleJobs} from './jobs.js';
 import {handleJobTime} from './job-time.js';
 import {handleAssistant} from './assistant.js';
+import {handlePublicInquiry,handleInquiries} from './inquiries.js';
 import {handleBlowout} from './blowout.js';
 import {handleAttendance} from './attendance.js';
 import {DEFAULT_FEATURES,normalizeFeatures,FEATURE_OPTIONS,licensedFeature,featureEnabled} from '../web/features.js';
@@ -52,6 +56,15 @@ const ROLE_NAMES=TEAM_ROLE_NAMES;
 const ROLES=['administrator','admin','worker','reader'];
 class HttpError extends Error{constructor(status,message,extra={}){super(message);this.status=status;this.extra=extra;}}
 const fail=(status,message,extra)=>{throw new HttpError(status,message,extra);};
+export function describeApiFailure(error){
+  const bits=[];
+  const push=value=>{const text=String(value??'').trim();if(!text||text==='undefined'||text==='null'||bits.includes(text))return;bits.push(text);};
+  push(error?.message);push(error?.cause?.message);if(typeof error?.cause==='string')push(error.cause);
+  const detail=bits.join(' — ').slice(0,420);
+  if(/no such table|no such column|D1_ERROR|SQLITE_/i.test(detail))return `Databáze vrátila chybu: ${detail}. Nic se neuložilo.`;
+  if(detail)return detail;
+  return `Požadavek se nepodařilo dokončit (${error?.name||'chyba'}). Server neposlal podrobnost. Nic se neuložilo.`;
+}
 const json=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'}});
 const canWrite=m=>['owner','administrator','admin','worker'].includes(m.role),canManage=m=>['owner','administrator','admin'].includes(m.role);
 const checkWrite=m=>{if(!canWrite(m))fail(403,'Máte oprávnění pouze k prohlížení.');};
@@ -210,11 +223,13 @@ async function workspaceRawApi(request,env,ctx){
     if(['/api/auth/options','/api/auth/login','/api/auth/recover'].includes(path)){await assertInstallation(env);return await handleLocalPublicAuth(request,env,{body,json,fail});}
     if(path==='/api/platform-invitation'){if(await passwordOnly(env))fail(403,'Účty nyní vytváří správce jménem a heslem.');await assertInstallation(env);return await tenantClaimInvitation(request,env,{fail,json,body,userFrom});}
     if(path==='/api/maintenance/volume-fixtures-20261027')return await handleVolumeFixtureCleanup(request,env,{fail,json,accessHash,boundedBytes});
+    if(path==='/api/maintenance/customer-directory-import'){await tenantPlatformGate(request,env,{fail});return await handleCustomerDirectoryImport(request,env,{fail,json,body,accessHash,validId});}
     if(path==='/api/maintenance/approved-job-import'){await tenantPlatformGate(request,env,{fail});
       const response=await handleApprovedImport(request,env,{fail,json,one,cleanText,validId,accessHash,boundedBytes});
       ctx.waitUntil(dispatchNotifications(env).catch(()=>{}));return response;
     }
     if(path==='/api/service-reminders/run'){await assertInstallation(env);const policy=await tenantPolicy(env),shared=await one(env.DB,"SELECT id FROM workspaces WHERE state IN ('active','read_only') LIMIT 1");if(!shared&&policy&&!policy.active)fail(403,'Licence firmy není aktivní.',{code:'license_inactive'});if(!shared&&policy&&!policy.modules.notifications)fail(403,'Upozornění nejsou v licenci.',{code:'module_not_licensed'});ctx.waitUntil(tenantHeartbeat(env).catch(()=>{}));if(await one(env.DB,"SELECT id FROM system_backups WHERE state='restoring' LIMIT 1"))fail(503,'Probíhá obnova instalace.');return await handleServiceReminders(request,env,null,{json,fail,boundedBytes,body});}
+    if(path==='/api/inquiries/public'||path.startsWith('/api/inquiries/public/')){await assertInstallation(env);const response=await handlePublicInquiry(request,env,ctx,{json,fail,body,cleanText,boundedBytes});if(method==='POST'&&path==='/api/inquiries/public'&&response.status===200)ctx.waitUntil(dispatchNotifications(env).catch(()=>{}));return response;}
     if(['/api/access-info','/api/access-link'].includes(path))fail(403,'Přihlášení osobním odkazem bylo zrušeno. Použijte přihlašovací jméno a heslo.',{code:'access_link_disabled'});
     if(path==='/api/platform-initialize'&&method==='POST'){Object.assign(env,await workspaceRequestContext(env,request));
       const supplied=request.headers.get('authorization')?.match(/^Bearer ([A-Za-z0-9_-]{43})$/)?.[1],expected=env.PLATFORM_SERVICE_TOKEN;
@@ -265,6 +280,9 @@ async function workspaceRawApi(request,env,ctx){
     if(path.startsWith('/api/subscriptions')||path.startsWith('/api/tariffs')){const {features}=await featureSettingsOnce();if(!features.subscriptions||!features.jobs||!features.customers)fail(403,'Předplatné, zákazníci nebo zakázky jsou v nastavení vypnuté.',{code:'subscriptions_disabled'});const response=await handleSubscriptions(request,env,m,{body,fail,json,validId,cleanText,boundedBytes});if(method!=='GET')deliver();return response;}
     if(path==='/api/notifications'||path.startsWith('/api/notifications/')){const {features}=await featureSettingsOnce();if(!features.notifications&&!(method==='GET'&&['/api/notifications/subscription','/api/notifications/preferences','/api/notifications/native/config','/api/notifications/native'].includes(path))&&!(method==='DELETE'&&['/api/notifications/subscription','/api/notifications/native'].includes(path)))fail(403,'Upozornění jsou v nastavení týmu vypnutá.');const response=await handleNotifications(request,env,m,{body,fail,json,one,all,execute,features});if(method==='GET'&&path==='/api/notifications'&&!request.headers.get('x-work-diary-preview-role'))deliver();return response;}
     if(path==='/api/customers'||path.startsWith('/api/customers/')){const {features}=await featureSettingsOnce();if(!features.customers)fail(403,'Seznam zákazníků je v nastavení týmu vypnutý.');return await handleCustomers(request,env,m,{all,one,execute,body,fail,json,validId,cleanText,expectedVersion,features});}
+    if(path==='/api/office-finance'||path.startsWith('/api/office-finance/'))return await handleOfficeFinance(request,env,m,{body,fail,json,validId,cleanText,boundedBytes});
+    if(path==='/api/team-office'||path.startsWith('/api/team-office/'))return await handleTeamOffice(request,env,m,{body,fail,json,validId,cleanText,boundedBytes});
+    if(path==='/api/inquiries'||path.startsWith('/api/inquiries/')){const response=await handleInquiries(request,env,m,{all,one,execute,body,fail,json,validId,cleanText,expectedVersion,boundedBytes});if(!['GET','HEAD'].includes(method))deliver();return response;}
     if(path.startsWith('/api/drive/')){const {features}=await featureSettingsOnce();if(!features.googleDrive)fail(403,'Google Disk je v nastavení vypnutý.',{code:'feature_disabled',feature:'googleDrive'});return await handleDrive(request,env,ctx,m,{one,all,execute,body,json,fail,cleanText,boundedBytes});}
     if(/^\/api\/jobs\/[-\w]{1,100}\/photos(?:\/|$)/.test(path)){const {features}=await featureSettingsOnce();if(!features.jobs||!features.drivePhotos)fail(403,'Fotodokumentace zakázek je v nastavení vypnutá.');return await handleJobPhotos(request,env,ctx,m,{one,all,execute,body,boundedBytes,json,fail,cleanText,validId,features,storeOriginal:original=>handleServiceWork(original,env,ctx,m,{body,fail,json,validId,cleanText,boundedBytes,features,galleryPhoto:true})});}
     if(/^\/api\/jobs\/[-\w]+\/handoffs$/.test(path)){const {features}=await featureSettingsOnce();if(!features.jobs)fail(403,'Zakázky jsou vypnuté.');const response=await handleJobHandoffs(request,env,m,{body,fail,json,validId,cleanText});if(method!=='GET')deliver();return response;}
@@ -428,5 +446,5 @@ async function workspaceRawApi(request,env,ctx){
     }
     fail(404,'Požadavek nebyl nalezen.');
   }catch(error){if(new URL(request.url).pathname.startsWith('/api/auth/')||new URL(request.url).pathname.startsWith('/api/local-accounts')){if(String(error?.message).includes('UNIQUE constraint'))return json({error:'Účet nebo přihlašovací jméno se mezitím změnilo. Obnovte údaje.'},409);if(error?.status===503)return json({error:'Přihlašování je vytížené. Zkuste to za chvíli.'},503);}
- if(String(error?.message).includes('workspace_member_capacity'))return json({error:'Limit členů nebo pozvánek je v jednom z pracovních oborů vyčerpaný. Upravte příslušnost nebo licenci.',code:'workspace_member_capacity'},409);if(String(error?.message).includes('workspace_'))return json({error:'Změna neodpovídá aktuálnímu oboru nebo oprávnění. Obnovte údaje.',code:'workspace_conflict'},409);if(error instanceof HttpError)return json({error:error.message,...error.extra},error.status);console.error('Team API error',error?.name,error?.message);return json({error:'Týmové úložiště není dostupné. Zkuste to za chvíli.'},503);}
+ if(String(error?.message).includes('workspace_member_capacity'))return json({error:'Limit členů nebo pozvánek je v jednom z pracovních oborů vyčerpaný. Upravte příslušnost nebo licenci.',code:'workspace_member_capacity'},409);if(String(error?.message).includes('workspace_'))return json({error:'Změna neodpovídá aktuálnímu oboru nebo oprávnění. Obnovte údaje.',code:'workspace_conflict'},409);if(error instanceof HttpError)return json({error:error.message,...error.extra},error.status);console.error('Team API error',error?.name,error?.message,error?.stack);return json({error:describeApiFailure(error),code:'internal_error'},500);}
 }

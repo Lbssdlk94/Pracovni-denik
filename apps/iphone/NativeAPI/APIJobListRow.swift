@@ -52,6 +52,7 @@ struct APIJobListRow:View {
             HStack(alignment:.firstTextBaseline,spacing:6){Text(APIJobsPresentation.title(current)).font(.headline).foregroundStyle(.primary).lineLimit(typeSize.isAccessibilitySize ? nil : 2);Spacer(minLength:2);statusBadge;Image(systemName:"chevron.right").font(.caption2).foregroundStyle(.secondary).accessibilityHidden(true)}
             if let subtitle=APIJobsPresentation.subtitle(current){Text(subtitle).font(.caption.weight(.medium)).foregroundStyle(.primary).lineLimit(typeSize.isAccessibilitySize ? nil : 1)}
             Text(typeTitle+(current["discipline"].string.isEmpty ? "" : current["discipline"].string=="garden" ? " · Garden" : " · Závlaha")+" · "+APIJobsPresentation.appointment(current)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal:false,vertical:true)
+            if current["schedule"]["days"].int>1 {Text("Vícedenní · \(current["schedule"]["days"].int) \(current["schedule"]["days"].int<5 ? "dny" : "dní") · \(current["schedule"]["done"].int) dokončeno").font(.caption.weight(.semibold)).foregroundStyle(DiaryStyle.accent)}
             if !current["address"].string.isEmpty{Label(current["address"].string,systemImage:"mappin").font(.caption).foregroundStyle(.secondary).lineLimit(typeSize.isAccessibilitySize ? nil : 1)}
             summaryMetrics
             if !current["completionPercent"].isNull{ProgressView(value:min(100,max(0,current["completionPercent"].double)),total:100).tint(DiaryStyle.accent).accessibilityHidden(true)}
@@ -75,7 +76,7 @@ struct APIJobListRow:View {
     private var statusBadge:some View{
         let status=current["status"].string
         let color:Color=status=="done" ? .green : status=="on_way" ? .blue : status=="incomplete" ? DiaryStyle.warning : DiaryStyle.accent
-        return Text(current["serviceApproval"].string=="pending" ? "Ke schválení" : status=="incomplete" ? "Nelze dokončit" : APIFormat.status(status)).font(.caption2.weight(.semibold)).foregroundStyle(.primary).padding(.horizontal,7).padding(.vertical,4).background(color.opacity(0.12),in:Capsule()).fixedSize(horizontal:false,vertical:true)
+        return Text(current["serviceApproval"].string=="pending" ? "Ke schválení" : status=="incomplete" ? "Nelze dokončit" : APIJobsPresentation.statusText(current)).font(.caption2.weight(.semibold)).foregroundStyle(.primary).padding(.horizontal,7).padding(.vertical,4).background(color.opacity(0.12),in:Capsule()).fixedSize(horizontal:false,vertical:true)
     }
     private var crew:some View{
         let names=Dictionary(current["handoffs"].array.map{($0["userId"].string,$0["name"].string)},uniquingKeysWith:{$1})
