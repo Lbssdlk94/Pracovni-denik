@@ -31,7 +31,7 @@ async function passwordSession(env,userId,version,request){
  return r.meta.changes?token:null;
 }
 async function standaloneOwnerHash(env,username){
- if(!env.STANDALONE_PASSWORD_AUTH||!env.STANDALONE_OWNER_PASSWORD_HASH||username!==env.TEAM_OWNER_EMAIL?.trim().toLowerCase())return null;
+ if(!env.STANDALONE_OWNER_PASSWORD_HASH||username!==env.TEAM_OWNER_EMAIL?.trim().toLowerCase())return null;
  const owner=await authOne(env,"SELECT m.user_id,m.email,c.user_id AS has_credentials FROM members m LEFT JOIN local_credentials c ON c.user_id=m.user_id WHERE m.role='owner' LIMIT 1");
  if(owner&&(owner.email.toLowerCase()!==username||owner.has_credentials))return null;
  return env.STANDALONE_OWNER_PASSWORD_HASH;

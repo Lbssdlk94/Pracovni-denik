@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {environment,people,request} from '../tests/fixtures.mjs';
+import {hashLocalPassword} from '../worker/password-crypto.js';
 
 const source=await readFile('dist/server/index.js','utf8');
 const hosting=JSON.parse(await readFile('dist/.openai/hosting.json','utf8'));
@@ -44,5 +45,20 @@ async function validateCloudflareLogin(){
   assert.equal(response.status,200,route+': '+await response.clone().text());
   if(route==='/api/me'){const {user}=await response.json();assert.equal(user.role,'owner');assert.equal(user.email,people.owner.email);}
  }
- console.log('PASS Cloudflare Access identity, owner bootstrap, spoofed-header rejection and protected API on isolated SQLite/R2.');
+ const owner=fixture.sqlite.prepare("SELECT user_id FROM members WHERE role='owner'").get();
+ ctx.access=undefined;
+ const temporary='Temporary-test-owner-9347';
+ const login=password=>fetchWorker('/api/auth/login',null,'POST',{username:people.owner.email,password});
+ assert.equal((await login(temporary)).status,401);
+ fixture.STANDALONE_OWNER_PASSWORD_HASH=await hashLocalPassword(temporary);
+ assert.equal((await login('incorrect-password')).status,401);
+ const opened=await login(temporary);
+ assert.equal(opened.status,200,await opened.clone().text());
+ const loginInfo=await opened.json();
+ assert.equal(loginInfo.userId,owner.user_id);
+ assert.equal(loginInfo.mustChange,true);
+ const cookie=opened.headers.get('set-cookie').split(';')[0];
+ const locked=await fetchWorker('/api/jobs',null,'GET',undefined,{cookie});
+ assert.equal((await locked.json()).code,'password_change_required');
+ console.log('PASS Cloudflare Access identity, password setup without Access, spoofed-header rejection and protected API on isolated SQLite/R2.');
 }
