@@ -15,14 +15,31 @@ Pro jistotu jsou zachované tyto větve:
 
 Žádná z nich nemění `main` ani stávající Sites nasazení. Kopie v GitHubu není záloha produkční databáze ani R2 souborů.
 
+## Přihlášení na testovací web mimo ChatGPT
+
+Testovací Worker zobrazuje český formulář pro uživatelské jméno a heslo na své standardní HTTPS adrese. Účty s nastaveným heslem se přihlásí svými stávajícími údaji v testovací databázi.
+
+Pro první přihlášení vlastníka bez nastaveného hesla postupujte v `apps/work-diary` po `npm ci`:
+
+```bash
+read -rs -p 'Dočasné heslo vlastníka: ' diary_owner_password
+printf '\n'
+printf '%s' "$diary_owner_password" | node scripts/hash-standalone-owner-password.mjs | npx wrangler secret put STANDALONE_OWNER_PASSWORD_HASH
+unset diary_owner_password
+```
+
+Použijte náhodné dočasné heslo ze správce hesel. Jako uživatelské jméno vlastník zadá hodnotu `TEAM_OWNER_EMAIL` z `wrangler.toml`. Při prvním přihlášení ho aplikace vyzve ke změně dočasného hesla. Po úspěšné změně odstraňte `STANDALONE_OWNER_PASSWORD_HASH` z Workeru. Další účty může vlastník vytvořit v sekci Tým.
+
+Pokud je na testovací adrese zapnutý Cloudflare Access, návštěvník nejprve projde jeho ověřením. Pro zobrazení formuláře přímo po otevření adresy vypněte Access pouze pro testovací Worker po ověření nasazené verze. Cloudflare spravuje toto nastavení mimo GitHub.
+
 ## Postup testu
 
 ### 1. Založit oddělený testovací backend
 
 1. V Cloudflare účtu Info@drzavlaha.cz jsou založené prázdná D1 `work-diary-test-db` a soukromý R2 bucket `work-diary-test-files`. První Worker nasadit bez veřejné URL.
-2. Pracovní větev připravuje izolovaný instalační balíček, statický testovací ID instalace a Wrangler konfiguraci pro tato dvě prostředí. Build vloží ověřovací vrstvu Cloudflare Access; bez ověřené Access identity Worker vrací 403. Tajemství nejsou v repozitáři.
+2. Pracovní větev připravuje izolovaný instalační balíček, statický testovací ID instalace a Wrangler konfiguraci pro tato dvě prostředí. Build používá vlastní přihlášení deníku jménem a heslem. Tajemství nejsou v repozitáři.
 3. Spustit jednu čistou počáteční migraci pouze na nové prázdné D1. Nepoužívat původní Sites DB ani jiné R2.
-4. Až bude Worker vytvořen, před zapnutím `workers.dev` na něj v Cloudflare připojit Access a omezit přihlášení na firemní identity. Poté ověřit načtení webu, přihlášení, základní čtení/zápis a soukromý upload souboru. V aplikaci použít pouze testovací data.
+4. Po nasazení nové verze na `workers.dev` nastavit první přístup vlastníka podle návodu výše. Poté ověřit načtení webu, přihlášení, základní čtení/zápis a soukromý upload souboru. V aplikaci použít pouze testovací data.
 
 ### 2. Připojit obě webové varianty k testovacímu API
 
@@ -48,7 +65,7 @@ Ostré přepnutí není součástí testu. Až staging projde ověřením, napl�
 
 - Připojit Cloudflare Workers Builds k soukromému repozitáři `Lbssdlk94/Pracovni-denik` na pracovní větvi `migration/cloudflare-test-9e80f6c`; před potvrzením přístupu ověřit požadovaný rozsah oprávnění.
 - Záloha databáze a soubory z Sites. V repozitáři ani v záložních větvích nejsou.
-- Cloudflare Access v Zero Trust a testovací URL `workers.dev`; Access identita bude do aplikace předána pouze z ověřeného Worker kontextu.
+- Testovací URL `workers.dev` a účet vlastníka s nastaveným heslem v testovací instalaci.
 - Po testu schválený čas a postup produkčního přepnutí. Do té doby zůstává aktuální Sites provoz zdrojem pravdy.
 
 ## Kontrola změn

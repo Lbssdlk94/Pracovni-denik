@@ -624,19 +624,10 @@ async function applyDeparture(env, m, h, params){
   if(!result.ok) return {reply:result.data.error||'Odjezd se nepodařilo zapsat.'};
   return {reply:`U zakázky „${result.data.job?.title||''}“ je stav na cestě, příjezd ${params.arrivalDate} v ${params.arrivalTime}.`, mutated:'jobs'};
 }
-async function loadJobTime(env, m, h, jobId){
-  let jobTime = null;
-  try{({handleJobTime:jobTime} = await import('./job-time.js'));}
-  catch{jobTime = typeof handleJobTime==='function' ? handleJobTime : null;}
-  if(typeof jobTime!=='function') return {error:'Pracovní interval v téhle evidenci nemám. Docházku ani zakázku jsem nezměnil.'};
-  return {jobTime};
-}
 async function readJobTime(env, m, h, jobId){
-  const loaded = await loadJobTime(env, m, h, jobId);
-  if(loaded.error) return loaded;
-  const result = await callJson(()=>loaded.jobTime(get('/api/jobs/'+encodeURIComponent(jobId)+'/time', h._headers), env, m, h));
+  const result = await callJson(()=>handleJobTime(get('/api/jobs/'+encodeURIComponent(jobId)+'/time', h._headers), env, m, h));
   if(!result.ok) return {error:blocked(result)||result.data?.error||'Pracovní dobu se nepodařilo načíst. Nic jsem nezapsal.'};
-  return {data:result.data, jobTime:loaded.jobTime};
+  return {data:result.data, jobTime:handleJobTime};
 }
 async function spokenJob(env, m, h, params, options){
   if(params.query){

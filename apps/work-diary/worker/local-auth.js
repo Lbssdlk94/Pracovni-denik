@@ -8,7 +8,7 @@ const authHash=async value=>Array.from(new Uint8Array(await crypto.subtle.digest
 const authRandom=()=>Array.from(crypto.getRandomValues(new Uint8Array(32)),v=>v.toString(16).padStart(2,'0')).join('');
 const authOne=(env,sql,...args)=>env.DB.prepare(sql).bind(...args).first();
 const authCookie=(response,token)=>{response.headers.set('set-cookie',AUTH_COOKIE+'='+token+'; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age='+30*86400);return response;};
-export async function passwordOnly(env){return (await authOne(env,"SELECT value FROM settings WHERE key='local-auth-mode'"))?.value==='password';}
+export async function passwordOnly(env){return env.STANDALONE_PASSWORD_AUTH||(await authOne(env,"SELECT value FROM settings WHERE key='local-auth-mode'"))?.value==='password';}
 const authAudit=(env,actor,subject,kind)=>env.DB.prepare('INSERT INTO local_auth_events(id,actor_id,subject_id,kind,at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(),actor,subject,kind,Date.now());
 async function authRate(request,env,username,fail){
  const window=Math.floor(Date.now()/900000),ip=await authHash(request.headers.get('cf-connecting-ip')||'unknown'),name=await authHash(username);
@@ -30,6 +30,21 @@ async function passwordSession(env,userId,version,request){
  const r=await env.DB.prepare("INSERT INTO access_sessions(id,user_id,token_hash,created_at,expires_at,last_seen_at,agent,auth_method,password_version) SELECT ?,c.user_id,?,?,?+CASE WHEN m.role IN ('owner','administrator','admin') THEN 604800000 ELSE 2592000000 END,?,?,'password',c.version FROM local_credentials c JOIN members m ON m.user_id=c.user_id WHERE c.user_id=? AND c.version=?").bind(id,hash,now,now,now,(request.headers.get('user-agent')||'Zařízení').slice(0,240),userId,version).run();
  return r.meta.changes?token:null;
 }
+async function standaloneOwnerHash(env,username){
+ if(!env.STANDALONE_PASSWORD_AUTH||!env.STANDALONE_OWNER_PASSWORD_HASH||username!==env.TEAM_OWNER_EMAIL?.trim().toLowerCase())return null;
+ const owner=await authOne(env,"SELECT m.user_id,m.email,c.user_id AS has_credentials FROM members m LEFT JOIN local_credentials c ON c.user_id=m.user_id WHERE m.role='owner' LIMIT 1");
+ if(owner&&(owner.email.toLowerCase()!==username||owner.has_credentials))return null;
+ return env.STANDALONE_OWNER_PASSWORD_HASH;
+}
+async function bootstrapStandaloneOwner(env,username,hash){
+ const now=Date.now(),newId='local-'+crypto.randomUUID();
+ await env.DB.batch([
+  env.DB.prepare("INSERT OR IGNORE INTO members(user_id,email,name,role,created_at) SELECT ?,?,?,'owner',? WHERE NOT EXISTS(SELECT 1 FROM members WHERE role='owner') AND NOT EXISTS(SELECT 1 FROM local_credentials WHERE username=?)").bind(newId,username,username,now,username),
+  env.DB.prepare("INSERT OR IGNORE INTO local_credentials(user_id,username,password_hash,must_change,updated_at,updated_by) SELECT user_id,?,?,1,?,user_id FROM members WHERE role='owner' AND lower(email)=?").bind(username,hash,now,username)
+ ]);
+ const row=await authOne(env,"SELECT c.*,m.role FROM local_credentials c JOIN members m ON m.user_id=c.user_id WHERE c.username=? AND m.role='owner'",username);
+ return row?.password_hash===hash?row:null;
+}
 export async function handleLocalPublicAuth(request,env,h){
  const {body,json,fail}=h,path=new URL(request.url).pathname;
  if(path==='/api/auth/recover')fail(403,'Zapomenuté heslo může obnovit pouze administrátor firmy.',{code:'administrator_reset_required'});
@@ -37,9 +52,12 @@ export async function handleLocalPublicAuth(request,env,h){
  if(request.method!=='POST')fail(405,'Nepodporovaná operace.');
  const b=await body(request,2500);let username;try{username=localUsername(b.username);}catch{badLogin(fail);}
  await authRate(request,env,username,fail);
- const row=await authOne(env,'SELECT c.*,m.role FROM local_credentials c JOIN members m ON m.user_id=c.user_id WHERE c.username=?',username);
  if(path!=='/api/auth/login'||Object.keys(b).some(k=>!['username','password','preview','expectedUserId','expectedVersion'].includes(k))||typeof b.password!=='string'||b.preview!==undefined&&typeof b.preview!=='boolean')badLogin(fail);
- const ok=await verifyLocalPassword(b.password,row?.password_hash);if(!row||!ok)badLogin(fail);
+ const existing=await authOne(env,'SELECT c.*,m.role FROM local_credentials c JOIN members m ON m.user_id=c.user_id WHERE c.username=?',username);
+ const hash=existing?.password_hash??await standaloneOwnerHash(env,username);
+ if(!await verifyLocalPassword(b.password,hash))badLogin(fail);
+ const row=existing||await bootstrapStandaloneOwner(env,username,hash);
+ if(!row)badLogin(fail);
  if(!await authOne(env,'SELECT 1 FROM local_credentials WHERE user_id=? AND version=? AND password_hash=?',row.user_id,row.version,row.password_hash))badLogin(fail);
  const info={...await authIdentity(env,row.user_id),mustChange:!!row.must_change,credentialVersion:row.version};if(b.preview===true)return json(info);
  if((b.expectedUserId!==undefined&&b.expectedUserId!==row.user_id)||(b.expectedVersion!==undefined&&b.expectedVersion!==row.version))fail(409,'Přihlašovací údaje se mezitím změnily. Přihlaste se znovu.');
@@ -49,7 +67,7 @@ export async function handleLocalPublicAuth(request,env,h){
 export async function handleLocalSelf(request,env,m,h){
  const {body,json,fail}=h,path=new URL(request.url).pathname,creds=await authOne(env,'SELECT * FROM local_credentials WHERE user_id=?',m.user_id);
  if(path==='/api/auth/account'&&request.method==='GET'){
-  const policy=await authOne(env,"SELECT value,version FROM settings WHERE key='local-auth-mode'");return json({username:creds?.username||'',hasPassword:!!creds,version:creds?.version||0,mustChange:!!creds?.must_change,linkAllowed:false,legacyAllowed:policy?.value!=='password',policyVersion:policy?.version||0,canManagePolicy:m.role==='owner'});
+  const policy=await authOne(env,"SELECT value,version FROM settings WHERE key='local-auth-mode'");return json({username:creds?.username||'',hasPassword:!!creds,version:creds?.version||0,mustChange:!!creds?.must_change,linkAllowed:false,legacyAllowed:!env.STANDALONE_PASSWORD_AUTH&&policy?.value!=='password',policyVersion:policy?.version||0,canManagePolicy:!env.STANDALONE_PASSWORD_AUTH&&m.role==='owner'});
  }
  if(path==='/api/auth/password'&&request.method==='PUT'){
   const b=await body(request,3000);if(Object.keys(b).some(k=>!['username','password','currentPassword','version'].includes(k))||b.version!==(creds?.version||0))fail(409,'Účet se mezitím změnil. Obnovte nastavení.');
@@ -62,6 +80,7 @@ export async function handleLocalSelf(request,env,m,h){
   return authCookie(json({ok:true}),token);
  }
  if(path==='/api/auth/policy'&&request.method==='PUT'){
+  if(env.STANDALONE_PASSWORD_AUTH)fail(403,'Tato instalace používá přihlašovací jméno a heslo.');
   if(m.role!=='owner'||m._authMethod!=='password'||!creds||creds.must_change)fail(403,'Způsob přihlášení nastavuje vlastník po přihlášení vlastním heslem.');
   const b=await body(request,2000);if(!['password','transition'].includes(b.mode)||!Number.isSafeInteger(b.version)||Object.keys(b).some(k=>!['mode','version','currentPassword'].includes(k)))fail(400,'Zkontrolujte nastavení přihlášení.');
   if(!await verifyLocalPassword(b.currentPassword,creds.password_hash))fail(401,'Současné heslo nesouhlasí.');

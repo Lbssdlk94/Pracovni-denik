@@ -20,4 +20,5 @@ migrations_dir = "cloudflare-migrations"
 binding = "BUCKET"
 bucket_name = "work-diary-test-files"
 
-# Test endpoint is protected by Cloudflare Access on the existing Worker.
+# The Worker serves the sign-in page and authenticates app sessions.
+# Provision STANDALONE_OWNER_PASSWORD_HASH as a Worker secret for first sign-in.
