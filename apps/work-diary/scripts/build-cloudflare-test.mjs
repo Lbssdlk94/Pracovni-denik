@@ -1,0 +1,30 @@
+import {cp,mkdir,rm,writeFile} from 'node:fs/promises';
+import path from 'node:path';
+import {tmpdir} from 'node:os';
+import {spawnSync} from 'node:child_process';
+import {prepareCompanyInstallation} from './prepare-company-installation.mjs';
+
+const root=process.cwd();
+const out=path.join(tmpdir(),'work-diary-cloudflare-test-installation');
+const instanceId='inst-workdiary-cf-test-20261127';
+const run=(command,args,cwd)=>{
+  const result=spawnSync(command,args,{cwd,stdio:'inherit'});
+  if(result.error)throw result.error;
+  if(result.status!==0)throw new Error(command+' exited with '+result.status);
+};
+await rm(out,{recursive:true,force:true});
+await rm(path.join(root,'dist'),{recursive:true,force:true});
+await rm(path.join(root,'cloudflare-migrations'),{recursive:true,force:true});
+await prepareCompanyInstallation({name:'Závlahový deník – TEST',owner:'info@drzavlaha.cz',out},{root});
+await writeFile(path.join(out,'.openai/installation.json'),JSON.stringify({instanceId},null,2)+'\n');
+await cp(path.join(root,'wrangler.toml'),path.join(out,'wrangler.toml'));
+const generatedMigration=path.join(out,'drizzle/0000_company_schema.sql');
+const generatedMigrations=path.join(out,'migrations');
+await mkdir(generatedMigrations,{recursive:true});
+await cp(generatedMigration,path.join(generatedMigrations,'0001_initial.sql'));
+run('npm',['ci'],out);
+run(process.execPath,['scripts/build.mjs'],out);
+run(process.execPath,['scripts/validate-artifact.mjs','--allow-unbound'],out);
+await cp(path.join(out,'dist'),path.join(root,'dist'),{recursive:true});
+await cp(generatedMigrations,path.join(root,'cloudflare-migrations'),{recursive:true});
+console.log('Built and validated the isolated Cloudflare test Worker.');
