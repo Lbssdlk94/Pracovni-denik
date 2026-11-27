@@ -6,7 +6,6 @@ workers_dev = true
 preview_urls = false
 
 [vars]
-STANDALONE_PASSWORD_AUTH = "1"
 COMPANY_NAME = "Závlahový deník – TEST"
 TEAM_OWNER_EMAIL = "info@drzavlaha.cz"
 INSTALLATION_ID = "inst-workdiary-cf-test-20261127"
@@ -21,5 +20,4 @@ migrations_dir = "cloudflare-migrations"
 binding = "BUCKET"
 bucket_name = "work-diary-test-files"
 
-# The Worker serves the sign-in page and authenticates app sessions.
-# Provision STANDALONE_OWNER_PASSWORD_HASH as a Worker secret for first sign-in.
+# Cloudflare Access provides the identity for this isolated test Worker.
