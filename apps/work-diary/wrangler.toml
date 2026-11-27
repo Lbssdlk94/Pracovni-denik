@@ -1,8 +1,8 @@
-name = "work-diary-test"
+name = "pracovni-denik"
 main = "dist/server/index.js"
 compatibility_date = "2026-11-27"
 compatibility_flags = ["nodejs_compat"]
-workers_dev = false
+workers_dev = true
 preview_urls = false
 
 [vars]
