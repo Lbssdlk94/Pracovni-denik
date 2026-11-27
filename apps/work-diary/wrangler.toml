@@ -1,0 +1,21 @@
+name = "work-diary-test"
+main = "dist/server/index.js"
+compatibility_date = "2026-11-27"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = false
+preview_urls = false
+
+[vars]
+COMPANY_NAME = "Závlahový deník – TEST"
+TEAM_OWNER_EMAIL = "info@drzavlaha.cz"
+INSTALLATION_ID = "inst-workdiary-cf-test-20261127"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "work-diary-test-db"
+database_id = "ad96137f-8be3-4450-92b5-95f7ba5bfb3c"
+migrations_dir = "cloudflare-migrations"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "work-diary-test-files"
