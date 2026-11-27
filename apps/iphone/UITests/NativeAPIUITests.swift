@@ -96,3 +96,49 @@ final class NativeAPIUITests:XCTestCase {
     }
 
 }
+
+final class NativeOfficeUITests: XCTestCase {
+    func testOpenInquiryAndPreviewCustomerImport() {
+        let app = launch()
+        app.tabBars.buttons["Více"].tap()
+        tap("Poptávky", in: app)
+        let request = app.staticTexts["Marie Nováková"].firstMatch
+        XCTAssertTrue(request.waitForExistence(timeout: 10)); request.tap()
+        XCTAssertTrue(app.navigationBars["P-1001"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Uložit změny"].exists)
+        app.tabBars.buttons["Zákazníci"].tap()
+        tap("Import tabulky", in: app)
+        XCTAssertTrue(app.buttons["Vybrat tabulku ze Souborů"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.webViews.count, 0)
+    }
+
+    func testCreatePurchaseInFinance() {
+        let app = launch()
+        app.tabBars.buttons["Více"].tap()
+        tap("Finance", in: app); tap("Nákupy", in: app); tap("Přidat záznam", in: app)
+        let title = app.textFields["Název"]
+        XCTAssertTrue(title.waitForExistence(timeout: 8)); title.tap(); title.typeText("Spojky")
+        if app.keyboards.buttons["Return"].exists { app.keyboards.buttons["Return"].tap() }
+        tap("Uložit", in: app)
+        XCTAssertTrue(app.staticTexts["Spojky"].firstMatch.waitForExistence(timeout: 10))
+        XCTAssertEqual(app.webViews.count, 0)
+    }
+
+    private func launch() -> XCUIApplication {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["--native-api-testing"]
+        app.launch()
+        XCTAssertTrue(app.tabBars.buttons["Více"].waitForExistence(timeout: 15))
+        return app
+    }
+
+    private func tap(_ label: String, in app: XCUIApplication) {
+        let button = app.buttons[label].firstMatch
+        for _ in 0..<7 {
+            if button.exists && button.isHittable { button.tap(); return }
+            app.swipeUp()
+        }
+        XCTFail("Chybí tlačítko " + label)
+    }
+}

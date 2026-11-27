@@ -143,6 +143,7 @@ struct APIOfficeList: View {
     @ObservedObject var store: APIStore
     let kind: OfficeKind
     let month: String
+    var linkedJob: APIValue = .null
     @State private var records: [APIValue] = []
     @State private var options: APIValue = .null
     @State private var finance: APIValue = .null
@@ -183,7 +184,7 @@ struct APIOfficeList: View {
             }
         }
         .sheet(isPresented: $creating, onDismiss: { Task { await load() } }) {
-            APIOfficeEditor(store: store, kind: kind, options: options, finance: finance)
+            APIOfficeEditor(store: store, kind: kind, options: options, finance: finance, linkedJob: linkedJob)
         }
         .confirmationDialog("Připravit pravidelné doklady na " + month + "?", isPresented: $prepare) {
             Button("Připravit doklady") { Task {
@@ -207,7 +208,7 @@ struct APIOfficeList: View {
                 records = result["records"].array
             } else {
                 finance = try await store.get(kind.base + (store.manager ? "?month=" + month : "?view=advances"), refresh: true)
-                records = finance["items"].array.filter { $0["kind"].string == kind.rawValue }
+                records = finance["items"].array.filter { $0["kind"].string == kind.rawValue && (linkedJob.isNull || $0["jobId"].string == linkedJob.id) }
             }
             problem = ""
         } catch { problem = error.localizedDescription }

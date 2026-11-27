@@ -12,6 +12,8 @@ struct APIResourceList: View {
     @StateObject private var location=APILocation()
     @State private var categories:[APIValue]=[]
     @State private var category=""
+    @State private var contactKind = ""
+    @State private var includeArchived = false
     @State private var onlyMine = false
     @State private var directorySaved:APIValue = .null
     private var serverSearch:Bool{[APIEntity.customers,.jobs].contains(resource.entity)}
@@ -38,6 +40,17 @@ struct APIResourceList: View {
         }.listStyle(.insetGrouped).scrollContentBackground(.hidden).background(DiaryStyle.background)
             .navigationTitle(resource.title).navigationBarTitleDisplayMode(.inline).searchable(text:$query,prompt:"Hledat")
             .toolbar {
+                if resource.entity == .customers {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            Picker("Typ kontaktu", selection: $contactKind) {
+                                Text("Všechny kontakty").tag(""); Text("Zákazníci").tag("customer")
+                                Text("Dodavatelé").tag("supplier"); Text("Zákazníci i dodavatelé").tag("both")
+                            }
+                            Toggle("Včetně archivovaných", isOn: $includeArchived)
+                        } label: { Label("Filtry adresáře", systemImage: "line.3.horizontal.decrease.circle") }
+                    }
+                }
                 if store.manager && !store.isRolePreview && [.customers, .materials].contains(resource.entity) {
                     ToolbarItem(placement: .topBarLeading) {
                         NavigationLink { APISpreadsheetImport(store: store, materials: resource.entity == .materials) }
@@ -45,7 +58,7 @@ struct APIResourceList: View {
                     }
                 }
                 if resource.entity.canCreate && resource.editable(store) { ToolbarItem(placement:.topBarTrailing) { Button { create() } label:{Image(systemName:"plus")}.accessibilityLabel("Přidat záznam") } } }
-            .task(id:store.scope+store.revision.uuidString+(serverSearch || resource.entity == .materials ? query : "")) { await load() }.refreshable { await store.resume(refreshViews:false);await load() }
+            .task(id:store.scope+store.revision.uuidString+contactKind+String(includeArchived)+(serverSearch || resource.entity == .materials ? query : "")) { await load() }.refreshable { await store.resume(refreshViews:false);await load() }
     }
     func create() {
         if resource.entity == .subscriptions { store.route = APIRoute(resource:resource,value:resource.initial(store),isNew:true) }
@@ -55,6 +68,12 @@ struct APIResourceList: View {
         if more && loading{return};let ticket=UUID();requestID=ticket;loading=true;defer{if requestID==ticket{loading=false}};let scope=store.scope
         do {
             var c=URLComponents(string:resource.listPath)!
+            if resource.entity == .customers {
+                var params = c.queryItems ?? []
+                if !contactKind.isEmpty { params.append(URLQueryItem(name: "contactKind", value: contactKind)) }
+                if includeArchived { params.append(URLQueryItem(name: "includeArchived", value: "1")) }
+                if !params.isEmpty { c.queryItems = params }
+            }
             if serverSearch && !query.isEmpty{if !more{try await Task.sleep(for:.milliseconds(300))};var q=c.queryItems ?? [];q.append(URLQueryItem(name:"q",value:String(query.prefix(100))));c.queryItems=q}
             if more { var q=c.queryItems ?? [];q.append(URLQueryItem(name:resource.entity == .materials ? "after" : "cursor",value:cursor));c.queryItems=q }
             let page=try await store.get(c.string!)
@@ -83,6 +102,10 @@ struct APIRecordRow: View {
                     Text([APIFormat.status(value["status"].string),value["dueDate"].string,value["plannedStart"].string].filter{!$0.isEmpty}.joined(separator:" · ")).font(.caption).foregroundStyle(.secondary)
                     APIJobCompletionSummary(job:value,compact:true)
                     if value["status"].string == "done" { Text(APIFormat.protocolState(value["protocolStatus"].string)).font(.caption).foregroundStyle(DiaryStyle.accent) }
+                }
+                if entity == .customers {
+                    if value["archived"].bool { Text("Archivovaný kontakt").font(.caption).foregroundStyle(.secondary) }
+                    if ["supplier","both"].contains(value["contactKind"].string) { Text(value["contactKind"].string == "both" ? "Zákazník i dodavatel" : "Dodavatel").font(.caption).foregroundStyle(.secondary) }
                 }
                 if entity == .defects { Text(APIFormat.status(value["status"].string)+" · "+value["discoveredOn"].string).font(.caption).foregroundStyle(value["status"].string == "resolved" ? Color.secondary : DiaryStyle.warning) }
                 if entity == .materials { Text([value["sku"].string,APIFormat.money(value["priceMinor"],currency:value["currency"].string)+" / "+value["unit"].string].filter{!$0.isEmpty}.joined(separator:" · ")).font(.caption).foregroundStyle(.secondary) }

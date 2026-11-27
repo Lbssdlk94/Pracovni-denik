@@ -21,6 +21,24 @@ final class APIFixtureProtocol:URLProtocol {
         func body()->APIValue{var data=request.httpBody;if data==nil,let stream=request.httpBodyStream{stream.open();defer{stream.close()};var bytes=Data();var buffer=[UInt8](repeating:0,count:4096);while stream.hasBytesAvailable{let n=stream.read(&buffer,maxLength:buffer.count);if n<=0{break};bytes.append(buffer,count:n)};data=bytes};return (try? JSONDecoder().decode(APIValue.self,from:data ?? Data())) ?? .null}
         if path=="/api/protocol-templates",APIProtocolFixture.enabled{if method=="PUT"{let b=body();records["protocol-templates"]=b.merged(["version":.n(b["version"].int+1)])};return json(records["protocol-templates"] ?? APIProtocolFixture.configuration)}
         let fixture=fixtureData(),me=fixture["context"].merged(["installation":.object(["id":.s("native-fixture"),"name":.s("Dr. Závlaha"),"version":.n(1)]),"license":.null])
+        if path == "/api/inquiries/summary" {
+            return json(.object(["members": .array([]), "statuses": .array([.object(["id": .s("new"), "label": .s("Nová"), "open": .bool(true)])])]))
+        }
+        if path == "/api/inquiries" || path == "/api/inquiries/demo-request" {
+            let inquiry: APIValue = .object(["id": .s("demo-request"), "firstName": .s("Marie"), "lastName": .s("Nováková"), "number": .s("P-1001"), "serviceLabel": .s("Údržba zahrady"), "status": .s("new"), "statusLabel": .s("Nová"), "version": .n(1)])
+            return json(path == "/api/inquiries" ? .object(["inquiries": .array([inquiry])]) : .object(["inquiry": inquiry]))
+        }
+        if path == "/api/office-finance" && method == "GET" { return json(.object(["items": .array([]), "report": .object([:])])) }
+        if path == "/api/team-office/options" { return json(.object(["disciplineChoices": .array([.s("garden")]), "jobs": .array([]), "members": .array([])])) }
+        if path == "/api/team-office" {
+            if method == "POST" {
+                let input = body()
+                let row: APIValue = .object(["id": input["id"], "kind": input["kind"], "status": .s("proposed"), "version": .n(1), "data": input])
+                records["office-test-purchase"] = row
+                return json(.object(["record": row]))
+            }
+            return json(.object(["records": .array(records["office-test-purchase"].map { [$0] } ?? [])]))
+        }
         if path=="/api/me"{return json(records[path] ?? me)}
         if path=="/api/auth/login"{let b=body();if b["preview"].bool{return json(.object(["userId":.s("fixture-owner"),"credentialVersion":.n(1)]))};return(200,try! APIValue.object(["mustChange":.bool(false)]).data(),["Content-Type":"application/json","Set-Cookie":"__Host-zavlahy-access=fixture; Path=/; Secure; HttpOnly; SameSite=Lax"])}
         if path=="/api/auth/account"{return json(.object(["username":.s("fixture"),"version":.n(1)]))}
