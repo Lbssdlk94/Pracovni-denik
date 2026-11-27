@@ -90,8 +90,12 @@ async function memberFor(request,env){
   if(await passwordOnly(env))fail(401,'Přihlaste se svým přihlašovacím jménem a heslem.',{code:'password_login_required'});
   const user=userFrom(request),workspaceIdentity=await workspaceIdentityMember(env,user);
   if(workspaceIdentity.member)return workspaceIdentity.member;
-  if(!workspaceIdentity.active&&user.email===env.TEAM_OWNER_EMAIL.toLowerCase()&&env.PLATFORM_REQUIRE_INVITATION!=='1')await execute(env.DB,"INSERT OR IGNORE INTO members(user_id,email,name,role,created_at) VALUES(?,?,?,'owner',?)",user.id,user.email,user.name,Date.now());
   let m=workspaceIdentity.active?null:await one(env.DB,'SELECT * FROM members WHERE user_id=?',user.id);
+  if(!m&&!workspaceIdentity.active&&user.email===env.TEAM_OWNER_EMAIL.toLowerCase()&&env.PLATFORM_REQUIRE_INVITATION!=='1'){
+    // Reuse a configured owner record created by a previous identity provider. Cloudflare Access subjects differ from Sites user IDs.
+    m=await one(env.DB,"SELECT * FROM members WHERE email=? AND role='owner'",user.email);
+    if(!m){await execute(env.DB,"INSERT OR IGNORE INTO members(user_id,email,name,role,created_at) VALUES(?,?,?,'owner',?)",user.id,user.email,user.name,Date.now());m=await one(env.DB,'SELECT * FROM members WHERE user_id=?',user.id);}
+  }
   if(!m){
     const invited=await one(env.DB,'SELECT * FROM invitations WHERE email=? AND access_token_hash IS NULL',user.email);
     if(invited){await env.DB.batch([env.DB.prepare('INSERT OR IGNORE INTO members(user_id,email,name,role,created_at) SELECT ?,?,?,role,? FROM invitations WHERE email=? AND access_token_hash IS NULL').bind(user.id,user.email,user.name,Date.now(),user.email),...await workspaceInvitationStatements(env,user.email,user.id,user.id),env.DB.prepare('DELETE FROM invitations WHERE email=? AND access_token_hash IS NULL AND EXISTS(SELECT 1 FROM members WHERE user_id=? AND email=?)').bind(user.email,user.id,user.email)]);m=await one(env.DB,'SELECT * FROM members WHERE user_id=?',user.id);}
