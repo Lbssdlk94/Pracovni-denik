@@ -19,3 +19,5 @@ migrations_dir = "cloudflare-migrations"
 [[r2_buckets]]
 binding = "BUCKET"
 bucket_name = "work-diary-test-files"
+
+# Test endpoint is protected by Cloudflare Access on the existing Worker.
