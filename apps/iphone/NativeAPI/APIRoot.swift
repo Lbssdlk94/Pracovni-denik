@@ -132,16 +132,46 @@ struct APIHeader:ToolbarContent {
 }
 struct APIMore:View {
     @ObservedObject var store:APIStore
-    var body:some View{ScrollView{VStack(spacing:16){HStack{Image(systemName:"person.crop.circle.fill").font(.largeTitle);VStack(alignment:.leading){Text(store.me["user"]["name"].string).font(.headline);Text(store.company).foregroundStyle(.secondary)}}.diaryCard()
-        category("Práce v terénu","leaf",entities:[.gardens,.defects,.shafts])
-        category("Firemní agenda","building.2",entities:[.materials,.vehicles,.subscriptions])
-        if store.manager && store.enabled("teamManagement"){NavigationLink{APIResourceList(store:store,resource:APIResource(entity:.team))}label:{row("Tým","person.2")}}
-        if store.enabled("notifications"){NavigationLink{APIResourceList(store:store,resource:APIResource(entity:.notifications))}label:{row("Upozornění","bell")}}
-        NavigationLink{APISettings(store:store)}label:{row("Nastavení","gearshape")}
-        NavigationLink{APIOutboxView(store:store)}label:{row("Koncepty a synchronizace","arrow.triangle.2.circlepath")}
-    }.padding(18)}.background(DiaryStyle.background).navigationTitle("Více").navigationBarTitleDisplayMode(.inline)}
-    @ViewBuilder func category(_ title:String,_ symbol:String,entities:[APIEntity])->some View{let allowed=entities.filter{store.enabled($0.feature)&&(!$0.managerOnly||store.manager)};if !allowed.isEmpty{NavigationLink{ScrollView{VStack(spacing:16){ForEach(allowed,id:\.self){entity in if entity == .vehicles{NavigationLink{APIVehiclesHome(store:store)}label:{row(entity.title,entity.symbol)}}else{NavigationLink{APIResourceList(store:store,resource:APIResource(entity:entity))}label:{row(entity.title,entity.symbol)}}}}.padding(18)}.background(DiaryStyle.background).navigationTitle(title)}label:{row(title,symbol)}}}
-    func row(_ title:String,_ symbol:String)->some View{HStack(spacing:14){Image(systemName:symbol).frame(width:44,height:44).background(DiaryStyle.soft,in:RoundedRectangle(cornerRadius:14));Text(title).font(.headline);Spacer();Image(systemName:"chevron.right").font(.caption)}.foregroundStyle(DiaryStyle.accent).frame(minHeight:48).diaryCard().accessibilityElement(children:.combine).accessibilityLabel(title)}
+    @State private var query = ""
+    private func matches(_ title: String) -> Bool { query.isEmpty || title.localizedStandardContains(query) }
+
+    var body: some View {
+        List {
+            if query.isEmpty {
+                HStack(spacing: 14) {
+                    Image(systemName: "person.crop.circle.fill").font(.largeTitle).foregroundStyle(DiaryStyle.accent)
+                    VStack(alignment: .leading) {
+                        Text(store.me["user"]["name"].string).font(.headline)
+                        Text(store.company).font(.subheadline).foregroundStyle(.secondary)
+                    }
+                }.padding(.vertical, 4)
+            }
+            Section("Práce v terénu") { resources([.gardens, .defects, .shafts]) }
+            Section("Firemní agenda") {
+                if store.manager && !store.isRolePreview && matches("Poptávky") {
+                    NavigationLink { APIInquiries(store: store) } label: { Label("Poptávky", systemImage: "tray.full") }
+                }
+                let office = store.manager ? "Finance" : "Nákupy a zálohy"
+                if (store.manager || store.role == "worker") && !store.isRolePreview && matches(office) {
+                    NavigationLink { APIOffice(store: store) } label: { Label(office, systemImage: "creditcard") }
+                }
+                resources([.materials, .vehicles, .subscriptions])
+            }
+            Section("Účet a tým") {
+                resources([.team, .notifications])
+                if matches("Nastavení") { NavigationLink { APISettings(store: store) } label: { Label("Nastavení", systemImage: "gearshape") } }
+                if matches("Koncepty a synchronizace") { NavigationLink { APIOutboxView(store: store) } label: { Label("Koncepty a synchronizace", systemImage: "arrow.triangle.2.circlepath") } }
+            }
+        }.navigationTitle("Více").searchable(text: $query, prompt: "Hledat v nabídce")
+    }
+    @ViewBuilder private func resources(_ entities: [APIEntity]) -> some View {
+        ForEach(entities.filter { store.enabled($0.feature) && (!$0.managerOnly || store.manager) && matches($0.title) }, id: \.self) { entity in
+            NavigationLink {
+                if entity == .vehicles { APIVehiclesHome(store: store) }
+                else { APIResourceList(store: store, resource: APIResource(entity: entity)) }
+            } label: { Label(entity.title, systemImage: entity.symbol) }
+        }
+    }
 }
 
 struct APIPhoneFollowUp:Identifiable{let id=UUID();let job:APIValue;let action:String}

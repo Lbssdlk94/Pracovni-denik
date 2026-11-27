@@ -62,7 +62,7 @@ struct APIAttendanceView:View {
             if let error=problem ?? model.problem{Section{Text(error).foregroundStyle(DiaryStyle.warning);Button("Zkusit znovu"){Task{await load(refresh:true)}}}}
         }.listStyle(.insetGrouped).listSectionSpacing(10).contentMargins(.top,0,for:.scrollContent).scrollContentBackground(.hidden).background(DiaryStyle.background)
             .navigationTitle("Docházka").navigationBarTitleDisplayMode(.inline)
-            .toolbar{APIHeader(store:store);ToolbarItem(placement:.topBarTrailing){Menu{Button("Vybrat měsíc",systemImage:"calendar"){calendar=true};if store.manager{Button("Export měsíční docházky",systemImage:"square.and.arrow.up"){export=true}.disabled(data["detail"]["activitySchema"].int != 1)}}label:{Image(systemName:"calendar")}.buttonStyle(.automatic).accessibilityLabel("Období a export").accessibilityIdentifier("attendance-period-menu")}}
+            .toolbar{APIHeader(store:store);ToolbarItem(placement:.topBarTrailing){Menu{if !store.isRolePreview { NavigationLink("Žádosti o volno") { APIOfficeList(store:store,kind:.leave,month:month) } };Button("Vybrat měsíc",systemImage:"calendar"){calendar=true};if store.manager{Button("Export měsíční docházky",systemImage:"square.and.arrow.up"){export=true}.disabled(data["detail"]["activitySchema"].int != 1)}}label:{Image(systemName:"calendar")}.buttonStyle(.automatic).accessibilityLabel("Období a export").accessibilityIdentifier("attendance-period-menu")}}
             .task(id:key){await load()}.refreshable{await store.resume(refreshViews:false);await load(refresh:true)}
             .sheet(isPresented:$calendar){APIAttendanceMonthPicker(month:$selectedMonth)}
             .sheet(item:$action){APIAttendanceAction(store:store,action:$0)}
