@@ -47,6 +47,7 @@ struct APIInquiries: View {
         .searchable(text: $query, prompt: "Jméno, číslo nebo adresa")
         .toolbar {
             Menu {
+                ShareLink(item: store.transport.origin.appendingPathComponent("poptavka.html")) { Label("Sdílet veřejný formulář", systemImage: "square.and.arrow.up") }
                 Picker("Stav", selection: $status) {
                     Text("Všechny stavy").tag("")
                     ForEach(summary["statuses"].array.filter { $0["open"].bool != closed }, id: \.id) { Text($0["label"].string).tag($0.id) }
@@ -108,6 +109,20 @@ struct APIInquiryDetail: View {
                     Text(row["serviceLabel"].string).font(.headline)
                     ForEach(["company", "address", "preferredDate", "phone", "email", "description"], id: \.self) { key in
                         if !row[key].string.isEmpty { Text(row[key].string).textSelection(.enabled) }
+                    }
+                }
+                if !row["extras"].object.isEmpty {
+                    Section("Podrobnosti") {
+                        ForEach([("area","Plocha"),("water","Zdroj vody"),("gardenNote","Poznámka k zahradě")], id: \.0) { key, title in
+                            if !row["extras"][key].string.isEmpty { LabeledContent(title, value: row["extras"][key].string) }
+                        }
+                    }
+                }
+                if !duplicates["inquiries"].array.isEmpty {
+                    Section("Související poptávky") {
+                        ForEach(duplicates["inquiries"].array, id: \.id) { other in
+                            NavigationLink(other["number"].string + " · " + other.title) { APIInquiryDetail(store: store, id: other.id, summary: summary) }
+                        }
                     }
                 }
                 Section("Vyřízení") {

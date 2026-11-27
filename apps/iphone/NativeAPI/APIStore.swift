@@ -157,6 +157,19 @@ final class APIStore: ObservableObject {
         try transport.forgetCredential(); lock()
     }
     func get(_ path: String, refresh: Bool = false) async throws -> APIValue {
+        if path.hasPrefix("/api/office-finance") || path.hasPrefix("/api/team-office") {
+            try requireLiveRole()
+            guard online else { throw APIError.local("Pro otevření této evidence se připojte k internetu.") }
+            let ticket = generation
+            do {
+                let result = try await transport.request(path)
+                guard ticket == generation else { throw APIError.local("Účet se změnil.") }
+                return result
+            } catch let error as APIError {
+                if error.status == 401 && ticket == generation { lock() }
+                throw error
+            }
+        }
         if APIDirectoryCache.matches(path){return try await directoryRead(path,refresh:refresh)}
         let ticket = generation
         let requestedDiscipline=APIJobMonthCache.parameters(path,today:today)?["discipline"],selectedDiscipline=me["workspace"]["selectedDiscipline"].string
@@ -263,6 +276,11 @@ final class APIStore: ObservableObject {
         return fallback.merged(cached.object)
     }
     func applyAcknowledgement(path:String,result:APIValue){
+        if path == "/api/assistant" && result["mutated"].string == "customers" { purgeDirectory() }
+        if path.hasSuffix("/convert") && path.hasPrefix("/api/inquiries/") && !result["jobId"].string.isEmpty {
+            purgeDirectory()
+            jobMonthsChanged(path: "/api/jobs", result: result)
+        }
         directoryChanged(path:path)
         var acknowledged=result
         if !result["job"].id.isEmpty,!result["report"].isNull{acknowledged["job"]["protocolStatus"]=result["report"]["documentState"].string=="ready" ? .s("ready") : .s("draft")}
@@ -302,6 +320,14 @@ final class APIStore: ObservableObject {
     func removeDraft(_ key: String) { guard !isRolePreview else{return};vault?.state.drafts.removeValue(forKey:key); try? vault?.persist() }
     func updateOutbox() { outbox = vault?.state.outbox ?? [] }
     func file(_ path:String,version:APIValue = .null) async throws -> APIBytes {
+        if path.hasPrefix("/api/office-finance/") || path.hasPrefix("/api/team-office/") {
+            try requireLiveRole()
+            guard online else { throw APIError.local("Pro otevření dokladu se připojte k internetu.") }
+            let ticket = generation
+            let file = try await transport.bytes(path)
+            guard ticket == generation else { throw APIError.local("Účet se změnil.") }
+            return file
+        }
         let cacheKey=version.isNull ? path : path+"#v="+version.string
         if !online,let vault,vault.offlineAllowed(),let data=try vault.blob(cacheKey) ?? liveVault?.blob(cacheKey){return APIBytes(data:data,type:"application/octet-stream",filename:nil)}
         let ticket=generation

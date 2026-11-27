@@ -100,6 +100,7 @@ struct APIEntityEditor: View {
         if !store.enabled("customers"){result=result.filter{$0.id != "customerId" && $0.id != "customerAddressId"}}
         if !store.enabled("gardens"){result=result.filter{$0.id != "gardenId"}}
         if !store.enabled("pump"){result=result.filter{$0.id != "pumpType"}}
+        if resource.entity == .customers && isNew { result.removeAll { $0.id == "directoryArchived" } }
         if resource.entity == .customers && !isNew{result=result.filter{$0.id != "discipline"}}
         result=result.map{field in var f=field;if f.id=="discipline"{f.required=true;f.choices=f.choices.filter{store.me["workspace"]["disciplines"].array.contains(.s($0.id))}};return f}
         if resource.entity == .entries{result=result.map{field in var f=field;if f.id=="kind"{f.choices=f.choices.filter{store.enabled(["fuel":"fleetFuel","service":"fleetService","expense":"fleetExpenses"][$0.id] ?? "vehicles")}};if f.id=="litersMilli"{f.required=value["kind"].string=="fuel"};return f}.filter{!["litersMilli","full","station"].contains($0.id) || value["kind"].string=="fuel"}}
@@ -142,6 +143,10 @@ struct APIEntityEditor: View {
     func load() async {
         let initial = isNew ? resource.initial(store).merged(original.object) : original
         let draft=store.draft(key,fallback:initial);value=draft.value;operationID=draft.operationID;touched=draft.touchedFields ?? []
+        if resource.entity == .customers {
+            if value["directoryArchived"].isNull { value["directoryArchived"] = .bool(original["archived"].bool) }
+            if value["contactKind"].string.isEmpty { value["contactKind"] = .s("customer") }
+        }
         if resource.entity == .gardens && !store.me["workspace"].isNull{if value["discipline"].string.isEmpty{value["discipline"]=resource.initial(store)["discipline"]};if !touched.contains("notes") && !value["workNotes"][value["discipline"].string].isNull{value["notes"]=value["workNotes"][value["discipline"].string]}}
         do {
             let refs=Set(fields.flatMap { [$0.reference].compactMap{$0} + $0.children.compactMap(\.reference) })

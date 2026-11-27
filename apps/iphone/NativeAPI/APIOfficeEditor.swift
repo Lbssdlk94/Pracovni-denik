@@ -1,10 +1,12 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct APIOfficeEditor: View {
     @ObservedObject var store: APIStore
     let kind: OfficeKind
     let options: APIValue
     let finance: APIValue
+    var linkedJob: APIValue = .null
     var row: APIValue = .null
     var action = ""
     var conflicts: [APIValue] = []
@@ -19,6 +21,12 @@ struct APIOfficeEditor: View {
     @State private var recordID = UUID().uuidString
     @State private var operationID = UUID().uuidString
 
+    @State private var choosingPDF = false
+    @State private var pdf: Data?
+    @State private var pdfName = ""
+    @State private var fileID = UUID().uuidString
+    @State private var saved: APIValue = .null
+    @State private var extracted = ""
     private var adding: Bool { action.isEmpty }
     private var date: String { DiaryDate.iso(Date()) }
     private func binding(_ key: String) -> Binding<String> {
@@ -45,14 +53,17 @@ struct APIOfficeEditor: View {
     var body: some View {
         NavigationStack {
             Form {
-                if adding { createFields } else { actionFields }
-                if invoice || action == "invoice" { invoiceFields }
+                Group { if adding { createFields } else { actionFields } }.disabled(!saved.isNull)
+                if invoice || action == "invoice" { invoiceFields.disabled(!saved.isNull) }
                 if !problem.isEmpty { Text(problem).foregroundStyle(.red) }
                 Button { Task { await save() } } label: {
-                    if busy { ProgressView() } else { Text(adding ? "Uložit" : "Potvrdit") }
+                    if busy { ProgressView() } else { Text(!saved.isNull ? "Znovu přiložit PDF" : adding ? "Uložit" : "Potvrdit") }
                 }.disabled(busy || !store.online || (!conflicts.isEmpty && action == "approve" && !ack))
             }.navigationTitle(title).navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Zavřít") { dismiss() }.disabled(busy) } }
+            .fileImporter(isPresented: $choosingPDF, allowedContentTypes: [.pdf]) { result in
+                Task { await readPDF(result) }
+            }
             .interactiveDismissDisabled(busy)
             .onAppear { if values.isEmpty { defaults() } }
         }
@@ -118,6 +129,11 @@ struct APIOfficeEditor: View {
     private var amount: some View { input("Částka (Kč)", "amountMinor", numeric: true) }
     private var invoiceFields: some View {
         Section("Faktura") {
+            Button { choosingPDF = true } label: { Label(pdfName.isEmpty ? "Načíst z PDF" : pdfName, systemImage: "doc.viewfinder") }.disabled(busy)
+            if !extracted.isEmpty {
+                DisclosureGroup("Přečtený text") { Text(extracted).textSelection(.enabled) }
+                Text("Zkontrolujte předvyplněné údaje. Čte se prvních osm stran. PDF se přiloží při uložení.").font(.footnote).foregroundStyle(.secondary)
+            }
             input("Číslo faktury", "reference"); dateField("Datum vystavení", "issuedOn")
             input("Variabilní symbol", "variableSymbol"); input("Bankovní účet", "bankAccount")
             input("Dodavatel", "supplierName"); input("Odběratel", "customerName")
@@ -161,6 +177,10 @@ struct APIOfficeEditor: View {
     private func defaults() {
         let disciplines = options["disciplineChoices"].array.map(\.string), selected = store.me["workspace"]["selectedDiscipline"].string
         values = ["date":date,"dueDate":date,"issuedOn":date,"startMonth":String(date.prefix(7)),"day":"1","quantity":"1","unit":"ks","type":"holiday","category":kind == .purchase ? "material" : "other","status":"paid","direction":"expense","discipline":disciplines.contains(selected) ? selected : disciplines.first ?? ""]
+        if !linkedJob.isNull {
+            values["jobId"] = linkedJob.id; values["discipline"] = linkedJob["discipline"].string
+            values["title"] = linkedJob.title; invoice = true
+        }
         if !adding {
             let data = row["data"]
             values["supplier"] = data["supplier"].string
@@ -169,6 +189,22 @@ struct APIOfficeEditor: View {
             if action == "pay" && kind == .bill { values["amountMinor"] = String(Double(data["amountMinor"].int - data["paidMinor"].int) / 100) }
             if !data["paidOn"].string.isEmpty { values["date"] = data["paidOn"].string }
         }
+    }
+    private func readPDF(_ result: Result<URL, Error>) async {
+        guard !busy else { return }
+        busy = true; problem = ""
+        defer { busy = false }
+        do {
+            let url = try result.get(), access = url.startAccessingSecurityScopedResource()
+            defer { if access { url.stopAccessingSecurityScopedResource() } }
+            guard let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 4 * 1024 * 1024 else { throw APIError.local("PDF může mít nejvýše 4 MB.") }
+            let bytes = try Data(contentsOf: url)
+            let text = try await Task.detached(priority: .userInitiated) { try APIInvoiceReader.read(bytes) }.value
+            pdf = bytes; pdfName = url.lastPathComponent; extracted = text
+            for (key, value) in APIInvoiceReader.suggestions(text) where (values[key] ?? "").isEmpty || ((key == "dueDate" || key == "issuedOn") && values[key] == date) {
+                values[key] = value
+            }
+        } catch where (error as NSError).code == NSUserCancelledError {} catch { problem = error.localizedDescription }
     }
     private func save() async {
         guard !busy else { return }
@@ -201,8 +237,15 @@ struct APIOfficeEditor: View {
                 path += "/" + row.id + "/action"
                 body["action"] = .s(action); body["version"] = row["version"]; body["acknowledgeConflicts"] = .bool(ack)
             }
-            _ = try await store.write(path, method: "POST", body: .object(body))
+            if saved.isNull {
+                let result = try await store.write(path, method: "POST", body: .object(body))
+                if (invoice || action == "invoice") && pdf != nil { saved = result["item"] }
+            }
+            if !saved.isNull, let pdf {
+                let headers = ["if-match": saved["version"].string, "x-file-name": pdfName.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "faktura.pdf"]
+                try await store.upload("/api/office-finance/" + saved.id + "/invoice-file/" + fileID, bytes: pdf, type: "application/pdf", headers: headers)
+            }
             dismiss()
-        } catch { problem = error.localizedDescription }
+        } catch { problem = (saved.isNull ? "" : "Doklad je uložený. PDF se nepřiložilo. ") + error.localizedDescription }
     }
 }

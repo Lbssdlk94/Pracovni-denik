@@ -61,6 +61,10 @@ struct APIJobDetailContent:View {
             if mayMaterial {
                 NavigationLink{material}label:{APIJobSettingsRow(title:"Připravenost materiálu",symbol:"shippingbox",detail:materialStatus)}
             }
+            if store.manager && !store.isRolePreview {
+                NavigationLink { APIOfficeList(store: store, kind: .bill, month: String(store.today.prefix(7)), linkedJob: job) }
+                label: { APIJobSettingsRow(title: "Faktury a doklady", symbol: "doc.text") }
+            }
             NavigationLink{notes}label:{APIJobSettingsRow(title:"Zadání a poznámky",symbol:"text.alignleft")}
             if store.enabled("jobHandoffs") {
                 NavigationLink{handoffs}label:{APIJobSettingsRow(title:"Předání kolegům",symbol:"person.2",detail:handoff["handoffs"].isNull ? nil : "Počet: \(handoff["handoffs"].array.count)")}

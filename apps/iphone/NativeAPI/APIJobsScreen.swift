@@ -39,6 +39,9 @@ struct APIJobsScreen:View {
                 if applied.dateRange{Text(APIJobsPresentation.date(APIJobsPresentation.day(applied.from))+" – "+APIJobsPresentation.date(APIJobsPresentation.day(applied.to))).font(.caption).foregroundStyle(.secondary)}
                 if !applied.attention.isEmpty{Text(APIDashboardLogic.attentionTitles[applied.attention] ?? applied.attention).font(.subheadline.weight(.semibold))}
             }.listRowBackground(Color.clear).listRowSeparator(.hidden).listRowInsets(EdgeInsets(top:2,leading:0,bottom:2,trailing:0))
+            if let mode = OfficePlanningMode.allCases.first(where: { store.enabled($0.rawValue) && ($0 != .backlog || store.manager) }) {
+                NavigationLink { APIPlanningBoard(store: store, mode: mode) } label: { Label("Plánování", systemImage: "calendar.day.timeline.left") }
+            }
             jobSections(visibleJobs)
             if model.loading{ProgressView(model.rows.isEmpty ? "Načítám zakázky…" : "Načítám další zakázky…").font(.subheadline).listRowBackground(Color.clear)}
             if visibleJobs.isEmpty && !model.loading{
