@@ -7,6 +7,19 @@ final class NativeAPITests:XCTestCase {
     func testIncompleteGardenNeverClearsExistingValues(){let result=APIDomainLogic.prefillGarden(.object(["gardenId":.s("garden-2"),"city":.s("Doplněné město")]),garden:APIFixtureProtocol.gardens[1],touched:[]);XCTAssertEqual(result["city"],.s("Doplněné město"));XCTAssertNotEqual(APIDomainLogic.referenceLabel(APIFixtureProtocol.gardens[0],kind:"gardens"),APIDomainLogic.referenceLabel(APIFixtureProtocol.gardens[1],kind:"gardens"))}
     func testMoneyUsesImmutablePriceAndDecimalRounding(){let line:APIValue = .object(["priceMinor":.n(199),"quantity":.number(1.5)]);XCTAssertEqual(APIProtocolPDF.lineTotal(line),299)}
     @MainActor func testTransportRestrictsOriginAndSendsScopeWithoutRedirects()async throws{APIFixtureProtocol.reset();let transport=APITransport(origin:EndpointPolicy.home,fixture:true);transport.discipline="garden";_ = try await transport.request("/api/me");let r=try XCTUnwrap(APIFixtureProtocol.requests.last);XCTAssertEqual(r.value(forHTTPHeaderField:"x-work-discipline"),"garden");XCTAssertEqual(r.value(forHTTPHeaderField:"x-workspace-client-version"),"shared-directory-v1");for path in ["https://evil.test/api/me","//evil.test/api/me","/not-api"]{do{_ = try await transport.request(path);XCTFail("Unexpected path accepted")}catch{}}}
+    @MainActor func testCloudflareAccessCookieStaysOnTestWorker() throws {
+        let origin = try XCTUnwrap(URL(string: "https://" + EndpointPolicy.cloudflareHost))
+        let cloudflare = APITransport(origin: origin, fixture: true)
+        let production = APITransport(origin: EndpointPolicy.home, fixture: true)
+        try cloudflare.setCloudflareCookie("header.payload.signature")
+        try production.setCloudflareCookie("header.payload.signature")
+        XCTAssertEqual(try cloudflare.requestFor("/api/me").value(forHTTPHeaderField: "Cookie"),
+                       "CF_Authorization=header.payload.signature")
+        XCTAssertNil(try production.requestFor("/api/me").value(forHTTPHeaderField: "Cookie"))
+        XCTAssertThrowsError(try cloudflare.setCloudflareCookie("invalid; other=value"))
+        try cloudflare.forgetCredential()
+        XCTAssertNil(try cloudflare.requestFor("/api/me").value(forHTTPHeaderField: "Cookie"))
+    }
     @MainActor func testFailedOptionalReadDoesNotLockLegitimateAccount()async throws{APIFixtureProtocol.reset();let store=APIStore(fixture:true);try store.bind(APIFixtureProtocol.fixtureData()["context"]);APIFixtureProtocol.forcedStatus["/api/zones"]=403;do{_ = try await store.get("/api/zones");XCTFail("Access must be denied")}catch{};XCTAssertTrue(store.authenticated);let customers=try await store.get("/api/customers");XCTAssertFalse(customers["customers"].array.isEmpty)}
     @MainActor func testOfflineLeaseExpiresAndPermissionScopesAreSeparate()throws{let store=APIStore(fixture:true);try store.bind(APIFixtureProtocol.fixtureData()["context"]);let first=store.scope;XCTAssertTrue(store.vault!.offlineAllowed());XCTAssertFalse(store.vault!.offlineAllowed(at:Date().addingTimeInterval(86500)));var changed=store.me;changed["features"]["materials"] = .bool(false);try store.bind(changed);XCTAssertNotEqual(first,store.scope);XCTAssertTrue(store.vault!.state.drafts.isEmpty)}
     @MainActor func testOutboxDuplicateAndChangedPayloadAreRejected()throws{let v=try APIVault(scope:"isolated-test",memoryOnly:true);let op=APIMutation(id:"one",path:"/api/defects/one",method:"PUT",body:.object(["title":.s("Závada")]),bytes:nil,contentType:"application/json",headers:[:],scope:v.scope,dependsOn:[],draftKey:nil);try v.enqueue(op);try v.enqueue(op);XCTAssertEqual(v.state.outbox.count,1);let changed=APIMutation(id:"one",path:op.path,method:op.method,body:.object(["title":.s("Jiná závada")]),bytes:nil,contentType:op.contentType,headers:[:],scope:v.scope,dependsOn:[],draftKey:nil);XCTAssertThrowsError(try v.enqueue(changed));XCTAssertEqual(v.state.outbox.count,1)}

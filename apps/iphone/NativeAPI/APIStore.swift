@@ -59,7 +59,7 @@ final class APIStore: ObservableObject {
     var manager: Bool { me["permissions"]["manage"].bool && ["owner","administrator","admin"].contains(role) }
     var writer: Bool { me["permissions"]["write"].bool && role != "reader" }
     var owner: Bool { role == "owner" }
-    var company: String { me["installation"]["name"].string.isEmpty ? (transport.origin.host?.hasPrefix("dr-garden") == true ? "Dr. Garden" : "Dr. Závlaha") : me["installation"]["name"].string }
+    var company: String { me["installation"]["name"].string.isEmpty ? (EndpointPolicy.installations.first { $0.1 == transport.origin.host }?.0 ?? "Pracovní deník") : me["installation"]["name"].string }
     var today: String { let f = DateFormatter(); f.calendar = Calendar(identifier:.gregorian); f.timeZone = TimeZone(identifier:"Europe/Prague"); f.dateFormat = "yyyy-MM-dd"; return f.string(from: Date()) }
     var scope: String { vault?.scope ?? "" }
     var canIrrigate:Bool{me["workspace"].isNull || me["workspace"]["disciplines"].array.contains(.s("irrigation"))}
@@ -108,7 +108,7 @@ final class APIStore: ObservableObject {
             if e.code == "password_change_required" { needsPasswordChange = true }
             else if e.isTransient, let last = UserDefaults.standard.string(forKey:"native-api-last-scope:" + transport.origin.host!), let local = try? APIVault(scope:last), local.offlineAllowed() {
                 vault = local; activeScope = last; me = local.state.session; authenticated = true; online = false; updateOutbox()
-            } else { lock(); if e.status != 401 { error = e.message } }
+            } else { lock(); error = e.status == 401 && e.code != "cloudflare_access_required" ? nil : e.message }
         } catch { self.error = error.localizedDescription }
     }
     func resume(refreshViews:Bool=true) async {
@@ -139,6 +139,7 @@ final class APIStore: ObservableObject {
     }
     func switchInstallation(_ origin: URL) async throws {
         try requireLiveRole()
+        guard EndpointPolicy.isDiary(origin) else { throw APIError.local("Nepovolená adresa deníku.") }
         guard vault?.state.outbox.isEmpty != false else { throw APIError.local("Nejdříve vyřešte neodeslané změny této firmy.") }
         lock(); transport = APITransport(origin:origin,fixture:fixture);if !fixture{UserDefaults.standard.set(origin.absoluteString,forKey:"native-api-installation")};await restore()
     }

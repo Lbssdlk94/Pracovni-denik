@@ -2,7 +2,19 @@ import Foundation
 
 enum EndpointPolicy {
     static let home = URL(string: "https://zavlahovy-denik.purplecedar.chatgpt.site/")!
-    static let hosts: Set<String> = ["zavlahovy-denik.purplecedar.chatgpt.site", "dr-garden.purplecedar.chatgpt.site"]
+    static let cloudflareHost = "pracovni-denik.white-haze-7e97.workers.dev"
+    static let cloudflareAccessHost = "damp-hat-9f3c.cloudflareaccess.com"
+    static let installations = [
+        ("Dr. Závlaha", "zavlahovy-denik.purplecedar.chatgpt.site"),
+        ("Dr. Garden", "dr-garden.purplecedar.chatgpt.site"),
+        ("Cloudflare – test", cloudflareHost)
+    ]
+    static let hosts = Set(installations.map { $0.1 })
+
+    static func isCloudflareAccess(_ url: URL) -> Bool {
+        url.scheme?.lowercased() == "https" && url.user == nil && url.password == nil &&
+        (url.port == nil || url.port == 443) && url.host?.lowercased() == cloudflareAccessHost
+    }
 
     static func isDiary(_ url: URL) -> Bool {
         url.scheme?.lowercased() == "https" && url.user == nil && url.password == nil &&

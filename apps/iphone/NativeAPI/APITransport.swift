@@ -31,10 +31,13 @@ final class APITransport {
     private let session: URLSession
     private let redirects = APIRedirectPolicy()
     private var cookie: String?
+    private var cloudflareCookie: String?
     init(origin: URL, fixture: Bool = false, configuration: URLSessionConfiguration? = nil) {
         precondition(EndpointPolicy.isDiary(origin))
         self.origin = origin; self.fixture = fixture
         cookie = fixture ? nil : APIKeychain.read("session:" + origin.host!).flatMap { String(data: $0, encoding: .utf8) }
+        cloudflareCookie = fixture || origin.host != EndpointPolicy.cloudflareHost ? nil :
+            APIKeychain.read("cloudflare:" + EndpointPolicy.cloudflareHost).flatMap { String(data: $0, encoding: .utf8) }
         let config = configuration ?? .ephemeral
         config.httpCookieStorage = nil; config.httpShouldSetCookies = false
         config.urlCache = nil; config.requestCachePolicy = .reloadIgnoringLocalCacheData
@@ -42,13 +45,33 @@ final class APITransport {
         if fixture { config.protocolClasses = [APIFixtureProtocol.self] }
         session = URLSession(configuration: config, delegate: redirects, delegateQueue: nil)
     }
-    func forgetCredential() throws { cookie = nil; if !fixture { try APIKeychain.write(nil, account: "session:" + origin.host!) } }
+    func forgetCredential() throws {
+        cookie = nil
+        if !fixture { try APIKeychain.write(nil, account: "session:" + origin.host!) }
+        if origin.host == EndpointPolicy.cloudflareHost { try setCloudflareCookie(nil) }
+    }
+    func setCloudflareCookie(_ token: String?) throws {
+        guard origin.host == EndpointPolicy.cloudflareHost else { return }
+        if let token, token.range(of: #"^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$"#, options: .regularExpression) == nil {
+            throw APIError.local("Cloudflare nevrátilo platné ověření.")
+        }
+        if !fixture { try APIKeychain.write(token?.data(using: .utf8), account: "cloudflare:" + EndpointPolicy.cloudflareHost) }
+        cloudflareCookie = token
+    }
+    private func checkCloudflareRedirect(_ response: HTTPURLResponse) throws {
+        guard origin.host == EndpointPolicy.cloudflareHost, (300..<400).contains(response.statusCode),
+              let location = response.value(forHTTPHeaderField: "Location"),
+              let url = URL(string: location), EndpointPolicy.isCloudflareAccess(url) else { return }
+        try setCloudflareCookie(nil)
+        throw APIError(status:401,code:"cloudflare_access_required",message:"Nejdříve ověřte přístup ke Cloudflare.")
+    }
     func bytes(_ path: String, method: String = "GET", data: Data? = nil, type: String = "application/json", headers: [String:String] = [:]) async throws -> APIBytes {
         let r=try requestFor(path,method:method,data:data,type:type,headers:headers)
         let result: (Data, URLResponse)
         do { result = try await session.data(for: r) }
         catch { if Task.isCancelled { throw CancellationError() }; throw APIError(status: 0, code: "connection", message: "Spojení se nepodařilo. Rozepsané změny zůstávají v iPhonu.") }
         guard let response = result.1 as? HTTPURLResponse else { throw APIError.local("API nevrátilo platnou odpověď.") }
+        try checkCloudflareRedirect(response)
         let body = result.0
         if let set = response.value(forHTTPHeaderField: "Set-Cookie") {
             let cookies = HTTPCookie.cookies(withResponseHeaderFields: ["Set-Cookie":set], for: origin)
@@ -78,14 +101,19 @@ final class APITransport {
         r.setValue("PracovniDenik-iOS/0.8", forHTTPHeaderField: "User-Agent")
         if method != "GET" { r.setValue("1", forHTTPHeaderField: "x-zavlahy-request"); r.setValue(origin.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")), forHTTPHeaderField: "Origin") }
         if data != nil { r.setValue(type, forHTTPHeaderField: "Content-Type") }
-        if let cookie { r.setValue(cookie, forHTTPHeaderField: "Cookie") }
+        let cookies = [cookie, cloudflareCookie.map { "CF_Authorization=" + $0 }].compactMap { $0 }
+        if !cookies.isEmpty { r.setValue(cookies.joined(separator: "; "), forHTTPHeaderField: "Cookie") }
         for (key, value) in headers where !["cookie", "authorization", "host", "origin"].contains(key.lowercased()) { r.setValue(value, forHTTPHeaderField: key) }
         return r
     }
     func download(_ path:String) async throws -> URL {
         let request=try requestFor(path)
         let (temporary,response)=try await session.download(for:request)
-        guard let http=response as? HTTPURLResponse,(200..<300).contains(http.statusCode) else{try? FileManager.default.removeItem(at:temporary);throw APIError.local("Soubor se nepodařilo stáhnout. Ověřte přístup a připojení.")}
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            try? FileManager.default.removeItem(at: temporary)
+            if let http = response as? HTTPURLResponse { try checkCloudflareRedirect(http) }
+            throw APIError.local("Soubor se nepodařilo stáhnout. Ověřte přístup a připojení.")
+        }
         let destination=FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString+".tar")
         try FileManager.default.moveItem(at:temporary,to:destination)
         try FileManager.default.setAttributes([.protectionKey:FileProtectionType.completeUntilFirstUserAuthentication],ofItemAtPath:destination.path)

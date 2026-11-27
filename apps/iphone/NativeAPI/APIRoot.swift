@@ -64,21 +64,63 @@ struct APILogin:View {
     @ObservedObject var store:APIStore
     @State private var username=""
     @State private var password=""
-    @State private var company="zavlahovy-denik.purplecedar.chatgpt.site"
+    @State private var company=EndpointPolicy.home.host!
+    @State private var verifyingCloudflare=false
     @State private var recovery=false
     var body:some View {
         NavigationStack{ScrollView{VStack(alignment:.leading,spacing:22){Image("DiaryMark").resizable().frame(width:72,height:72).clipShape(RoundedRectangle(cornerRadius:18));Text("Pracovní deník").font(.largeTitle.bold());Text("Přihlaste se firemním účtem.").foregroundStyle(.secondary)
-            VStack(spacing:15){Picker("Firma",selection:$company){Text("Dr. Závlaha").tag("zavlahovy-denik.purplecedar.chatgpt.site");Text("Dr. Garden").tag("dr-garden.purplecedar.chatgpt.site")}.pickerStyle(.menu)
+            VStack(spacing:15){Picker("Firma",selection:$company){ForEach(EndpointPolicy.installations, id: \.1) { name, host in Text(name).tag(host) }}.pickerStyle(.menu)
+                if company == EndpointPolicy.cloudflareHost {
+                    Button("Ověřit přístup ke Cloudflare"){ verifyingCloudflare=true }
+                        .frame(minHeight:44).disabled(store.busy)
+                }
                 TextField("Přihlašovací jméno",text:$username).textContentType(.username).textInputAutocapitalization(.never).autocorrectionDisabled().frame(minHeight:44).accessibilityIdentifier("api-login-username")
                 SecureField("Heslo",text:$password).textContentType(.password).frame(minHeight:44).accessibilityIdentifier("api-login-password")
-                Button("Přihlásit se"){Task{if store.transport.origin.host != company{try? await store.switchInstallation(URL(string:"https://"+company+"/")!)};await store.login(username:username,password:password);password=""}}.diaryBubble(.primary).frame(minHeight:44).disabled(store.busy)
+                Button("Přihlásit se"){Task{await signIn()}}.diaryBubble(.primary).frame(minHeight:44).disabled(store.busy)
             }.diaryCard()
             Button("Zapomenuté heslo"){recovery=true}.frame(minHeight:44)
             if store.busy{ProgressView("Ověřuji přihlášení…")};if let error=store.error{Text(error).foregroundStyle(DiaryStyle.warning)}
         }.padding(24)}.background(DiaryStyle.background).navigationTitle(store.company).navigationBarTitleDisplayMode(.inline)}
             .onAppear{company=store.transport.origin.host ?? company}
+            .onChange(of:company){_,_ in password=""}
+            .sheet(isPresented:$verifyingCloudflare){
+                NavigationStack {
+                    APICloudflareAccess(onVerified: { token in
+                        verifyingCloudflare=false
+                        Task {
+                            do {
+                                try await selectCompany()
+                                try store.transport.setCloudflareCookie(token)
+                                await store.restore()
+                            } catch { store.error=error.localizedDescription }
+                        }
+                    }, onError: { message in
+                        verifyingCloudflare=false
+                        store.error=message
+                    })
+                    .navigationTitle("Ověření Cloudflare")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar { Button("Zavřít"){verifyingCloudflare=false} }
+                }
+            }
             .alert("Obnovení hesla",isPresented:$recovery){Button("Rozumím",role:.cancel){}}message:{Text("Požádejte administrátora firmy o nové dočasné heslo. Obnovení odkazem ani e-mailem není dostupné.")}
     }
+    private func selectCompany() async throws {
+        if store.transport.origin.host != company {
+            try await store.switchInstallation(URL(string:"https://"+company+"/")!)
+        }
+    }
+
+    private func signIn() async {
+        do {
+            try await selectCompany()
+            if !store.authenticated && !store.needsPasswordChange {
+                await store.login(username:username,password:password)
+            }
+        } catch { store.error=error.localizedDescription }
+        password=""
+    }
+
 }
 struct APIHeader:ToolbarContent {
     @ObservedObject var store:APIStore
