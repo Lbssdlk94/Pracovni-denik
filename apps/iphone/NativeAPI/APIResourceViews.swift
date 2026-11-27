@@ -322,7 +322,9 @@ struct APIEntityDetail: View {
         let scope=store.scope
         do {
             if [.jobs,.customers,.defects,.vehicles,.subscriptions].contains(resource.entity) {
-                let response=try await store.get(resource.recordPath(initial.id));guard scope==store.scope else{return};detail=response;value=response[resource.recordKey].isNull ? response : response[resource.recordKey]
+                let archived = resource.entity == .customers && (initial["archived"].bool || record["archived"].bool)
+                let path = resource.recordPath(initial.id) + (archived ? "?includeArchived=1" : "")
+                let response=try await store.get(path);guard scope==store.scope else{return};detail=response;value=response[resource.recordKey].isNull ? response : response[resource.recordKey]
             } else {
                 let response=try await store.get(resource.listPath);guard scope==store.scope else{return};detail=response;value=response[resource.listKey].array.first(where:{$0.id==initial.id}) ?? initial
             }

@@ -7,6 +7,10 @@ struct APIInquiries: View {
     @State private var status = ""
     @State private var category = ""
     @State private var assignee = ""
+    @State private var dateFilters = false
+    @State private var limitDates = false
+    @State private var from = Date()
+    @State private var to = Date()
     @State private var summary: APIValue = .null
     @State private var records: [APIValue] = []
     @State private var problem = ""
@@ -15,7 +19,7 @@ struct APIInquiries: View {
     private var path: String {
         var url = URLComponents()
         url.path = "/api/inquiries"
-        url.queryItems = ["closed": closed ? "1" : "0", "q": query, "status": status, "category": category, "assignee": assignee]
+        url.queryItems = ["closed": closed ? "1" : "0", "q": query, "status": status, "category": category, "assignee": assignee, "from": limitDates ? DiaryDate.iso(from) : "", "to": limitDates ? DiaryDate.iso(to) : ""]
             .filter { !$0.value.isEmpty }.sorted { $0.key < $1.key }
             .map { URLQueryItem(name: $0.key, value: $0.value) }
         return url.string ?? "/api/inquiries"
@@ -47,6 +51,7 @@ struct APIInquiries: View {
         .searchable(text: $query, prompt: "Jméno, číslo nebo adresa")
         .toolbar {
             Menu {
+                Button("Období přijetí") { dateFilters = true }
                 ShareLink(item: store.transport.origin.appendingPathComponent("poptavka.html")) { Label("Sdílet veřejný formulář", systemImage: "square.and.arrow.up") }
                 Picker("Stav", selection: $status) {
                     Text("Všechny stavy").tag("")
@@ -60,6 +65,18 @@ struct APIInquiries: View {
                     ForEach(summary["members"].array, id: \.id) { Text($0.title).tag($0.id) }
                 }
             } label: { Label("Filtry", systemImage: "line.3.horizontal.decrease.circle") }
+        }
+        .sheet(isPresented: $dateFilters) {
+            NavigationStack {
+                Form {
+                    Toggle("Omezit podle data přijetí", isOn: $limitDates)
+                    if limitDates {
+                        DatePicker("Od", selection: $from, in: ...to, displayedComponents: .date)
+                        DatePicker("Do", selection: $to, in: from..., displayedComponents: .date)
+                    }
+                }.navigationTitle("Období přijetí").navigationBarTitleDisplayMode(.inline)
+                .toolbar { Button("Hotovo") { dateFilters = false } }
+            }.presentationDetents([.medium])
         }
         .onChange(of: closed) { _, _ in status = "" }
         .task { do { summary = try await store.get("/api/inquiries/summary", refresh: true) } catch { problem = error.localizedDescription } }
@@ -264,5 +281,22 @@ private struct APIInquiryConversion: View {
             _ = try await store.write(path, method: "POST", body: .object(["version": preview["inquiry"]["version"], "mode": .s(customer == "new" ? "new" : "existing"), "customerId": customer == "new" ? .null : .s(customer), "acknowledgeDuplicates": .bool(acknowledge), "job": job]))
             dismiss()
         } catch { problem = error.localizedDescription }
+    }
+}
+
+struct APIInquiryFromNotice: View {
+    @ObservedObject var store: APIStore
+    let id: String
+    @State private var summary: APIValue = .null
+    @State private var problem = ""
+    var body: some View {
+        Group {
+            if !summary.isNull { APIInquiryDetail(store: store, id: id, summary: summary) }
+            else if !problem.isEmpty { Text(problem) }
+            else { ProgressView("Načítám poptávku…") }
+        }.task {
+            do { summary = try await store.get("/api/inquiries/summary", refresh: true) }
+            catch { problem = error.localizedDescription }
+        }
     }
 }
