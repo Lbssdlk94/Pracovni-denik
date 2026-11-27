@@ -18,6 +18,20 @@ try{
  assert.equal(page.status,200);
  assert.match(await page.text(),/id="app"/);
  assert.equal((await fetchWorker('/app.js')).status,200);
+ if(process.argv.includes('--cloudflare'))await validateCloudflareLogin();
+ else{
+  for(const route of ['/api/me','/api/installation','/api/jobs']){
+   const response=await fetchWorker(route,people.owner);
+   assert.equal(response.status,200,route+': '+await response.clone().text());
+   if(route==='/api/me')assert.equal((await response.json()).user.role,'owner');
+  }
+  assert.equal((await fetchWorker('/api/me')).status,401);
+  console.log('PASS Sites startup and protected API on isolated SQLite/R2.');
+ }
+ await Promise.all(pending);
+}finally{fixture.sqlite.close();}
+
+async function validateCloudflareLogin(){
  const options=await fetchWorker('/api/auth/options');
  assert.equal(options.status,200,await options.clone().text());
  assert.deepEqual(await options.json(),{password:true,linkAllowed:false,legacyAllowed:false});
@@ -57,6 +71,5 @@ try{
  }
  assert.equal((await fetchWorker('/api/access-logout',null,'POST',{},session)).status,200);
  assert.equal((await fetchWorker('/api/me',null,'GET',undefined,session)).status,401);
- await Promise.all(pending);
  console.log('PASS Cloudflare login, owner setup, password change, protected API and logout on isolated SQLite/R2.');
-}finally{fixture.sqlite.close();}
+}
