@@ -1,3 +1,5 @@
+> **Nahrazeno:** Pro aktuální test migrace použijte plán na větvi `migration/cloudflare-test-9e80f6c`, který vychází z commit `9e80f6c731b28ef20e69d8974304c25b42bdcc5c` (živé zdroje Závlahového deníku v182 a Dr. Garden v101). Tento starší plán vychází z `main` a neobsahuje novější testovací zdroje ani Dr. Garden relay konfiguraci.
+
 # Plán bezpečné migrace Pracovního deníku na Cloudflare
 
 Datum přípravy: 27. 11. 2026  
