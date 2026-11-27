@@ -1,7 +1,7 @@
 # Příprava testovací migrace deníku na Cloudflare
 
 Datum: 27. 11. 2026  
-Stav: zdroj a postup ověřeny; Cloudflare účet ani produkční data zatím nebyly změněny.
+Stav: zdroj ověřen; prázdná testovací D1 a soukromý R2 bucket založeny. Worker zatím není nasazen ani veřejně dostupný. Produkční Sites zůstávají beze změny.
 
 ## Přesný zdroj pro test
 
@@ -19,10 +19,10 @@ Pro jistotu jsou zachované tyto větve:
 
 ### 1. Založit oddělený testovací backend
 
-1. Na novém Cloudflare účtu vytvořit testovací Worker, novou prázdnou D1 databázi (`DB`) a nový prázdný R2 bucket (`BUCKET`).
-2. Sestavit `apps/work-diary` z výše uvedeného commitu a připravit Wrangler konfiguraci pro Worker, D1 a R2. Konfigurace a tajemství zůstanou mimo zdrojový kód; použít oddělené testovací hodnoty a doménu.
-3. Spustit databázové migrace z daného commitu pouze na nové prázdné D1. Nejpoužívat původní Sites DB ani existující R2.
-4. Na prázdné instalaci ověřit načtení aplikace, vlastní přihlášení, základní čtení/zápis, nahrání a načtení testovacího souboru. Nepoužívat skutečná zákaznická data.
+1. V Cloudflare účtu Info@drzavlaha.cz jsou založené prázdná D1 `work-diary-test-db` a soukromý R2 bucket `work-diary-test-files`. První Worker nasadit bez veřejné URL.
+2. Pracovní větev připravuje izolovaný instalační balíček, statický testovací ID instalace a Wrangler konfiguraci pro tato dvě prostředí. Build vloží ověřovací vrstvu Cloudflare Access; bez ověřené Access identity Worker vrací 403. Tajemství nejsou v repozitáři.
+3. Spustit jednu čistou počáteční migraci pouze na nové prázdné D1. Nepoužívat původní Sites DB ani jiné R2.
+4. Až bude Worker vytvořen, před zapnutím `workers.dev` na něj v Cloudflare připojit Access a omezit přihlášení na firemní identity. Poté ověřit načtení webu, přihlášení, základní čtení/zápis a soukromý upload souboru. V aplikaci použít pouze testovací data.
 
 ### 2. Připojit obě webové varianty k testovacímu API
 
@@ -46,11 +46,11 @@ Ostré přepnutí není součástí testu. Až staging projde ověřením, napl�
 
 ## Co je potřeba před skutečným během
 
-- Přístup ke Cloudflare účtu kolegy nebo jeho vlastní nasazení. Cloudflare připojení v tomto prostředí není dostupné.
+- Připojit Cloudflare Workers Builds k soukromému repozitáři `Lbssdlk94/Pracovni-denik` na pracovní větvi `migration/cloudflare-test-9e80f6c`; před potvrzením přístupu ověřit požadovaný rozsah oprávnění.
 - Záloha databáze a soubory z Sites. V repozitáři ani v záložních větvích nejsou.
-- Doména/URL pro testovací Worker a weby; testovací tajemství a provozní plánovače se nastavují pouze v Cloudflare.
+- Cloudflare Access v Zero Trust a testovací URL `workers.dev`; Access identita bude do aplikace předána pouze z ověřeného Worker kontextu.
 - Po testu schválený čas a postup produkčního přepnutí. Do té doby zůstává aktuální Sites provoz zdrojem pravdy.
 
 ## Kontrola změn
 
-Při kontrole větve `feat/assistant-create-records` byl potvrzen výše uvedený commit a soubor `apps/work-diary/deployments/dr-garden/README.md`. Tato migrační příprava pouze vytváří oddělené reference a tento dokument. Nebyl spuštěn build ani testy; nebyl proveden deployment, změněna databáze, R2, heslo ani živá aplikace.
+Při kontrole větve `feat/assistant-create-records` byl potvrzen výše uvedený commit a soubor `apps/work-diary/deployments/dr-garden/README.md`. Příprava změnila pouze pracovní větev, založila prázdnou D1 a soukromý R2 bucket a připravila jejich testovací konfiguraci. Build ani testy zatím neběžely; Worker ani veřejná URL nejsou nasazené. Main, Sites, hesla a skutečná data zůstaly beze změny.
