@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 const source=await readFile('dist/server/index.js','utf8'),hosting=JSON.parse(await readFile('dist/.openai/hosting.json','utf8'));
 assert.ok(hosting.project_id||process.argv.includes('--allow-unbound'));assert.ok(!hosting.static);const worker=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64')).catch(e=>{console.error(e.message);process.exit(1);});assert.equal(typeof worker.default.fetch,'function');
-const result=await worker.default.fetch(new Request('https://example.test/'),{},{});assert.equal(result.status,200);const html=await result.text();assert.ok(html.includes('id="app"'));assert.ok(/<title>[^<]+<\/title>/.test(html));console.log('Worker artifact validated.');
+const deniedPage=await worker.default.fetch(new Request('https://example.test/'),{},{});assert.equal(deniedPage.status,403);const accessContext={access:{getIdentity:async()=>({email:'owner@example.com',user_uuid:'owner-id'})}};const result=await worker.default.fetch(new Request('https://example.test/'),{},accessContext);assert.equal(result.status,200);const html=await result.text();assert.ok(html.includes('id="app"'));assert.ok(/<title>[^<]+<\/title>/.test(html));console.log('Worker artifact validated.');
 
 // Exercise the exact compiled authenticated entrypoint against isolated data.
 // A public HTML response or an unauthenticated 401 cannot detect missing init functions.
