@@ -6,6 +6,7 @@ workers_dev = true
 preview_urls = false
 
 [vars]
+STANDALONE_PASSWORD_AUTH = "1"
 COMPANY_NAME = "Závlahový deník – TEST"
 TEAM_OWNER_EMAIL = "info@drzavlaha.cz"
 INSTALLATION_ID = "inst-workdiary-cf-test-20261127"

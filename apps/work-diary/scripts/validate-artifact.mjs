@@ -9,6 +9,8 @@ assert.ok(hosting.project_id||process.argv.includes('--allow-unbound'));
 assert.ok(!hosting.static);
 const {default:worker}=await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
 const fixture=environment(),pending=[],ctx={waitUntil:task=>pending.push(task.catch(()=>{}))};
+const expected=JSON.parse(source.match(/const EXPECTED_INSTALLATION_ID=([^;]+);/)[1]);
+if(expected)fixture.sqlite.prepare('UPDATE installation_state SET instance_id=?').run(expected);
 const fetchWorker=(...args)=>worker.fetch(request(...args),fixture,ctx);
 const login=(password,preview=false)=>fetchWorker('/api/auth/login',null,'POST',{username:people.owner.email,password,preview});
 const sessionHeader=response=>({cookie:response.headers.get('set-cookie').split(';')[0]});
