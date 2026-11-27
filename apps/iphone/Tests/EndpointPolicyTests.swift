@@ -14,6 +14,17 @@ final class EndpointPolicyTests: XCTestCase {
         XCTAssertFalse(EndpointPolicy.isSignIn(URL(string: "https://evil.test/signin-with-chatgpt")!))
         XCTAssertFalse(EndpointPolicy.isSignIn(EndpointPolicy.home))
     }
+    func testCloudflareSignInIsSeparateFromDiaryAndAllowsItsProvider() throws {
+        let provider = try XCTUnwrap(URL(string: "https://dash.cloudflare.com/oauth2/auth"))
+        let challenge = try XCTUnwrap(URL(string: "https://challenges.cloudflare.com/"))
+        let lookalike = try XCTUnwrap(URL(string: "https://dash.cloudflare.com.example.test/"))
+        XCTAssertTrue(EndpointPolicy.isCloudflareSignInPage(provider, mainFrame: true))
+        XCTAssertFalse(EndpointPolicy.isCloudflareAccess(provider))
+        XCTAssertFalse(EndpointPolicy.isDiary(provider))
+        XCTAssertTrue(EndpointPolicy.isCloudflareSignInPage(challenge, mainFrame: false))
+        XCTAssertFalse(EndpointPolicy.isCloudflareSignInPage(challenge, mainFrame: true))
+        XCTAssertFalse(EndpointPolicy.isCloudflareSignInPage(lookalike, mainFrame: true))
+    }
     func testPDFBlobMustBelongToKnownDiary() {
         XCTAssertTrue(EndpointPolicy.isEmbeddedDocument(URL(string: "blob:https://zavlahovy-denik.purplecedar.chatgpt.site/test-pdf")!))
         XCTAssertFalse(EndpointPolicy.isEmbeddedDocument(URL(string: "blob:https://evil.test/private")!))

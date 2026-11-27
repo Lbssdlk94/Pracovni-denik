@@ -32,8 +32,8 @@ struct APICloudflareAccess: UIViewRepresentable {
         func webView(_ web: WKWebView, decidePolicyFor action: WKNavigationAction,
                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
             guard let url = action.request.url else { decisionHandler(.cancel); return }
-            let diary = EndpointPolicy.isDiary(url) && url.host == EndpointPolicy.cloudflareHost
-            decisionHandler(diary || EndpointPolicy.isCloudflareAccess(url) ? .allow : .cancel)
+            let allowed = EndpointPolicy.isCloudflareSignInPage(url, mainFrame: action.targetFrame?.isMainFrame ?? true)
+            decisionHandler(allowed ? .allow : .cancel)
         }
 
         func webView(_ web: WKWebView, decidePolicyFor navigation: WKNavigationResponse,

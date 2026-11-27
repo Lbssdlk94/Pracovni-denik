@@ -12,8 +12,21 @@ enum EndpointPolicy {
     static let hosts = Set(installations.map { $0.1 })
 
     static func isCloudflareAccess(_ url: URL) -> Bool {
+        isCloudflareHTTPS(url) && url.host?.lowercased() == cloudflareAccessHost
+    }
+
+    static func isCloudflareSignInPage(_ url: URL, mainFrame: Bool) -> Bool {
+        guard isCloudflareHTTPS(url) else { return false }
+        switch url.host?.lowercased() {
+        case cloudflareHost, cloudflareAccessHost, "dash.cloudflare.com": return true
+        case "challenges.cloudflare.com": return !mainFrame
+        default: return false
+        }
+    }
+
+    private static func isCloudflareHTTPS(_ url: URL) -> Bool {
         url.scheme?.lowercased() == "https" && url.user == nil && url.password == nil &&
-        (url.port == nil || url.port == 443) && url.host?.lowercased() == cloudflareAccessHost
+        (url.port == nil || url.port == 443)
     }
 
     static func isDiary(_ url: URL) -> Bool {
