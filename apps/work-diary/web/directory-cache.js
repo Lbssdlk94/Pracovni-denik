@@ -1,17 +1,17 @@
 // Complete, authorized directory snapshots. No mutations, photos or work history.
-export const DIRECTORY_CACHE_KEY='directory-cache-v1';
+export const DIRECTORY_CACHE_KEY='directory-cache-v2-contact-types';
 const copy=value=>structuredClone(value),day=86400000,ttl=120000;
 const fault=(message,code='directory_unavailable')=>Object.assign(Error(message),{code});
 const base=()=>({records:[],gardens:[],services:[],serviceWork:[],defects:[]});
 const fold=value=>String(value||'').normalize('NFD').replace(/\p{Diacritic}/gu,'').toLocaleLowerCase('cs');
-export function directoryPath(path){const u=new URL(path,'https://directory.invalid');return path.startsWith('/api/')&&u.origin==='https://directory.invalid'&&/^\/api\/(customers|gardens)(?:\/[-\w]{1,100})?$/.test(u.pathname)&&[...u.searchParams.keys()].every(k=>['q','cursor','discipline'].includes(k))?u:null;}
+export function directoryPath(path){const u=new URL(path,'https://directory.invalid');return path.startsWith('/api/')&&u.origin==='https://directory.invalid'&&/^\/api\/(customers|gardens)(?:\/[-\w]{1,100})?$/.test(u.pathname)&&[...u.searchParams.keys()].every(k=>['q','cursor','discipline','contactKind','includeArchived'].includes(k))?u:null;}
 export function directoryResult(path,snapshot,{now=Date.now(),offline=false}={}){
  const u=directoryPath(path);if(!u)return null;const [, ,kind,id]=u.pathname.split('/'),p=u.searchParams;
  let rows=snapshot[kind]||[],discipline=p.get('discipline');
- if(discipline&&discipline!=='all')rows=rows.filter(r=>(r.disciplines||[]).includes(discipline));
+ if(discipline&&discipline!=='all')rows=rows.filter(r=>discipline==='both'?(r.disciplines||[]).includes('irrigation')&&(r.disciplines||[]).includes('garden'):discipline==='unassigned'?!(r.disciplines||[]).length:(r.disciplines||[]).includes(discipline));
  const meta={at:snapshot.at,offline,persistent:snapshot.persistent!==false,stale:now-snapshot.at>=ttl};
  if(id){const row=rows.find(r=>r.id===id);if(!row)throw Object.assign(fault('Záznam není v dostupném uloženém adresáři.'),{status:404});return kind==='gardens'?{garden:copy(row),_directoryCache:meta}:{customer:{...copy(row),gardens:copy((snapshot.gardens||[]).filter(g=>g.customerId===id))},_directoryCache:meta};}
- const q=fold(p.get('q')).trim();if(q)rows=rows.filter(r=>fold([r.name,r.email,r.address,...(r.phones||[]).map(v=>v.number),...(r.addresses||[]).flatMap(v=>[v.address,v.city])].join(' ')).includes(q));
+ if(kind==='customers'){if(p.get('includeArchived')!=='1')rows=rows.filter(r=>!r.archived);const type=p.get('contactKind');if(type&&type!=='all')rows=rows.filter(r=>type==='both'?r.contactKind==='both':(r.contactKind||'customer')===type||r.contactKind==='both');}const q=fold(p.get('q')).trim();if(q)rows=rows.filter(r=>fold([r.name,r.email,r.address,...(r.phones||[]).map(v=>v.number),...(r.addresses||[]).flatMap(v=>[v.address,v.city]),...(r.contacts||[]).flatMap(v=>[v.name,v.phone,v.email])].join(' ')).includes(q));
  rows=[...rows].sort((a,b)=>fold(a.name).localeCompare(fold(b.name),'cs')||a.id.localeCompare(b.id));
  if(kind==='gardens')return {gardens:copy(rows),_directoryCache:meta};
  let offset=0;const cursor=p.get('cursor');if(cursor){const parts=cursor.split(':');if(parts.length!==3||parts[0]!=='directory'||Number(parts[1])!==snapshot.at||!/^\d+$/.test(parts[2]))throw fault('Adresář se změnil. Obnovte první stránku.','directory_cursor_changed');offset=Number(parts[2]);}
@@ -37,7 +37,7 @@ export function createDirectoryCache({read,write,send,getSession,scope,online,no
    if(session.workspace){const manifest=await send('/api/workspace/manifest',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(base())});check(ticket,key);verify(manifest,session);stamp=manifest.stamp;if(old?.scope===key&&old.stamp!==stamp){oldAllowed=false;await write(null);check(ticket,key);}}
    const snapshot={scope:key,at:now(),stamp,customers:[],gardens:[]};
    if(session.features?.customers!==false){let cursor='',seen=new Set();for(let page=0;page<200;page++){
-    const result=await send('/api/customers'+(cursor?'?cursor='+encodeURIComponent(cursor):''));check(ticket,key);
+    const result=await send('/api/customers?includeArchived=1'+(cursor?'&cursor='+encodeURIComponent(cursor):''));check(ticket,key);
     if(!Array.isArray(result.customers))throw fault('Neúplný seznam zákazníků.');
     for(const row of result.customers){if(!row.id||seen.has(row.id))throw fault('Seznam zákazníků se během načítání změnil.');seen.add(row.id);snapshot.customers.push(row);}
     const next=result.nextCursor;if(!next)break;if(next===cursor||page===199)throw fault('Adresář nebyl načten celý.');cursor=next;

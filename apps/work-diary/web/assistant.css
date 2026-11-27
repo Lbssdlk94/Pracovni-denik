@@ -15,6 +15,8 @@
 .assistant-history{left:12px;right:auto}
 .assistant-tabs{display:none}
 .assistant-concept-sheet,.assistant-empty-stage{display:grid;gap:12px}
+.assistant-concept-scroll{display:contents}
+.assistant-discard{margin-left:auto;min-height:36px;padding:0 12px;border:1px solid var(--as-line);border-radius:999px;background:transparent;color:var(--as-ink);font:inherit;font-size:13px;font-weight:700;cursor:pointer}
 .assistant-concept-sheet header,.assistant-concept-actions,.assistant-term,.assistant-material{display:flex;flex-wrap:wrap;gap:8px;align-items:end}
 .assistant-pill{margin-left:8px;border-radius:999px;padding:3px 8px;background:var(--as-mint);color:var(--as-green);font-size:12px;font-weight:700}
 .assistant-term,.assistant-material{padding:10px;border:1px solid var(--as-line);border-radius:14px}
@@ -45,6 +47,11 @@
 .assistant-modes button[aria-pressed=true]{background:var(--as-mint);color:var(--as-green);border-color:transparent}
 .assistant-concept{margin-top:10px;padding:12px;border:1px solid var(--as-line);border-radius:18px;background:var(--as-surface)}
 .assistant-concept p,.assistant-concept li{margin:4px 0 0;color:var(--as-muted);font-size:13px}
+.assistant-protocol-card .assistant-place{color:var(--as-ink);font-weight:700;font-size:15px}
+.assistant-material-list{margin:8px 0 0;padding:0 0 0 18px}
+.assistant-protocol-card .assistant-muted{font-size:13px}
+.assistant-choice{display:grid;gap:4px;margin-top:6px;font-size:12px}
+.assistant-choice select{min-height:40px;border:1px solid var(--as-line);border-radius:12px;background:var(--as-bg);color:var(--as-ink);padding:8px}
 .assistant-days{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .assistant-days span{padding:6px 8px;border-radius:12px;background:var(--as-mint);color:var(--as-green);font-size:12px;font-weight:700}
 .assistant-local{margin:0 18px 8px;padding:12px;border:1px solid var(--as-line);border-radius:16px;background:var(--as-bg)}
@@ -245,21 +252,32 @@
   .assistant-sheet-title h2{font-size:24px}
   .assistant-day-note{grid-column:1}
 }
-/* Mobile Safari: later desktop rules must not reopen the bottom nav, stretch the sheet, or let the composer cover the log. */
+/* Mobile: the sheet covers the page. The page behind must not show through or scroll. */
 @media(max-width:760px){
-  body.assistant-open{overflow:hidden}
+  html:has(body.assistant-open){overflow:hidden;height:100%;overscroll-behavior:none}
+  body.assistant-open{overflow:hidden;overscroll-behavior:none;width:100%}
   body.assistant-open .shell:not(.admin-shell)>.sidebar,
   body.assistant-open .sidebar,
-  body.assistant-open .mobile-brand{display:none}
-  #assistant-root.is-open{position:fixed;inset:0;z-index:80;right:auto;bottom:auto;width:auto;height:auto}
+  body.assistant-open .mobile-brand,
+  body.assistant-open .topbar{display:none}
+  #assistant-root.is-open{
+    position:fixed;inset:0;z-index:2500;right:auto;bottom:auto;width:100%;height:100%;
+    background:#f6f7f4;overflow:hidden
+  }
+  #assistant-root.is-open:has(#assistant-page[data-theme="dark"]){background:#121417}
   #assistant-root.is-open .assistant-launch{display:none}
   #assistant-root.is-open #assistant-page{
-    position:fixed;left:0;right:0;top:var(--vv-top,0px);bottom:auto;
-    width:auto;height:var(--vv-height,100dvh);max-height:var(--vv-height,100dvh);
+    position:absolute;left:0;right:0;top:0;bottom:auto;
+    width:100%;height:100%;max-height:100%;
     margin:0;padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
-    display:flex;background:var(--as-bg);border:0;overflow:hidden;border-radius:0
+    display:flex;flex-direction:column;background:var(--as-bg);border:0;overflow:hidden;border-radius:0;
+    overscroll-behavior:none
   }
-  #assistant-root .assistant-workspace{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;overflow:hidden;border-radius:0;background:var(--as-bg)}
+  #assistant-root.is-open.keyboard-open #assistant-page{
+    top:var(--vv-top,0px);height:var(--vv-height,100%);max-height:var(--vv-height,100%)
+  }
+  #assistant-page[data-theme="dark"]{background:#121417}
+  #assistant-root .assistant-workspace{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;max-height:100%;overflow:hidden;border-radius:0;background:var(--as-bg)}
   #assistant-page .assistant-bar{position:sticky;top:0;z-index:5;flex:none;min-height:48px;padding:4px 6px;border:0;border-bottom:1px solid var(--as-line);border-radius:0;background:var(--as-surface)}
   #assistant-page .assistant-brand small,#assistant-page .assistant-bar [data-new],#assistant-page .assistant-bar [data-hide-chat]{display:none}
   #assistant-page .assistant-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;flex:none;margin:8px 12px 4px;padding:4px;border-radius:14px;background:var(--as-bg)}
@@ -275,7 +293,13 @@
   #assistant-page .assistant-row.mine{margin-left:12px}
   #assistant-page .assistant-avatar,#assistant-page .assistant-row>.assistant-spark{width:26px;height:26px}
   #assistant-page .assistant-card{margin-top:6px;padding:10px;border-radius:14px}
-  #assistant-page .assistant-stage{padding:12px;overflow:auto}
+  #assistant-page .assistant-stage{display:flex;flex-direction:column;flex:1 1 0%;min-height:0;padding:0;overflow:hidden}
+  #assistant-page .assistant-concept-sheet{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;gap:0;overflow:hidden}
+  #assistant-page .assistant-concept-scroll{display:block;flex:1 1 auto;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:12px}
+  #assistant-page .assistant-concept-actions{position:static;flex:none;justify-content:stretch;margin:0;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:var(--as-surface);border-top:1px solid var(--as-line)}
+  #assistant-page .assistant-concept-actions button{flex:1;min-width:0}
+  #assistant-page .assistant-material{grid-template-columns:1fr}
+  #assistant-page .assistant-empty-stage,#assistant-page .assistant-detail{flex:1 1 auto;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch}
   #assistant-page .assistant-composer{
     position:sticky;bottom:0;z-index:4;flex:none;margin:0;border:0;border-radius:0;border-top:1px solid var(--as-line);
     padding:8px 10px calc(8px + var(--kb-pad, env(safe-area-inset-bottom)));

@@ -1,10 +1,11 @@
-import {parseAssistantCommand, contextualCommand, assistantModeInfo, assistantSuggestions, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, planMaterialLines, parseServiceDictation, reviseServiceDraft, annotateProtocolMaterials, serviceDraftQuestions, parseDictionaryCommand, applyAssistantDictionary} from '../web/assistant-commands.js';
+import {interpretAssistant, assistantModeInfo, assistantSuggestions, ASSISTANT_PROVIDERS, KNOWLEDGE_KINDS, planMaterialLines, parseServiceDictation, reviseServiceDraft, annotateProtocolMaterials, serviceDraftQuestions, parseDictionaryCommand, applyAssistantDictionary, matchProtocolQuery} from '../web/assistant-commands.js';
 import {formatSelectionReply, selectionCards} from '../web/job-selection.js';
 import {readJobKinds} from './job-kinds.js';
+import {modelReadCommand, pickNextWork} from '../web/assistant-intent.js';
 import {planWork, revisePlan, matchPeople, planCollisions, planSummary, nameStem, customerHit} from '../web/job-plan.js';
 import {featureEnabled} from '../web/features.js';
 import {attendanceHours, attendanceInstant} from '../web/attendance-model.js';
-import {readImportSheet} from '../web/assistant-import.js';
+import {readImportSheet, customerImportConflict} from '../web/assistant-import.js';
 import {materialMoney, materialSummary, materialTotals} from '../web/material-model.js';
 import {installationInfo} from './installation.js';
 import {handleJobs} from './jobs.js';
@@ -13,8 +14,10 @@ import {handleCustomers} from './customers.js';
 import {handleMaterials} from './materials.js';
 import {handleServiceWork} from './service-work.js';
 import {handleJobDiary} from './job-diary.js';
+import {handleJobTime} from './job-time.js';
 import {handleGardenHistory} from './garden-history.js';
 import {handleSubscriptions} from './subscriptions.js';
+import {inquiryCommand} from './inquiries.js';
 
 const MANAGERS = ['owner','administrator','admin'];
 const STATUS = {planned:'plánovaná', on_way:'na cestě', in_progress:'probíhá', done:'hotová', incomplete:'nedokončená'};
@@ -57,8 +60,114 @@ function jobCards(jobs){
     type:'job', id:job.id, title:job.title||'Zakázka',
     subtitle:[job.customerName, job.startTime&&job.endTime?job.startTime+'–'+job.endTime:'', job.city||job.address].filter(Boolean).join(' · '),
     meta:job.dueDate||'', status:job.status||'', statusLabel:STATUS[job.status]||job.status||'',
-    openLabel:'Otevřít zakázku'
+    openLabel:'Otevřít zakázku',
+    href:mapsHref(job)
   }));
+}
+function mapsHref(job){
+  const query = [job?.address, job?.city].filter(Boolean).join(', ');
+  return query ? 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(query) : '';
+}
+function optionalPending(question){
+  if(/těsnosti/.test(question)) return 'tightness';
+  if(/funkční/.test(question)) return 'functional';
+  if(/návštěva/.test(question)) return 'next';
+  if(/závady/.test(question)) return 'defects';
+  return '';
+}
+function occurrenceLine(row){
+  const place = [row.job.customerName, row.job.address, row.job.city].filter(Boolean).join(' · ');
+  const when = row.timed ? `${row.date} ${row.time}` : `${row.date}, bez času výjezdu`;
+  return `• ${row.job.title}${place?' · '+place:''} · ${when}`;
+}
+async function assignedWindow(env, m, h, today){
+  const jobs = [];
+  for(let week=0; week<3; week++){
+    const start = addDays(today, week*7);
+    const end = addDays(start, 6);
+    const result = await jobsGet(env, m, h, `/api/jobs?state=active&order=schedule&from=${start}&to=${end}&assignee=${encodeURIComponent(m.user_id)}`);
+    if(!result.ok) return {error:blocked(result)||'Rozvrh se nepodařilo načíst. Pořadí neodhaduji.'};
+    if(result.data.nextCursor) return {error:'Zakázek je víc, než můžu bezpečně seřadit. Pořadí neodhaduji.'};
+    jobs.push(...(result.data.jobs||[]));
+  }
+  const unique = [];
+  const seen = new Set();
+  for(const job of jobs){if(job?.id&&!seen.has(job.id)){seen.add(job.id); unique.push(job);}}
+  return {jobs:unique};
+}
+async function nextWork(env, m, h, params, today, options){
+  const loaded = await assignedWindow(env, m, h, today);
+  if(loaded.error) return {reply:loaded.error};
+  const current = params.currentJobId || options.context?.jobId || '';
+  const picked = pickNextWork(loaded.jobs, today, current);
+  if(picked.choices){
+    return {reply:'Na stejný termín vidím víc zakázek a nehádám pořadí. Vyberte jednu. Cestu jsem nezahájil.\n'+picked.choices.map(occurrenceLine).join('\n'), cards:jobCards(picked.choices.map(row=>row.job))};
+  }
+  if(!picked.next) return {reply:'Další přiřazenou práci v rozvrhu nevidím. Pořadí jsem si nevymyslel.'};
+  const row = picked.next;
+  const lead = row.date===today ? 'Další práce dnes' : 'Dnes už nic dalšího nemáte. Nejbližší další práce';
+  const time = row.timed ? ` v ${row.time}` : ', bez určeného času výjezdu';
+  const place = [row.job.customerName, row.job.address, row.job.city].filter(Boolean).join(' · ');
+  return {reply:`${lead}: „${row.job.title}“${place?' · '+place:''}, ${row.date}${time}. Cestu ani stav zakázky jsem nezměnil.`, cards:jobCards([row.job])};
+}
+async function navigationAddress(env, m, h, params, today, options){
+  const wanted = String(params.query||'').trim();
+  if(wanted){
+    const found = await findJobs(env, m, h, wanted);
+    if(found.error) return {reply:found.error};
+    if(found.jobs.length===1){
+      const job = found.jobs[0];
+      if(!mapsHref(job)) return {reply:`U „${job.title}“ adresa v evidenci není. Mapu jsem neotevřel a adresu jsem si nevymyslel.`, cards:jobCards([job])};
+      return {reply:`Adresa „${job.title}“: ${[job.address, job.city].filter(Boolean).join(', ')}. Tlačítko jen otevře mapu. Cestu jsem nezahájil.`, cards:jobCards([job])};
+    }else if(found.jobs.length>1){
+      return {reply:`Našel jsem víc zakázek pro „${wanted}“. Upřesněte, kam mám navigovat. Mapu jsem neotevřel.\n`+lines(found.jobs, jobLine, ''), cards:jobCards(found.jobs)};
+    }
+    const customers = await customersGet(env, m, h, '/api/customers?q='+encodeURIComponent(wanted.slice(0,100)));
+    const customerError = blocked(customers);
+    if(customerError) return {reply:customerError};
+    const list = customers.data.customers||[];
+    if(list.length>1) return {reply:`Vyhovuje víc zákazníků. Mapu jsem neotevřel.\n`+lines(list, customer=>`• ${customer.name}`, '')};
+    if(list.length===1){
+      const address = (list[0].addresses||[])[0]||{};
+      const place = [address.address, address.city].filter(Boolean).join(', ');
+      const href = place ? 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(place) : '';
+      if(!href) return {reply:`U „${list[0].name}“ adresa v evidenci není. Mapu jsem neotevřel a adresu jsem si nevymyslel.`};
+      return {reply:`Adresa „${list[0].name}“: ${place}. Tlačítko jen otevře mapu. Cestu jsem nezahájil.`, cards:[{type:'customer', id:list[0].id, title:list[0].name, subtitle:place, href, openLabel:'Otevřít zákazníka'}]};
+    }
+    return {reply:`Místo „${wanted}“ v zakázkách ani u zákazníků nevidím. Mapu jsem neotevřel a adresu jsem si nevymyslel.`};
+  }
+  const currentId = params.currentJobId || options.context?.jobId || '';
+  let job = null;
+  if(currentId){
+    const loaded = await jobsGet(env, m, h, '/api/jobs/'+encodeURIComponent(currentId));
+    if(!loaded.ok) return {reply:blocked(loaded)||'Zakázku se nepodařilo načíst. Adresu jsem si nevymyslel.'};
+    job = loaded.data.job;
+  }else{
+    const found = await nextWork(env, m, h, params, today, options);
+    if(!found.cards?.length) return {reply:(found.reply||'Adresu nemám.')+' Mapu jsem neotevřel.'};
+    return {reply:found.reply+' Tlačítko jen otevře mapu se skutečnou adresou. Cestu jsem nezahájil.', cards:found.cards};
+  }
+  const href = mapsHref(job);
+  if(!href) return {reply:`U „${job.title}“ adresa v evidenci není. Mapu jsem neotevřel a adresu jsem si nevymyslel.`, cards:jobCards([job])};
+  return {reply:`Adresa „${job.title}“: ${[job.address, job.city].filter(Boolean).join(', ')}. Tlačítko jen otevře mapu. Cestu jsem nezahájil.`, cards:jobCards([job])};
+}
+async function catalogStock(env, m, h, query){
+  const found = await catalogLookup(env, m, h, query);
+  if(found.reply) return found;
+  const name = found.choices?query:found.item.name;
+  return {reply:`Skladové množství u „${name}“ katalog neeviduje. Číslo si nevymýšlím.${found.choices?' Vyhovuje víc položek: '+found.choices.map(item=>item.name).join(', ')+'.':''}`};
+}
+async function catalogLookup(env, m, h, query){
+  const wanted = String(query||'').trim();
+  if(!wanted) return {reply:'O kterou položku jde? Název ani cenu jsem si nevymyslel.'};
+  const result = await materialsGet(env, m, h);
+  const error = blocked(result);
+  if(error) return {reply:error};
+  if(result.data.nextCursor) return {reply:'Katalog je delší než jedna stránka. Upřesněte název, ať nesáhnu vedle.'};
+  const found = matchProtocolQuery(wanted, result.data.items||[]);
+  if(found.missing) return {reply:`Položku „${wanted}“ v katalogu nevidím. Novou nezakládám a cenu nevymýšlím.`};
+  if(found.choices) return {choices:found.choices, reply:`„${wanted}“ sedí na víc položek: ${found.choices.map(item=>item.name).join(', ')}. Jednu jsem nevybral.`};
+  return {item:found.item};
 }
 function materialCards(items){
   return (items||[]).filter(item=>item?.id).slice(0,8).map(item=>({
@@ -68,7 +177,7 @@ function materialCards(items){
 }
 function reply(mode, text, extra={}){
   const info = assistantModeInfo(mode);
-  return {mode:info.id, modeLabel:info.label, modeNote:info.detail, available:info.available===true, reply:text, suggestions:extra.suggestions||[], cards:extra.cards||[], concept:extra.concept||null, context:extra.context||null, confirm:extra.confirm||null, mutated:extra.mutated||null, unavailable:extra.unavailable===true||info.available!==true};
+  return {mode:info.id, modeLabel:info.label, modeNote:info.detail, available:info.available===true, reply:text, suggestions:extra.suggestions||[], cards:extra.cards||[], concept:extra.concept||null, context:extra.context||null, confirm:extra.confirm||null, mutated:extra.mutated||null, unavailable:extra.unavailable===true||info.available!==true, ...(extra.importProgress?{importProgress:extra.importProgress,continueImport:extra.continueImport===true}: {})};
 }
 
 async function companyOf(env, m){
@@ -148,7 +257,7 @@ async function auditCommit(env, row, summary, h){
 }
 
 export async function handleAssistant(request, env, ctx, m, h){
-  const body = await h.body(request, 120000);
+  const body = await h.body(request, 2200000);
   if(!body||typeof body!=='object'||Array.isArray(body)) h.fail(400,'Neplatný příkaz.');
   const mode = assistantModeInfo(typeof body.mode==='string'?body.mode:'basic').id;
   const info = assistantModeInfo(mode);
@@ -167,21 +276,27 @@ export async function handleAssistant(request, env, ctx, m, h){
   const rawText = typeof body.text==='string'?body.text:'';
   const entries = await dictionaryEntries(env);
   const text = parseDictionaryCommand(rawText)?rawText:applyAssistantDictionary(rawText, entries);
-  const command = contextualCommand(parseAssistantCommand(text, today, await readJobKinds(env)), context);
-  const answer = await run(env, ctx, m, h, command, today, {propose:true, preview, context:body.context&&typeof body.context==='object'?body.context:null});
+  const kinds = await readJobKinds(env);
+  const command = interpretAssistant(text, today, context, kinds);
+  const hinted = command.intent==='unknown'?modelReadCommand(body.understanding):null;
+  const answer = await run(env, ctx, m, h, hinted||command, today, {propose:true, preview, context:body.context&&typeof body.context==='object'?body.context:null});
   return h.json(reply(mode, answer.reply, answer));
 }
 
 async function cancel(env, m, h, id, mode){
   if(typeof id!=='string'||!/^[-a-zA-Z0-9_]{1,100}$/.test(id)) h.fail(400,'Neplatné potvrzení.');
   await ensureAudit(env);
-  const company = await companyOf(env, m);
-  const result = await env.DB.prepare("UPDATE assistant_events SET kind='cancelled', summary=? WHERE id=? AND actor_id=? AND company_id=? AND kind='proposal'")
-    .bind('Potvrzení je zrušené. Nic jsem neuložil.', id, m.user_id, company).run();
-  if(result.meta.changes) return reply(mode, 'Potvrzení je zrušené. Nic jsem neuložil.');
-  const row = await ownEvent(env, id, m);
-  if(row?.kind==='committed') return reply(mode, 'Tato akce už byla provedena. '+row.summary);
-  if(row?.kind==='cancelled') return reply(mode, 'Potvrzení už je zrušené. Nic se neuložilo.');
+  const company=await companyOf(env,m),previous=await ownEvent(env,id,m);
+  const payload=previous?JSON.parse(previous.payload):null;
+  const message=payload?.intent==='import.customers'&&payload.params?.processed
+    ?`Zbytek importu je zrušený. Již uložených ${payload.params.saved||0} zákazníků zůstává zachováno.`
+    :'Potvrzení je zrušené. Nic jsem neuložil.';
+  const result=await env.DB.prepare("UPDATE assistant_events SET kind='cancelled', summary=? WHERE id=? AND actor_id=? AND company_id=? AND kind='proposal'")
+    .bind(message,id,m.user_id,company).run();
+  if(result.meta.changes)return reply(mode,message);
+  const row=await ownEvent(env,id,m);
+  if(row?.kind==='committed')return reply(mode,'Tato akce už byla provedena. '+row.summary);
+  if(row?.kind==='cancelled')return reply(mode,row.summary);
   h.fail(404,'Potvrzení už není platné. Zadejte příkaz znovu.');
 }
 
@@ -233,7 +348,7 @@ async function confirm(env, ctx, m, h, id, mode, preview, concept){
   const row = await ownEvent(env, id, m);
   if(!row) h.fail(404,'Potvrzení už není platné. Zadejte příkaz znovu.');
   if(!claimed.meta.changes){
-    if(row.kind==='committed') return reply(mode, 'Tato akce už byla provedena. '+row.summary);
+    if(row.kind==='committed'){const prior=JSON.parse(row.payload).importResult;return prior?reply(mode,prior.reply,prior):reply(mode,'Tato akce už byla provedena. '+row.summary);}
     if(row.kind==='cancelled') return reply(mode, 'Potvrzení je zrušené. Nic jsem neuložil.');
     if(row.kind==='committing') return reply(mode, 'Toto potvrzení se právě zpracovává. Znovu ho nespouštím.');
     h.fail(409,'Potvrzení vypršelo. Zadejte příkaz znovu.');
@@ -247,17 +362,30 @@ async function confirm(env, ctx, m, h, id, mode, preview, concept){
     await env.DB.prepare("UPDATE assistant_events SET kind='proposal' WHERE id=? AND actor_id=? AND company_id=? AND kind='committing'").bind(id, m.user_id, company).run();
     throw error;
   }
+  // Persist the continuation with its parent receipt: retrying a lost response
+  // returns the same next chunk, never a second import with new customer IDs.
+  if(done.importProgress){
+    await env.DB.prepare("UPDATE assistant_events SET payload=? WHERE id=? AND actor_id=? AND kind='committing'")
+      .bind(JSON.stringify({...action,importResult:done}),row.id,m.user_id).run();
+    await auditCommit(env,row,done.reply,h);
+    return reply(mode,done.reply,done);
+  }
   if(done.confirm){
     await auditCommit(env, row, 'Vyžaduje další potvrzení. '+done.reply, h);
     return reply(mode, done.reply, {confirm:done.confirm});
   }
   await auditCommit(env, row, done.reply, h);
-  return reply(mode, done.reply, {mutated:done.mutated||null, context:done.context||null, concept:done.concept||null});
+  return reply(mode, done.reply, {mutated:done.mutated||null, context:done.context||null, concept:done.concept||null, cards:done.cards||[]});
 }
 
 async function run(env, ctx, m, h, command, today, options){
   const {intent, params} = command;
   const tomorrow = addDays(today, 1);
+  if(String(intent||'').startsWith('inquiries.')){
+    const answer = await inquiryCommand(env, m, h, intent, params||{}, options);
+    if(answer.proposal && options.propose) return {reply:answer.reply, confirm:await propose(env, m, {intent, params:answer.proposal.params, text:command.text||''}, answer.proposal.summary)};
+    return answer;
+  }
   if(!options.propose&&intent==='protocol.draft'&&params.jobId) return protocolDraft(env, ctx, m, h, {id:params.jobId, title:params.title, description:params.description||'', dueDate:params.dueDate||''}, options);
   if(!options.propose&&intent==='jobs.create'&&params.dueDate) return createJob(env, m, h, params, today, tomorrow, options);
   if(!options.propose&&intent==='jobs.plan') return planJob(env, m, h, params, today, options);
@@ -266,6 +394,7 @@ async function run(env, ctx, m, h, command, today, options){
   if(!options.propose&&intent==='jobs.assign'&&params.jobId) return applyJobChange(env, m, h, params);
   if(!options.propose&&intent==='jobs.status'&&params.jobId) return applyStatus(env, m, h, params);
   if(!options.propose&&intent==='jobs.depart'&&params.jobId) return applyDeparture(env, m, h, params);
+  if(!options.propose&&intent==='jobs.work'&&params.jobId) return applyWork(env, m, h, params);
   if(!options.propose&&intent==='attendance.arrive') return applyPunch(env, m, h, 'arrival', params);
   if(!options.propose&&intent==='attendance.leave') return applyPunch(env, m, h, 'departure', params);
   if(!options.propose&&intent==='materials.add'&&params.jobId) return applyMaterialLines(env, ctx, m, h, params);
@@ -278,10 +407,16 @@ async function run(env, ctx, m, h, command, today, options){
   if(!options.propose&&intent==='diary.day'&&params.jobId&&Array.isArray(params.days)) return commitDiary(env, ctx, m, h, params);
   if(!options.propose&&intent==='dictionary.add'&&params.phrase) return commitDictionary(env, m, params);
   if(intent==='dictionary.list') return listDictionary(env);
+  if(intent==='assistant.clarify'||intent==='assistant.explain'||intent==='assistant.refuse'||intent==='assistant.batch'||intent==='materials.plan'){
+    return {reply:params.reply||'Potřebuji upřesnit. Nic jsem nezměnil.'};
+  }
+  if(intent==='jobs.next') return nextWork(env, m, h, params, today, options);
+  if(intent==='navigation.address') return navigationAddress(env, m, h, params, today, options);
+  if(intent==='materials.stock') return catalogStock(env, m, h, params.query||'');
   if(!options.propose&&intent==='import.customers') return applyCustomerImport(env, m, h, params);
   if(!options.propose&&intent==='import.materials') return applyMaterialImport(env, m, h, params);
   if(intent==='unknown') return {reply:'Tomuhle příkazu nerozumím. Můžete zkusit některou z dostupných akcí.', suggestions:assistantSuggestions()};
-  if(intent==='help') return {reply:'Umím zakázky, docházku, hodiny na zakázce z evidence, zákazníky, materiál a přípravu servisního protokolu. Zákazníka a zakázku přidám jen tehdy, když to smí vaše role, a zápis nejdřív potvrdíte. Mazání nechávám na stávajících obrazovkách.', suggestions:assistantSuggestions()};
+  if(intent==='help') return {reply:'Umím zakázky, docházku, hodiny na zakázce z evidence, zákazníky, materiál, poptávky a přípravu servisního protokolu. Zákazníka, zakázku i převod poptávky přidám jen tehdy, když to smí vaše role, a zápis nejdřív potvrdíte. Mazání nechávám na stávajících obrazovkách.', suggestions:assistantSuggestions()};
   if(intent==='refused.destructive') return {reply:'Smazání nebo zrušení tady nespouštím, aby se nic omylem neztratilo. Použijte stávající obrazovku záznamu.'};
 
   if(intent.startsWith('jobs.')||intent.startsWith('protocol.')){
@@ -331,6 +466,9 @@ async function run(env, ctx, m, h, command, today, options){
   if(intent==='diary.day') return proposeDiary(env, m, h, params, options);
   if(intent==='dictionary.add') return proposeDictionary(env, m, params, options);
   if(intent==='jobs.reschedule'||intent==='jobs.assign'||intent==='jobs.depart'||intent==='jobs.status') return prepareJobCommand(env, m, h, intent, params, today, tomorrow, options);
+  if(intent==='jobs.work') return prepareWork(env, m, h, params, today, options);
+  if(intent==='jobs.unplanned') return unplannedJobs(env, m, h, params, today);
+  if(intent==='jobs.personDay') return personDay(env, m, h, params, today);
   if(intent==='attendance.active'||intent==='attendance.arrive'||intent==='attendance.leave') return attendanceCommand(env, m, h, intent, params, today, options);
   if(intent==='jobs.search'||intent==='jobs.history'||intent==='jobs.hours'||intent==='jobs.materials'||intent==='protocol.draft'){
     return jobIntent(env, ctx, m, h, intent, params, today, tomorrow, options);
@@ -339,6 +477,7 @@ async function run(env, ctx, m, h, command, today, options){
   if(intent==='jobs.plan') return planJob(env, m, h, params, today, options);
   if(intent==='customers.create') return createCustomer(env, m, h, params, options);
   if(intent==='attendance.hours'||intent==='attendance.report') return attendanceIntent(env, m, h, intent, params, today);
+  if(intent==='customers.contact' && !params.query && options.context?.customerName) params.query = String(options.context.customerName).slice(0,160);
   if(intent==='customers.search'||intent==='customers.contact'||intent==='customers.history'||intent==='customers.tariffs') return customerIntent(env, m, h, intent, params);
   if(intent==='materials.search') return materialSearch(env, m, h, params.query||'');
   if(intent==='materials.add'||intent==='materials.price'||intent==='materials.readiness'||intent==='materials.shopping') return materialCommand(env, ctx, m, h, intent, params, today, tomorrow, options);
@@ -355,12 +494,12 @@ async function jobSelection(env, m, h, params){
     const reason = params?.reason==='irrigation'
       ? 'Samotné slovo závlaha neurčuje druh práce. Může jít o realizaci, servis i zazimování.'
       : 'V příkazu není jednoznačný druh práce.';
-    return {reply:reason+' Upřesněte ho. Nic jsem nehledal v poznámkách jiných zakázek.', suggestions:choices.map(label=>'Kdo čeká na '+label+'?')};
+    return {reply:reason+' Upřesněte ho. Nic jsem nehledal v poznámkách jiných zakázek.', suggestions:choices.map(label=>'Kdo čeká na '+label+'?'), cards:[]};
   }
   const kind = kinds.find(item=>item.id===params.kind);
   if(!kind) return {reply:'Tento druh práce v číselníku zakázek není. Nic jsem nedohledával podle poznámek.'};
   const phase = params.phase||'open';
-  const result = await jobsGet(env,m,h,`/api/jobs?phase=${encodeURIComponent(phase)}&type=${encodeURIComponent(kind.id)}&order=schedule`);
+  const result = await jobsGet(env,m,h,`/api/jobs?phase=${encodeURIComponent(phase)}&type=${encodeURIComponent(kind.id)}&order=schedule&state=all`);
   const error = blocked(result,'Zakázky se nepodařilo načíst.');
   if(error) return {reply:error};
   const jobs = result.data.jobs||[];
@@ -399,6 +538,19 @@ async function prepareJobCommand(env, m, h, intent, params, today, tomorrow, opt
   if((intent==='jobs.reschedule'||intent==='jobs.assign')&&!manager(m)) return {reply:'Termín a přiřazení mění vlastník nebo správce.'};
   if(intent==='jobs.status'&&!params.status) return {reply:'Řekněte, jaký stav mám nastavit: plánovaná, probíhá, hotová nebo nedokončená.'};
   if(intent==='jobs.reschedule'&&!params.dueDate) return {reply:'Řekněte den, třeba pátek nebo zítra. Termín jsem nezměnil.'};
+  if(intent==='jobs.reschedule'&&params.current&&!params.query&&!options.context?.jobId) return {reply:'Kterou zakázku mám přesunout? Řekněte jméno zákazníka. Termín jsem nezměnil.'};
+  if(intent==='jobs.depart'&&params.next){
+    const loaded = await assignedWindow(env, m, h, today);
+    if(loaded.error) return {reply:loaded.error};
+    const picked = pickNextWork(loaded.jobs, today, options.context?.jobId||'');
+    if(picked.choices) return {reply:'Na stejný termín vidím víc zakázek a nehádám, ke které vyjet. Vyberte jednu. Cestu jsem nezahájil.\n'+picked.choices.map(occurrenceLine).join('\n'), cards:jobCards(picked.choices.map(row=>row.job))};
+    if(!picked.next) return {reply:'Další přiřazenou práci v rozvrhu nevidím. Odjezd jsem nezapsal.'};
+    const nextJob = picked.next.job;
+    const plan = arrivalPlan();
+    const summary = `Vyjet na další práci „${nextJob.title}“ a označit ji jako na cestě, příjezd ${plan.arrivalDate} v ${plan.arrivalTime}? Stav se změní jen když jste k zakázce přiřazený.`;
+    if(options.propose) return {reply:summary, confirm:await propose(env, m, {intent, params:{jobId:nextJob.id, version:nextJob.version, ...plan}}, summary)};
+    return applyDeparture(env, m, h, {jobId:nextJob.id, ...plan});
+  }
   const dueDate = params.dueDate==='tomorrow'?tomorrow:params.dueDate;
   let found;
   if(params.current&&!params.query&&options.context?.jobId) found = {jobs:[]};
@@ -471,6 +623,117 @@ async function applyDeparture(env, m, h, params){
   const result = await callJson(()=>handleJobs(write('/api/jobs/'+encodeURIComponent(params.jobId)+'/departure','POST',{version:loaded.data.job.version, arrivalDate:params.arrivalDate, arrivalTime:params.arrivalTime}, h._headers), env, m, h));
   if(!result.ok) return {reply:result.data.error||'Odjezd se nepodařilo zapsat.'};
   return {reply:`U zakázky „${result.data.job?.title||''}“ je stav na cestě, příjezd ${params.arrivalDate} v ${params.arrivalTime}.`, mutated:'jobs'};
+}
+async function loadJobTime(env, m, h, jobId){
+  let jobTime = null;
+  try{({handleJobTime:jobTime} = await import('./job-time.js'));}
+  catch{jobTime = typeof handleJobTime==='function' ? handleJobTime : null;}
+  if(typeof jobTime!=='function') return {error:'Pracovní interval v téhle evidenci nemám. Docházku ani zakázku jsem nezměnil.'};
+  return {jobTime};
+}
+async function readJobTime(env, m, h, jobId){
+  const loaded = await loadJobTime(env, m, h, jobId);
+  if(loaded.error) return loaded;
+  const result = await callJson(()=>loaded.jobTime(get('/api/jobs/'+encodeURIComponent(jobId)+'/time', h._headers), env, m, h));
+  if(!result.ok) return {error:blocked(result)||result.data?.error||'Pracovní dobu se nepodařilo načíst. Nic jsem nezapsal.'};
+  return {data:result.data, jobTime:loaded.jobTime};
+}
+async function spokenJob(env, m, h, params, options){
+  if(params.query){
+    const found = await findJobs(env, m, h, params.query);
+    if(found.error) return {error:found.error};
+    return oneJob(found.jobs, params.query);
+  }
+  const id = options.context?.jobId||'';
+  if(!id) return {error:params.action==='stop'
+    ?'Na které zakázce mám ukončit práci? Otevřete ji, nebo řekněte u koho. Docházku ani zakázku jsem nezavřel.'
+    :'Na které zakázce mám práci zahájit? Otevřete ji, nebo řekněte u koho. Nic jsem nezapsal.'};
+  const loaded = await jobsGet(env, m, h, '/api/jobs/'+encodeURIComponent(id));
+  if(!loaded.ok) return {error:blocked(loaded)||'Otevřenou zakázku se nepodařilo načíst. Nic jsem nezapsal.'};
+  return {job:loaded.data.job};
+}
+async function prepareWork(env, m, h, params, today, options){
+  if(!on(h.features,'attendance')) return {reply:'Pracovní interval potřebuje zapnutou docházku. Nic jsem nezapsal.'};
+  if(options.preview) return {reply:'V náhledu role práci nezapisuji.'};
+  const picked = await spokenJob(env, m, h, params, options);
+  if(picked.error) return {reply:picked.error};
+  if(picked.choices) return {reply:'Našel jsem víc zakázek. Upřesněte název. Interval jsem nezapsal.\n'+lines(picked.choices, jobLine, '')};
+  const job = picked.job;
+  const time = await readJobTime(env, m, h, job.id);
+  if(time.error) return {reply:time.error};
+  const mine = time.data.job?.myTime;
+  if(!mine) return {reply:'Váš pracovní interval nevidím. Nic jsem nezapsal.'};
+  const active = mine.active||null;
+  const same = active && active.jobId===job.id;
+  if(params.action==='stop'){
+    if(!same) return {reply:active?`Na „${job.title}“ nemáte otevřený interval. Práce běží jinde. Docházku ani zakázku jsem nezavřel.`:`Na „${job.title}“ nemáte otevřený interval. Docházku ani zakázku jsem nezavřel.`};
+    const summary = `Ukončit jen vaši práci na „${job.title}“? Docházka zůstane otevřená a zakázka se neoznačí jako hotová.`;
+    if(options.propose) return {reply:summary, confirm:await propose(env, m, {intent:'jobs.work', params:{jobId:job.id, action:'stop'}}, summary)};
+    return applyWork(env, m, h, {jobId:job.id, action:'stop'});
+  }
+  if(same && active.kind==='work') return {reply:`Na „${job.title}“ už práci máte otevřenou. Nový interval jsem nezaložil.`};
+  let arrival = '';
+  const people = await attendanceGet(env, m, h, `/api/attendance?month=${today.slice(0,7)}`);
+  if(people.ok && !people.data.activeShift) arrival = ' Docházka není otevřená, takže se s intervalem zapíše i příchod.';
+  const summary = (active && !same
+    ? `Ukončit váš interval jinde a zahájit práci na „${job.title}“?`
+    : `Zahájit vaši práci na „${job.title}“?`)
+    + ' Odchod z docházky nezapíšu a zakázku neoznačím jako hotovou.'+arrival;
+  if(options.propose) return {reply:summary, confirm:await propose(env, m, {intent:'jobs.work', params:{jobId:job.id, action:'start'}}, summary)};
+  return applyWork(env, m, h, {jobId:job.id, action:'start'});
+}
+async function applyWork(env, m, h, params){
+  const loaded = await jobsGet(env, m, h, '/api/jobs/'+encodeURIComponent(params.jobId));
+  if(!loaded.ok) return {reply:blocked(loaded)||'Zakázku se nepodařilo načíst. Interval jsem nezapsal.'};
+  const time = await readJobTime(env, m, h, params.jobId);
+  if(time.error) return {reply:time.error};
+  const mine = time.data.job?.myTime;
+  if(!mine) return {reply:'Váš pracovní interval nevidím. Nic jsem nezapsal.'};
+  const action = params.action==='stop'?'stop':'work';
+  if(action==='stop' && mine.active?.jobId!==params.jobId) return {reply:'Otevřený interval na téhle zakázce už nevidím. Docházku ani zakázku jsem nezavřel.'};
+  const body = {operationId:crypto.randomUUID(), action, at:Date.now(), workers:[{userId:m.user_id, version:mine.version}], ...(action==='work'?{allowSwitch:true}:{})};
+  const result = await callJson(()=>time.jobTime(write('/api/jobs/'+encodeURIComponent(params.jobId)+'/time/actions','POST', body, h._headers), env, m, h));
+  if(!result.ok) return {reply:result.data?.error||'Interval se nepodařilo zapsat. Docházku ani celou zakázku jsem kvůli tomu nezavřel.'};
+  const title = result.data.job?.title || loaded.data.job?.title || '';
+  if(action==='stop') return {reply:`Ukončil jsem jen váš interval na „${title}“. Docházka běží dál a zakázka není hotová.`, mutated:'jobs'};
+  return {reply:`Zahájil jsem vaši práci na „${title}“. Odchod z docházky jsem nezapsal a zakázku jsem neoznačil jako hotovou.`, mutated:'jobs'};
+}
+function datedVisit(job){
+  if(job?.dueDate) return true;
+  return (job?.schedule?.dates||[]).some(date=>/^\d{4}-\d{2}-\d{2}$/.test(String(date||''))) || (job?.terms||[]).some(term=>/^\d{4}-\d{2}-\d{2}$/.test(String(term?.date||'')));
+}
+async function unplannedJobs(env, m, h, params, today){
+  const kinds=await readJobKinds(env),kind=params.type?kinds.find(item=>item.id===params.type):null;
+  if(params.type&&!kind)return {reply:'Tento druh práce v číselníku zakázek není.'};
+  const result=await jobsGet(env,m,h,'/api/jobs?phase=waiting&order=schedule'+(kind?'&type='+encodeURIComponent(kind.id):''));
+  const error=blocked(result,'Zakázky bez termínu se nepodařilo načíst.');
+  if(error)return {reply:error};
+  const jobs=result.data.jobs||[],selection=result.data.selection||{total:jobs.length,customers:0,counts:{waiting:jobs.length}};
+  return {reply:formatSelectionReply(jobs,{...selection,phase:'waiting',kindLabel:kind?.label||'zakázky',kinds}),cards:selectionCards(jobs,kinds)};
+}
+async function personDay(env, m, h, params, today){
+  const when = params.when==='tomorrow'?addDays(today,1):today;
+  const person = String(params.person||'').trim();
+  if(!person) return {reply:'Řekněte jméno. Den jsem si nevymyslel.'};
+  let assignee = '', who = person;
+  if(manager(m)){
+    const people = await attendanceGet(env, m, h, `/api/attendance?month=${when.slice(0,7)}&userId=all`);
+    if(!people.ok) return {reply:blocked(people)||'Tým se nepodařilo načíst. Den jsem nevypsal.'};
+    const hits = (people.data.employees||[]).filter(item=>nearName(person, item.name));
+    if(!hits.length) return {reply:`Pracovníka „${person}“ v týmu nevidím. Den jsem si nevymyslel.`};
+    if(hits.length>1) return {reply:'Vyhovuje víc lidí: '+hits.map(item=>item.name).join(', ')+'. Upřesněte jméno.'};
+    assignee = hits[0].id;
+    who = hits[0].name;
+  }else if(nearName(person, m.name)){
+    assignee = m.user_id;
+    who = m.name;
+  }else return {reply:'Den kolegy vidí správce. Vám ukážu jen vlastní zakázky, když řeknete své jméno. Nic jsem si nevymyslel.'};
+  const result = await jobsGet(env, m, h, `/api/jobs?state=all&order=schedule&month=${when.slice(0,7)}&day=${when}&assignee=${encodeURIComponent(assignee)}`);
+  const error = blocked(result, 'Zakázky se nepodařilo načíst.');
+  if(error) return {reply:error};
+  const jobs = result.data.jobs||[];
+  const label = params.when==='tomorrow'?'Zítra':'Dnes';
+  return {reply:jobs.length?`${label} má ${who}:\n`+lines(jobs, jobLine, ''):`${label} pro ${who} žádnou zakázku nevidím.`, cards:jobCards(jobs)};
 }
 async function attendanceCommand(env, m, h, intent, params, today, options){
   if(!on(h.features,'attendance')) return {reply:'Docházka je v nastavení firmy vypnutá.'};
@@ -620,9 +883,7 @@ function jobHoursUnavailable(){
   return {reply:'Odpracované hodiny na zakázce v téhle evidenci nemám. Plánovaný čas z rozvrhu nepoužívám, abych nic neodhadoval.'};
 }
 async function recordedJobHours(env, m, h, job, person){
-  let jobTime = null;
-  try{({handleJobTime:jobTime} = await import('./job-time.js'));}
-  catch{jobTime = typeof handleJobTime==='function' ? handleJobTime : null;}
+  const jobTime = handleJobTime;
   if(typeof jobTime!=='function') return jobHoursUnavailable();
   const result = await callJson(()=>jobTime(get('/api/jobs/'+encodeURIComponent(job.id)+'/time', h._headers), env, m, h));
   if(!result.ok) return {reply:blocked(result)||'Hodiny zakázky se nepodařilo načíst.'};
@@ -689,7 +950,8 @@ function slimProtocol(draft){
     work:String(draft.work||'').slice(0,4000),
     asked:Array.isArray(draft.asked)?draft.asked.slice(0,16):[],
     history:(draft.history||[]).slice(-6).map(item=>({jobId:item.jobId||'', work:item.work||'', asked:item.asked||[], materials:item.materials||[]})),
-    materials:(draft.materials||[]).slice(0,30).map(line=>({key:line.key||'', label:line.label||'', query:line.query||'', quantity:line.quantity??null, unit:line.unit||'', generic:line.generic!==false, status:line.status||'', itemId:line.itemId||'', itemVersion:line.itemVersion||0, catalogName:line.catalogName||'', choices:(line.choices||[]).slice(0,6)}))
+    materials:(draft.materials||[]).slice(0,30).map(line=>({key:line.key||'', label:line.label||'', query:line.query||'', quantity:line.quantity??null, unit:line.unit||'', generic:line.generic!==false, status:line.status||'', itemId:line.itemId||'', itemVersion:line.itemVersion||0, catalogName:line.catalogName||'', choices:(line.choices||[]).slice(0,6)})),
+    pendingQuestion:String(draft.pendingQuestion||'').slice(0,40)
   };
 }
 function protocolConcept(draft, job, questions){
@@ -700,6 +962,8 @@ function protocolConcept(draft, job, questions){
     customerName:job?.customerName||'',
     address:job?.address||'',
     city:job?.city||'',
+    status:job?.status||'',
+    statusLabel:STATUS[job?.status]||'',
     work:draft.work||'',
     materials:(draft.materials||[]).map(line=>({key:line.key, label:line.label, query:line.query, quantity:line.quantity==null?'':String(line.quantity), unit:line.unit||'', status:line.status||'', itemId:line.status==='matched'?line.itemId||'':'', choiceId:line.status==='matched'?line.itemId||'':'', name:line.catalogName||line.label, choices:line.choices||[]})),
     questions:questions?.required||[],
@@ -707,19 +971,10 @@ function protocolConcept(draft, job, questions){
   };
 }
 function protocolReplyText(job, draft){
-  const questions = serviceDraftQuestions(draft);
-  const rows = (draft.materials||[]).map(line=>{
-    const qty = line.quantity==null?'množství k upřesnění':`${line.quantity} ${line.unit||''}`.trim();
-    if(line.status==='matched') return `• ${line.catalogName||line.label}: ${qty}.`;
-    if(line.status==='choices') return `• ${line.label}: ${qty}. V katalogu je víc možností, nic jsem nevybral.`;
-    if(line.status==='missing') return `• ${line.label}: ${qty}. V katalogu položku nevidím, novou nezakládám.`;
-    if(line.status==='unquantified') return `• ${line.label}: množství k upřesnění.`;
-    return `• ${line.label}: ${qty}.`;
-  });
-  const where = job?`Zakázka „${job.title}“${job.customerName?' · '+job.customerName:''}${job.address?' · '+job.address:''}.`:'Zakázku jsem jednoznačně nenašel. Zápis nikam neukládám.';
-  const ask = questions.required.length?'\nPotřebuji upřesnit:\n'+questions.required.map(item=>'• '+item).join('\n'):'';
-  const optional = questions.optional.length?'\nMůžete doplnit, není to povinné:\n'+questions.optional.map(item=>'• '+item).join('\n'):'';
-  return `${where}\n\nProvedené práce:\n${draft.work}\n\nSpotřebovaný materiál:\n${rows.join('\n')||'• Z diktátu nevidím materiál.'}${ask}${optional}${job?' Do protokolu se to zapíše až po potvrzení.':''}`;
+  const one = serviceDraftQuestions(draft).required[0] || '';
+  if(!job) return one ? `Zakázku jsem jednoznačně nenašel. Zápis nikam neukládám. ${one}` : 'Zakázku jsem jednoznačně nenašel. Zápis nikam neukládám.';
+  const line = `Návrh protokolu pro „${job.title||'zakázku'}“. Nic se nezapíše, dokud neklepnete na Uložit.`;
+  return one ? `${line} ${one}` : line;
 }
 function storedProtocol(draft){
   return {
@@ -793,6 +1048,7 @@ async function protocolReport(env, ctx, m, h, params, options){
   if(params.base){
     const revised = reviseServiceDraft(params.base, params.text||'');
     if(revised?.undo==='empty') return {reply:'Žádnou předchozí úpravu protokolu nemám. Nic jsem neměnil.', concept:protocolConcept(params.base, null, serviceDraftQuestions(params.base)), context:{protocol:slimProtocol(params.base), jobId:params.base.jobId||options.context?.jobId||''}};
+    if(revised?.clarify) return {reply:revised.clarify, concept:protocolConcept(params.base, null, serviceDraftQuestions(params.base)), context:{protocol:slimProtocol({...params.base, pendingQuestion:''}), jobId:params.base.jobId||options.context?.jobId||''}};
     draft = revised?.draft || params.base;
   }
   if(!draft) draft = params.draft || parseServiceDictation(params.text||'');
@@ -803,10 +1059,12 @@ async function protocolReport(env, ctx, m, h, params, options){
   draft = annotateProtocolMaterials(draft, catalog.data.items||[]);
   const picked = await resolveProtocolJob(env, m, h, params, options, draft);
   const questions = serviceDraftQuestions(draft);
-  const shown = {...draft, asked:[...new Set([...(draft.asked||[]), ...questions.optional])]};
+  const pending = questions.required.length ? '' : optionalPending(questions.optional[0]||'');
+  const shown = {...draft, pendingQuestion:pending};
   if(picked.choices){
     shown.jobId = '';
-    return {reply:`Není jednoznačně aktivní zakázka. Zápis nikam neukládám.\n${lines(picked.choices, jobLine, '')}\n\n${protocolReplyText(null, draft)}`, concept:protocolConcept(draft, null, questions), context:{protocol:slimProtocol(shown)}};
+    const cards = jobCards(picked.choices).map(card=>({...card, pickLabel:'Použít tuhle'}));
+    return {reply:`Není jednoznačně aktivní zakázka. Zápis nikam neukládám. Vyberte jednu, sám jsem si nevybral.\n${lines(picked.choices, jobLine, '')}`, cards, concept:protocolConcept(draft, null, questions), context:{protocol:slimProtocol(shown)}};
   }
   if(picked.error||!picked.job) return {reply:`${picked.error||'Zakázku jsem nenašel. Nic jsem nepřiřadil.'}\n\n${protocolReplyText(null, draft)}`, concept:protocolConcept(draft, null, questions), context:{protocol:slimProtocol(shown)}};
   draft.jobId = picked.job.id;
@@ -843,7 +1101,7 @@ async function commitProtocolReport(env, ctx, m, h, params){
   const result = await callJson(()=>handleServiceWork(write('/api/jobs/'+encodeURIComponent(params.jobId)+'/service','PUT', protocolBody(current, keptReport(current, {work:workToSave, materialItems:[...merged.values()]})), h._headers), env, ctx, m, h));
   if(!result.ok) return {reply:result.data.error||'Protokol se nepodařilo uložit. Nic dalšího jsem nezměnil.'};
   const saved = result.data.report?.materialItems||[];
-  return {reply:`Servisní protokol „${current.job.title}“ je uložený ke kontrole. Katalogové položky: ${saved.length}. Stejné množství není zapsané ještě jednou v textu materiálu.`, mutated:'jobs', context:{jobId:params.jobId, customerName:current.job.customerName||'', protocol:{jobId:params.jobId, work:params.work, materials:params.materials, asked:[], history:[]}}};
+  return {reply:`Servisní protokol „${current.job.title}“ je uložený ke kontrole. Katalogové položky: ${saved.length}. Stejné množství není zapsané ještě jednou v textu materiálu.`, cards:jobCards([current.job]), mutated:'jobs', context:{jobId:params.jobId, customerName:current.job.customerName||'', protocol:{jobId:params.jobId, work:params.work, materials:params.materials, asked:[], history:[]}}};
 }
 
 async function dictionaryEntries(env){
@@ -1151,7 +1409,7 @@ async function commitPlan(env, m, h, params){
   if(!first||params.terms.some(term=>!Array.isArray(term.people)||!term.people.length)) h.fail(400,'Doplňte pracovníka ke každému dni. Nic jsem neuložil.');
   const ids = [...new Set(params.terms.flatMap(term=>term.people))];
   const before = await env.DB.prepare('SELECT id FROM jobs WHERE id=? AND deleted=0').bind(id).first();
-  if(before) return {reply:`Zakázka „${params.title}“ už je uložená. Podruhé jsem ji nezaložil.`, mutated:'jobs', context:{jobId:id, customerName:params.customerName||''}};
+  if(before) return {reply:`Zakázka „${params.title}“ už je uložená. Podruhé jsem ji nezaložil.`, cards:[{type:'job', id, title:params.title||'Zakázka', subtitle:params.customerName||'', openLabel:'Otevřít zakázku'}], mutated:'jobs', context:{jobId:id, customerName:params.customerName||''}};
   const materialNote = (params.materials||[]).map(item=>'Materiál: '+item.name+' '+item.quantity+' '+item.unit).join('\n');
   const result = await callJson(()=>handleJobs(write('/api/jobs/'+id,'PUT',{
     version:0, title:params.title, jobType:'installation', status:'planned', incompleteReason:'',
@@ -1179,7 +1437,7 @@ async function commitPlan(env, m, h, params){
       h.fail(400, material.data.error||'Materiál se nepodařilo uložit. Zakázku jsem neponechal.');
     }
   }
-  return {reply:`Zakázka „${params.title}“ je jedna, s ${params.terms.length} termíny od ${first.date}${params.address?' na adrese '+params.address:''}. Materiál ${params.materials?.length?'je u zakázky uložený a neobjednaný':'se neobjednává'}.`, mutated:'jobs', context:{jobId:id, customerName:params.customerName||''}};
+  return {reply:`Zakázka „${params.title}“ je jedna, s ${params.terms.length} termíny od ${first.date}${params.address?' na adrese '+params.address:''}. Materiál ${params.materials?.length?'je u zakázky uložený a neobjednaný':'se neobjednává'}.`, cards:[{type:'job', id, title:params.title||'Zakázka', subtitle:[params.customerName, params.address].filter(Boolean).join(' · '), status:'planned', statusLabel:'plánovaná', openLabel:'Otevřít zakázku'}], mutated:'jobs', context:{jobId:id, customerName:params.customerName||''}};
 }
 
 async function createJob(env, m, h, params, today, tomorrow, options){
@@ -1320,7 +1578,8 @@ async function customerResultCards(env, m, h, list){
 async function customerIntent(env, m, h, intent, params){
   if(intent==='customers.tariffs'&&!on(h.features,'subscriptions')) return {reply:'Předplatné a tarify jsou v nastavení firmy vypnuté.'};
   const query = params.query||'';
-  if((intent==='customers.search'||intent==='customers.contact'||intent==='customers.history')&&!query) return {reply:'Napište jméno zákazníka.'};
+  if(intent==='customers.contact'&&!query) return {reply:'Komu mám zavolat? Číslo jsem si nevymyslel a hovor jsem neotevřel.'};
+  if((intent==='customers.search'||intent==='customers.history')&&!query) return {reply:'Napište jméno zákazníka.'};
   const result = await customersGet(env,m,h,'/api/customers'+(query?`?q=${encodeURIComponent(query.slice(0,100))}`:''));
   const error = blocked(result);
   if(error) return {reply:error};
@@ -1333,7 +1592,12 @@ async function customerIntent(env, m, h, intent, params){
   }
   if(list.length>1&&intent!=='customers.tariffs') return {reply:'Vyhovuje víc zákazníků:\n'+lines(list, customer=>`• ${customer.name}`, '')};
   const customer = list[0];
-  if(intent==='customers.contact') return {reply:customerCard(customer, true)};
+  if(intent==='customers.contact'){
+    const phones = (customer.phones||[]).map(phone=>String(phone.number||'').replace(/[^\d+]/g,'')).filter(number=>/^\+?\d{6,15}$/.test(number));
+    if(phones.length>1) return {reply:`U „${customer.name}“ je víc čísel. Vyberte jedno, sám jsem nezavolal.\n`+phones.map(number=>'• '+number).join('\n'), cards:[{type:'customer', id:customer.id, title:customer.name, subtitle:phones.join(', '), openLabel:'Otevřít zákazníka'}]};
+    if(!phones.length) return {reply:`${customerCard(customer, true)}\nČíslo v evidenci není. Volání jsem neotevřel.`};
+    return {reply:`${customerCard(customer, true)}\nTlačítko jen otevře vytáčení. Hovor jsem sám neuskutečnil.`, cards:[{type:'customer', id:customer.id, title:customer.name, subtitle:phones[0], href:'tel:'+phones[0], openLabel:'Otevřít zákazníka'}]};
+  }
   if(intent==='customers.history'){
     const visits = await jobsGet(env,m,h,`/api/jobs?state=all&q=${encodeURIComponent(customer.name.slice(0,100))}`);
     const subs = on(h.features,'subscriptions')?await subscriptionsGet(env,m,h,`/api/subscriptions?customerId=${encodeURIComponent(customer.id)}`):{ok:false,data:{}};
@@ -1384,6 +1648,13 @@ function keptReport(current, patch){
   return {date:report.date||pragueDate(new Date()), work:report.work||'', material:report.material||'', defects:report.defects||'', notes:report.notes||'', recommendations:report.recommendations||'', photoIds:report.photoIds||[], ...patch};
 }
 async function materialCommand(env, ctx, m, h, intent, params, today, tomorrow, options){
+  if(intent==='materials.price' && params.catalog){
+    const found = await catalogLookup(env, m, h, params.query||'');
+    if(found.reply && !found.item) return {reply:found.reply};
+    const item = found.item;
+    if(!Number.isSafeInteger(item.priceMinor)) return {reply:`U „${item.name}“ v katalogu cenu nevidím. Částku jsem si nevymyslel.`};
+    return {reply:`Katalogová cena „${item.name}“ je ${materialMoney(item.priceMinor, item.currency||'CZK')} za ${item.unit}. Do protokolu jsem nic nezapsal.`, cards:materialCards([item])};
+  }
   if(intent==='materials.shopping'){
     const day = params.when==='today'?today:tomorrow;
     const result = await jobsGet(env,m,h,`/api/jobs?state=active&order=schedule&month=${day.slice(0,7)}&day=${day}`);
@@ -1484,7 +1755,7 @@ async function applyProtocolNote(env, ctx, m, h, params){
 
 async function fileImport(env, m, h, body, preview){
   const file = body.file;
-  if(!file||typeof file!=='object'||Array.isArray(file)||typeof file.text!=='string'||file.text.length>100000) return {reply:'Soubor se nepodařilo přečíst. Pošlete textovou tabulku do 100 kB. Nic jsem neuložil.'};
+  if(!file||typeof file!=='object'||Array.isArray(file)||typeof file.text!=='string'||file.text.length>1000000) return {reply:'Soubor se nepodařilo přečíst. Pošlete textovou tabulku do 1 MB. Nic jsem neuložil.'};
   const name = String(file.name||'soubor.txt').slice(0,120);
   if(/\.(pdf|xlsx|xls|doc|docx|png|jpe?g)$/i.test(name)) return {reply:'PDF, Excel a fotky zatím nečtu. Uložte tabulku jako CSV. Nic jsem neuložil.'};
   const sheet = readImportSheet(file.text, typeof body.text==='string'?body.text:'');
@@ -1496,17 +1767,21 @@ async function fileImport(env, m, h, body, preview){
   const skipped = [...sheet.skipped];
   const records = [];
   if(sheet.kind==='customers'){
+    const existing=await importDirectory(env,m,h);
+    if(existing.error)return {reply:existing.error};
+    const importScope=await companyOf(env,m);
     for(const record of sheet.records){
-      const existing = await customersGet(env,m,h,'/api/customers?q='+encodeURIComponent(record.name.slice(0,100)));
-      if(!existing.ok) return {reply:blocked(existing)||'Stávající zákazníky se nepodařilo porovnat. Nic jsem neuložil.'};
-      if((existing.data.customers||[]).some(customer=>customer.name.toLocaleLowerCase('cs')===record.name.toLocaleLowerCase('cs'))) skipped.push(`${record.name}: už v evidenci je`);
-      else records.push(record);
+      const reason=customerImportConflict(record,existing.customers);
+      if(reason)skipped.push(`${record.name}: ${reason}; ručně zkontrolujte, nic nepřepisuji`);
+      else {records.push({...record,id:await customerImportId(importScope,record)});existing.customers.push({name:record.name,email:record.email,phones:record.phones||(record.phone?[{number:record.phone}]:[]),sourceRef:record.sourceRef||null});}
     }
-    if(!records.length) return {reply:'Žádného nového zákazníka jsem nenašel.\n'+skipped.slice(0,8).join('\n')};
-    const lines = records.slice(0,8).map(record=>`• ${record.name}${record.phone?' · '+record.phone:''}${record.address?' · '+[record.address, record.city].filter(Boolean).join(', '):''}`).join('\n');
-    const garden = on(h.features,'gardens')?' Ke každému se podle stávající evidence založí i zahrada se stejným názvem.':'';
-    const summary = `Ze souboru ${name} připravím ${records.length} zákazníků.${garden}\n${lines}${records.length>8?'\n…':''}${skipped.length?'\nPřeskočeno: '+skipped.slice(0,5).join('; '):''}\nChybějící údaje nedoplňuji. Uloží se až po potvrzení.`;
-    return {reply:summary, confirm:await propose(env, m, {intent:'import.customers', params:{records}}, summary)};
+    if(!records.length)return {reply:'Žádného nového zákazníka jsem nenašel.\n'+skipped.join('\n')};
+    const lines=records.map((record,index)=>`${index+1}. ${record.name}${record.contactKind==='supplier'?' [Dodavatel]':record.contactKind==='both'?' [Zákazník i dodavatel]':''}\n${(record.contacts||[{phone:record.phone,email:record.email}]).map(c=>[c.name,c.phone,c.email,c.note].filter(Boolean).join(' · ')).join('\n')}\n${(record.addresses||[{address:record.address,city:record.city}]).map(a=>[a.label,a.address,a.city].filter(Boolean).join(', ')).join('\n')}${record.billing&&Object.keys(record.billing).length?'\nFakturační údaje: '+Object.values(record.billing).join(', '):''}`).join('\n');
+    const garden=on(h.features,'gardens')?' Ke každému vznikne i propojená zahrada podle současných pravidel.':'';
+    const summary=`Ze souboru ${name} připravím ${records.length} zákazníků.${garden}\n${lines}${skipped.length?'\nPřeskočeno / ke kontrole ('+skipped.length+'):\n'+skipped.join('\n'):''}\nExistující údaje nepřepisuji. Chybějící údaje nedoplňuji. Potvrzením schválíte celý tento seznam; ukládání proběhne po malých dávkách. Bez připojení se import neprovede.`;
+    if(new TextEncoder().encode(JSON.stringify(records)).length>1500000)return {reply:'Profily jsou příliš rozsáhlé pro jednu dávku. Rozdělte soubor. Nic jsem neuložil.'};
+    const params={records,total:records.length,saved:0,processed:0,problems:[],discipline:m._workspace?.selectedDiscipline||null};
+    return {reply:summary,confirm:await propose(env,m,{intent:'import.customers',params},summary)};
   }
   const catalog = await materialsGet(env, m, h);
   if(!catalog.ok) return {reply:blocked(catalog)||'Katalog se nepodařilo načíst. Nic jsem neuložil.'};
@@ -1525,21 +1800,68 @@ async function fileImport(env, m, h, body, preview){
   return {reply:summary, confirm:await propose(env, m, {intent:'import.materials', params:{categoryId:category.id, records}}, summary)};
 }
 function foldHint(value){return String(value||'').toLocaleLowerCase('cs').normalize('NFD').replace(/\p{M}/gu,'').replace(/[^a-z0-9 ]+/g,' ').trim();}
-async function applyCustomerImport(env, m, h, params){
-  if(!manager(m)) return {reply:'Zákazníky zakládá vlastník nebo správce. Nic jsem neuložil.'};
-  let saved = 0; const problems = [];
-  for(const record of params.records||[]){
-    const existing = await customersGet(env,m,h,'/api/customers?q='+encodeURIComponent(record.name.slice(0,100)));
-    if(existing.ok&&(existing.data.customers||[]).some(customer=>customer.name.toLocaleLowerCase('cs')===record.name.toLocaleLowerCase('cs'))){problems.push(`${record.name}: už v evidenci je`); continue;}
-    const result = await callJson(()=>handleCustomers(write('/api/customers/'+crypto.randomUUID(),'PUT',{
-      version:0, name:record.name, email:record.email||'', irrigationOrigin:'unknown',
-      phones:record.phone?[{id:crypto.randomUUID(), label:'', number:record.phone}]:[],
-      addresses:record.address?[{id:crypto.randomUUID(), label:'', address:record.address, city:record.city||''}]:[]
-    }, h._headers), env, m, h));
-    if(!result.ok) problems.push(`${record.name}: ${result.data.error||'nepodařilo se uložit'}`);
-    else saved++;
+async function customerImportId(scope,record){
+  const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(scope+'|'+(record.sourceRef||JSON.stringify(record))));
+  return 'import_'+Array.from(new Uint8Array(hash),byte=>byte.toString(16).padStart(2,'0')).join('');
+}
+async function importDirectory(env,m,h){
+  const customers=[];let cursor=null;
+  // Use the authorized directory, including all pages, rather than 100 searches.
+  do{
+    const page=await customersGet(env,m,h,'/api/customers'+(cursor?'?cursor='+encodeURIComponent(cursor):''));
+    if(!page.ok)return {error:blocked(page)||'Adresář se nepodařilo porovnat. Nic jsem neuložil.'};
+    customers.push(...(page.data.customers||[]));cursor=page.data.nextCursor||null;
+    if(customers.length>10000)return {error:'Adresář je pro tento import příliš velký. Nic jsem neuložil.'};
+  }while(cursor);
+  return {customers};
+}
+async function applyCustomerImport(env,m,h,params){
+  if(!manager(m))return {reply:'Zákazníky importuje správce. Nic dalšího jsem neuložil.'};
+  if(!on(h.features,'customers'))return {reply:'Zákazníci jsou v nastavení vypnutí. Nic dalšího jsem neuložil.'};
+  if(params.discipline&&(params.discipline!==m._workspace?.selectedDiscipline||!m._workspace.disciplines.includes(params.discipline)))return {reply:'Obor se změnil. Vraťte se do původního oboru importu. Nic dalšího jsem neuložil.'};
+  let saved=params.saved||0,processed=params.processed||0;const problems=[...(params.problems||[])];
+  const records=params.records||[],total=params.total||records.length;
+  const directory=await importDirectory(env,m,h);
+  if(directory.error)throw Error(directory.error);
+  // Five ordinary customer writes per request bound D1 work. Their IDs were
+  // assigned at preview, making retries safe even after an interrupted response.
+  for(const record of records.slice(0,5)){
+    const own=directory.customers.find(c=>c.id===record.id);
+    if(own){await applyCustomerProfileExtras(env,m,record);saved++;processed++;continue;}
+    const reason=customerImportConflict(record,directory.customers);
+    if(reason){problems.push(`${record.name}: ${reason}; přeskočeno bez přepsání`);processed++;continue;}
+    const result=await callJson(()=>handleCustomers(write('/api/customers/'+record.id,'PUT',{
+      version:0,name:record.name,email:record.email||'',irrigationOrigin:'unknown',
+      ...(params.discipline?{discipline:params.discipline}:{}),
+      phones:record.phones||(record.phone?[{id:'import-phone',label:'',number:record.phone}]:[]),contacts:record.contacts||[],contactKind:record.contactKind||'customer',billing:record.billing||{},
+      addresses:record.addresses||(record.address?[{id:'import-address',label:'',address:record.address,city:record.city||''}]:[])
+    },h._headers),env,m,h));
+    if(!result.ok){
+      if(result.status>=500||[401,403].includes(result.status))throw Object.assign(Error(result.data.error||'Import se přerušil. Zkuste pokračovat.'),{status:result.status});
+      problems.push(`${record.name}: ${result.data.error||'nepodařilo se uložit'}`);
+    }else {await applyCustomerProfileExtras(env,m,record);saved++;directory.customers.push(result.data.customer);}
+    processed++;
   }
-  return {reply:`Uloženo ${saved} z ${(params.records||[]).length} zákazníků.${problems.length?'\n'+problems.slice(0,8).join('\n'):''}`, mutated:saved?'customers':null};
+  const remaining=records.slice(5),importProgress={saved,processed,total,done:remaining.length===0,problems};
+  if(remaining.length){
+    const message=`Import: zpracováno ${processed} z ${total}, uloženo ${saved}. Zbývá ${remaining.length}. Pokud se připojení přeruší, použijte Pokračovat v importu. Již uložené kontakty zůstanou zachované.`;
+    const next=await propose(env,m,{intent:'import.customers',params:{...params,records:remaining,saved,processed,problems,total}},message);
+    return {reply:message,confirm:{...next,title:'Pokračovat v importu'},continueImport:true,importProgress,mutated:'customers'};
+  }
+  return {reply:`Import dokončen. Uloženo ${saved} z ${total} zákazníků.${problems.length?'\nKe kontrole:\n'+problems.join('\n'):''}`,importProgress,mutated:'customers'};
+}
+async function applyCustomerProfileExtras(env,m,record){
+  if(!record.sourceRef&&!record.importDetails&&!Array.isArray(record.disciplines))return;
+  const disciplines=record.disciplines;if(disciplines&&(!Array.isArray(disciplines)||disciplines.some(v=>!['irrigation','garden'].includes(v)||m._workspace&&!m._workspace.disciplines.includes(v))))throw Error('K oboru importovaného zákazníka nemáte oprávnění.');
+  const detail=JSON.stringify(record.importDetails||{}),source=record.sourceRef||null;
+  const gate="EXISTS(SELECT 1 FROM members actor WHERE actor.user_id=? AND actor.role IN ('owner','administrator','admin'))";
+  const owned="EXISTS(SELECT 1 FROM customers c WHERE c.id=? AND c.created_by=? AND c.deleted=0)";
+  const statements=[env.DB.prepare('UPDATE customers SET source_ref=?,import_details=?,version=version+CASE WHEN source_ref IS NOT ? OR import_details<>? THEN 1 ELSE 0 END WHERE id=? AND created_by=? AND deleted=0 AND (source_ref IS NULL OR source_ref IS ?) AND '+gate).bind(source,detail,source,detail,record.id,m.user_id,source,m.user_id)];
+  if(Array.isArray(disciplines)){
+    statements.push(env.DB.prepare('DELETE FROM customer_disciplines WHERE customer_id=? AND discipline NOT IN (SELECT value FROM json_each(?)) AND NOT EXISTS(SELECT 1 FROM jobs j WHERE j.customer_id=? AND j.deleted=0 AND j.discipline=customer_disciplines.discipline) AND '+owned+' AND '+gate).bind(record.id,JSON.stringify(disciplines),record.id,record.id,m.user_id,m.user_id));
+    for(const discipline of disciplines)statements.push(env.DB.prepare('INSERT OR IGNORE INTO customer_disciplines(customer_id,discipline) SELECT ?,? WHERE '+owned+' AND '+gate).bind(record.id,discipline,record.id,m.user_id,m.user_id));
+  }
+  const result=await env.DB.batch(statements);if(!result[0].meta.changes)throw Error('Zdrojové údaje zákazníka se změnily nebo nemáte oprávnění. Zkontrolujte import.');
 }
 async function applyMaterialImport(env, m, h, params){
   if(!manager(m)) return {reply:'Katalog upravuje vlastník nebo správce. Nic jsem neuložil.'};

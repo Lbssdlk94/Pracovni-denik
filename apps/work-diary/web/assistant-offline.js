@@ -1,11 +1,12 @@
 // Offline answers use only the snapshot the caller already has. Missing data stays missing.
 import {attendanceHours} from './attendance-model.js?v=workspace-roles-v1';
-import {filterJobs, formatSelectionReply} from './job-selection.js';
+import {pickNextWork} from './assistant-intent.js';
+import {filterJobs, formatSelectionReply, selectionCards} from './job-selection.js';
 
 const STATUS = {planned:'plánovaná', on_way:'na cestě', in_progress:'probíhá', done:'hotová', incomplete:'nedokončená'};
 const missing = 'Tento přehled v zařízení nemám. Připojte se. Nic jsem si nevymyslel.';
 const noWrite = 'Zápis bez připojení neukládám. Až budete online, příkaz zopakujte. Nic se teď nezměnilo.';
-const writeIntents = ['jobs.create','jobs.plan','jobs.followup','jobs.complete','diary.day','defects.track','dictionary.add','protocol.draft','protocol.report','protocol.note','protocol.photo','jobs.reschedule','jobs.assign','jobs.depart','jobs.status','attendance.arrive','attendance.leave','materials.add'];
+const writeIntents = ['jobs.create','jobs.plan','jobs.followup','jobs.complete','diary.day','defects.track','dictionary.add','protocol.draft','protocol.report','protocol.note','protocol.photo','jobs.reschedule','jobs.assign','jobs.depart','jobs.work','jobs.status','attendance.arrive','attendance.leave','materials.add','inquiries.convert','inquiries.status'];
 
 function lines(items, render, empty){
   if(!items.length) return empty;
@@ -23,11 +24,29 @@ export function queueOfflineWrite(queue, command, options = {}){
   if(list.some(item=>item.text===text)) return {queued:false, duplicate:true, queue:list, reply:'Ten příkaz už ve frontě je. Zápis bez připojení neukládám. Až budete online, navrhnu ho znovu. Nic se teď nezměnilo.'};
   const item = {text, intent:command.intent};
   const next = options.front ? [item, ...list].slice(0,20) : [...list, item].slice(-20);
-  return {queued:true, duplicate:false, queue:next, reply:'Příkaz jsem si schoval do fronty. Zápis bez připojení neukládám. Až budete online, navrhnu ho znovu a počkám na potvrzení. Nic se teď nezměnilo.'};
+  return {queued:true, duplicate:false, queue:next, reply:'Příkaz jsem si schoval. Nic jsem nezapsal. Až bude signál, navrhnu ho znovu a počkám na uložení.'};
 }
 export function answerOffline(command, snapshot = {}){
   const intent = command?.intent;
   const jobs = Array.isArray(snapshot.jobs) ? snapshot.jobs : null;
+  if(intent==='assistant.clarify'||intent==='assistant.explain'||intent==='assistant.refuse'||intent==='assistant.batch'||intent==='materials.plan'){
+    return {reply:(command.params?.reply||'Bez připojení nic neměním. Až budete online, vyhodnotím požadavek znovu.')+' Údaj jsem si nevymyslel.', missing:intent!=='assistant.refuse'};
+  }
+  if(String(intent||'').startsWith('inquiries.')){
+    if(writeIntents.includes(intent)) return {reply:noWrite, missing:true};
+    return {reply:'Poptávky v zařízení nemám. Připojte se. Nic jsem si nevymyslel ani neodeslal.', missing:true};
+  }
+  if(intent==='jobs.next'){
+    if(!jobs) return {reply:'Další práci v zařízení nemám. Připojte se. Pořadí neodhaduji. Nic jsem nezměnil.', missing:true};
+    const picked = pickNextWork(jobs, snapshot.today||'', command.params?.currentJobId||'');
+    const stale = ' Údaje jsou z poslední uložené kopie a nemusí být aktuální. Cestu jsem nezahájil.';
+    if(picked.choices) return {reply:'V uložené kopii je víc zakázek bez jasného pořadí. Po připojení je ukážu znovu.'+stale, missing:true};
+    if(picked.next) return {reply:`Z uložené kopie je další „${picked.next.job.title}“ ${picked.next.date}${picked.next.timed?' '+picked.next.time:', bez času výjezdu'}.${stale}`, missing:true};
+    return {reply:'V uložené kopii další práci nevidím.'+stale, missing:true};
+  }
+  if(intent==='navigation.address'||intent==='materials.stock'||intent==='materials.price'||intent==='customers.contact'){
+    return {reply:'Tohle chci ověřit v aktuální evidenci. Připojte se. Nic jsem nezměnil ani si nevymyslel.', missing:true};
+  }
   if(intent==='dictionary.list') return {reply:'Firemní slovník v zařízení nemám. Připojte se. Vestavěné výrazy třicet dvojka, PE 25 a T-kus platí pořád. Nic jsem si nevymyslel.', missing:true};
   if(writeIntents.includes(intent)) return {reply:noWrite, missing:true};
   if(intent==='refused.destructive') return {reply:'Smazání nebo zrušení tady nespouštím, aby se nic omylem neztratilo. Použijte stávající obrazovku záznamu.'};
@@ -49,6 +68,23 @@ export function answerOffline(command, snapshot = {}){
   }
   if(intent==='jobs.incomplete'){
     return {reply:'Nedokončené z uloženého přehledu:\n'+lines(jobs.filter(job=>job.status==='incomplete'), jobLine, 'V uloženém přehledu žádná nedokončená zakázka není.')};
+  }
+  if(intent==='jobs.selection'){
+    if(!jobs) return {reply:'Výběr podle druhu práce počítá server. V zařízení ten seznam nemám a nic si nedomýšlím.', missing:true};
+    if(command.params?.ask) return {reply:'Offline druh práce nehádám. Upřesněte ho. V uložených zakázkách jsem nic nehledal.', suggestions:(command.params.choices||[]).slice(0,8)};
+    const selected = filterJobs(jobs, {phase:command.params?.phase||'open', kind:command.params?.kind||''});
+    return {reply:formatSelectionReply(selected.jobs, selected)+'\nJen uložená kopie v telefonu. Nemusí být aktuální a nemusí obsahovat všechny zakázky. Hotové a zrušené jsem do otevřeného výběru nedal.', cards:selectionCards(selected.jobs)};
+  }
+  if(intent==='jobs.unplanned'){
+    const selected=filterJobs(jobs,{kind:command.params?.type||'',phase:'waiting'});
+    return {reply:'Odpověď vychází jen z uložených dat v zařízení.\n'+formatSelectionReply(selected.jobs,{...selected,phase:'waiting',kindLabel:selected.kindLabel})+' Údaje nemusí být aktuální. Nic jsem nenaplánoval.'};
+  }
+  if(intent==='jobs.personDay'){
+    const person = String(command.params?.person||'').toLocaleLowerCase('cs');
+    const day = command.params?.when==='tomorrow'?tomorrow:today;
+    if(!person) return {reply:missing, missing:true};
+    const rows = jobs.filter(job=>String(job.assignedName||'').toLocaleLowerCase('cs').includes(person) && (job.dueDate===day || (job.schedule?.dates||[]).includes(day)));
+    return {reply:`${command.params.person} z uložené kopie${day?' ('+day+')':''}:\n`+lines(rows, jobLine, 'V uložené kopii pro něj žádnou zakázku nevidím.')+' Údaje nemusí být aktuální.'};
   }
   if(intent==='jobs.selection'||intent==='customers.waitingService'||intent==='jobs.plannedServices'){
     const params = intent==='customers.waitingService'?{kind:'service', phase:'open'}

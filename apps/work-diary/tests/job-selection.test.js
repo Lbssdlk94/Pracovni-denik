@@ -88,3 +88,4 @@ test('Phase comes from stored status and every appointment, never from a note or
   assert.doesNotMatch(offline.reply, /Hotovo/);
   assert.doesNotMatch(offline.reply, /Servis/);
 });
+

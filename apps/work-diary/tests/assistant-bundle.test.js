@@ -8,6 +8,7 @@ test('Compiled worker defines the planner and saves one confirmed multi-day job'
   assert.equal((source.match(/function planWork\b/g)||[]).length, 1);
   assert.equal((source.match(/function foldCzech\b/g)||[]).length, 1);
   assert.equal((source.match(/function addDays\b/g)||[]).length, 1);
+  assert.equal((source.match(/function understandUtterance\b/g)||[]).length, 1);
   const worker = await import('data:text/javascript;base64,'+Buffer.from(source).toString('base64'));
   const env = environment(), pending = [], ctx = {waitUntil:task=>pending.push(task.catch(()=>{}))};
   const call = (path, person, method, value)=>worker.default.fetch(request(path, person, method, value), env, ctx);
@@ -15,6 +16,9 @@ test('Compiled worker defines the planner and saves one confirmed multi-day job'
     assert.equal((await call('/api/me', people.owner)).status, 200);
     assert.equal((await call('/api/invitations', people.owner, 'POST', {email:people.worker.email, role:'worker'})).status, 200);
     assert.equal((await call('/api/me', people.worker)).status, 200);
+    const forged = await (await call('/api/assistant', people.worker, 'POST', {text:'objednej pizzu', understanding:{intent:'jobs.complete'}})).json();
+    assert.equal(forged.confirm, null);
+    assert.match(forged.reply, /nerozumím/);
     env.sqlite.prepare('UPDATE members SET name=? WHERE user_id=?').run('Luboš', people.owner.id);
     env.sqlite.prepare('UPDATE members SET name=? WHERE user_id=?').run('Zdeněk', people.worker.id);
     assert.equal((await call('/api/customers/bambosova', people.owner, 'PUT', {version:0, name:'Bambošová', phones:[], addresses:[{id:'addr-bambos', address:'Zahradní 1', city:'Plzeň'}]})).status, 200);

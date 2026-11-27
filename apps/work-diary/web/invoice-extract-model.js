@@ -1,0 +1,31 @@
+const fold=s=>String(s||'').normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().replace(/\u00a0/g,' ');
+const unique=a=>[...new Set(a.filter(v=>v!==null&&v!==undefined&&v!==''))];
+export function invoiceAmount(value){let s=String(value||'').replace(/[\s\u00a0']/g,'');if(!/^[\d.,]+$/.test(s))return null;const comma=s.lastIndexOf(','),dot=s.lastIndexOf('.');if(comma>=0&&dot>=0)s=s.slice(0,Math.max(comma,dot)).replace(/[.,]/g,'')+'.'+s.slice(Math.max(comma,dot)+1);else if(comma>=0)s=s.replace(',','.');else if(dot>=0&&s.length-dot-1===3)s=s.replaceAll('.','');if(!/^\d+(?:\.\d{1,2})?$/.test(s))return null;const [a,b='']=s.split('.'),n=Number(a)*100+Number(b.padEnd(2,'0'));return Number.isSafeInteger(n)&&n>0&&n<=100000000000?n:null;}
+function date(value){const m=String(value).match(/\b(20\d{2})-(\d{1,2})-(\d{1,2})\b|\b(\d{1,2})[./]\s*(\d{1,2})[./]\s*(20\d{2})\b/);if(!m)return null;const [y,mo,d]=m[1]?[m[1],m[2],m[3]]:[m[6],m[5],m[4]],s=`${y}-${mo.padStart(2,'0')}-${d.padStart(2,'0')}`;return Number.isFinite(new Date(s+'T12:00:00Z').getTime())&&new Date(s+'T12:00:00Z').toISOString().slice(0,10)===s?s:null;}
+function field(lines,pattern,read=x=>x){const values=[];for(let i=0;i<lines.length;i++){const m=fold(lines[i]).match(pattern);if(!m)continue;const tail=lines[i].slice(m.index+m[0].length).replace(/^\s*[:#]\s*/,'').trim();const found=read(tail||lines[i+1]||'');if(found!=null&&found!=='')values.push(found);}return unique(values);}
+function party(lines,label){const i=lines.findIndex(l=>label.test(fold(l)));if(i<0)return '';const line=lines[i],m=fold(line).match(label),tail=line.slice(m.index+m[0].length).replace(/^\s*:\s*/,'').trim(),block=[tail];for(const l of lines.slice(i+1,i+8)){if(/\b(?:dodavatel|odberatel|supplier|customer)\b/.test(fold(l)))break;block.push(l);}return block.filter(Boolean).join('\n');}
+
+function partyName(block){return String(block||'').split('\n').map(x=>x.trim()).find(l=>l&&!/^(?:ico|dic|ic |adresa|telefon|e-mail|ucet|banka|dodavatel|odberatel|supplier|customer)\b/.test(fold(l)))||'';}
+function partyId(block){return fold(block).match(/\b(?:ico|ic)\s*:?\s*(\d{8})\b/)?.[1]||'';}
+export function parseInvoiceText(text,{company={},parties={},partial=false}={}){
+ const lines=String(text||'').slice(0,100000).split(/\r?\n/).map(x=>x.trim()).filter(Boolean),warnings=[],fields={};
+ const choose=(key,values)=>{if(values.length===1)fields[key]=values[0];else if(values.length>1)warnings.push('Více různých hodnot: '+({amount:'částka',reference:'číslo faktury',dueDate:'splatnost',issuedOn:'vystavení',variableSymbol:'variabilní symbol',bankAccount:'účet'})[key]);};
+ choose('reference',field(lines,/(?:faktura(?:\s*[-–]\s*danovy doklad)?\s*(?:cislo|c\.?)(?![a-z])|cislo\s*(?:faktury|dokladu)|invoice\s*(?:number|no\.?))\s*:?\s*/,s=>s.match(/^([A-Za-z0-9][A-Za-z0-9/_.-]{0,69})/)?.[1]));
+ if(!fields.reference)choose('reference',field(lines,/^(?:faktura(?:\s*[-–]\s*danovy doklad)?|invoice)\s*[:#]?\s*/,s=>{const candidate=s.match(/^([A-Za-z0-9][A-Za-z0-9/_.-]{0,69})/)?.[1];return candidate&&/\d/.test(candidate)?candidate:null;}));
+ choose('dueDate',field(lines,/(?:datum\s*)?splatnost(?:i)?\s*:?\s*|due date\s*:?\s*/,date));
+ choose('issuedOn',field(lines,/(?:datum\s*)?vystaven(?:i|o)\s*:?\s*|issue date\s*:?\s*/,date));
+ const amountRead=s=>{if(/^\s*[-−]/.test(s))return null;const m=s.match(/(?:\d[\d\s.,'\u00a0]*\d|\d)/);return m?invoiceAmount(m[0].trim()):null;};
+ let amounts=field(lines,/(?:celkem\s*)?(?:k uhrade|castka k zaplaceni|amount due|total due)\s*:?\s*/,amountRead);if(!lines.some(l=>/(k uhrade|castka k zaplaceni|amount due|total due)/.test(fold(l))))amounts=field(lines,/(?:celkem\s*(?:vcetne dph|s dph)|total including vat)\s*:?\s*/,amountRead);
+ if(/dobropis|opravny danovy doklad|credit note/.test(fold(text))){amounts=[];warnings.push('Opravný doklad vyžaduje samostatnou kontrolu. Částku automaticky nepřebíráme.');}if(!partial)choose('amount',amounts);else warnings.push('Dokument nebyl načten celý. Částku doplňte podle celé faktury.');
+ const currencies=unique(lines.flatMap(l=>[...l.matchAll(/\b(CZK|EUR|USD|GBP)\b|Kč|€/gi)].map(m=>/kč|czk/i.test(m[0])?'CZK':m[0]==='€'?'EUR':m[0].toUpperCase())));if(currencies.length===1)fields.currency=currencies[0];else warnings.push(currencies.length?'Dokument uvádí více měn. Ověřte měnu částky k úhradě.':'Měna nebyla rozpoznána. Ověřte ji.');
+ choose('variableSymbol',field(lines,/(?:variabilni symbol|var\.?\s*symbol|v\.?\s*s\.)\s*:?\s*/,s=>s.match(/^\d{1,10}\b/)?.[0]));
+ choose('bankAccount',field(lines,/(?:cislo uctu|bankovni ucet|ucet|iban)\s*:?\s*/,s=>s.match(/^(?:[A-Z]{2}\d{2}(?:\s?[A-Z0-9]){11,30}|(?:\d{1,6}-)?\d{2,10}\s*\/\s*\d{4})\b/)?.[0]?.replace(/\s/g,'')));
+ const supplier=parties.supplier||party(lines,/\b(?:dodavatel|supplier)\s*:?\s*/),customer=parties.customer||party(lines,/\b(?:odberatel|customer)\s*:?\s*/);fields.supplierName=partyName(supplier);fields.customerName=partyName(customer);
+ const ownId=String(company.companyId||'').replace(/\D/g,''),ownName=fold(company.name).replace(/[^a-z0-9]/g,'');const matches=(block,name)=>ownId.length===8&&partyId(block)?partyId(block)===ownId:ownName.length>=6&&fold(name).replace(/[^a-z0-9]/g,'')===ownName;
+ const from=matches(supplier,fields.supplierName),to=matches(customer,fields.customerName);if(from!==to){fields.direction=from?'income':'expense';fields.counterparty=from?fields.customerName:fields.supplierName;}else warnings.push('Směr platby není jednoznačný. Vyberte vydanou nebo přijatou fakturu.');
+ if(/\b(?:uhrazeno|zaplaceno|paid|zaloh[ay])\b/.test(fold(text)))warnings.push('Dokument zmiňuje úhradu nebo zálohu. Skutečné platby ověřte samostatně; automaticky se nezapisují.');
+ if(fields.currency&&fields.currency!=='CZK')warnings.push('Tato evidence podporuje Kč. Cizí měnu nepřevádíme automaticky.');
+ for(const key of ['reference','amount','dueDate','issuedOn'])if(fields[key]==null)warnings.push('Doplňte '+({reference:'číslo faktury',amount:'částku k úhradě',dueDate:'splatnost',issuedOn:'datum vystavení'})[key]+'.');
+ return {fields,warnings:unique(warnings),requiresReview:true};
+}
+export function invoicePrefill(fields,edited=new Set()){return Object.fromEntries(Object.entries(fields).filter(([key,value])=>value!==''&&value!=null&&!edited.has(key)).map(([key,value])=>[key,key==='amount'?String(value/100):value]));}

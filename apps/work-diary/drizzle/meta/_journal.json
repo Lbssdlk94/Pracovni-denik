@@ -435,6 +435,41 @@
       "when": 1795300000000,
       "tag": "0061_job_terms",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "6",
+      "when": 1795400000000,
+      "tag": "0062_time_request_withdraw",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "6",
+      "when": 1795500000000,
+      "tag": "0063_customer_inquiries",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "6",
+      "when": 1795694400000,
+      "tag": "0064_team_office",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "6",
+      "when": 1795710000000,
+      "tag": "0065_office_finance",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "6",
+      "when": 1795771200000,
+      "tag": "0066_customer_directory",
+      "breakpoints": true
     }
   ]
 }

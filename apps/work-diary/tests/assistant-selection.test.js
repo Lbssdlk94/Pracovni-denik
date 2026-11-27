@@ -241,3 +241,4 @@ test('Selection totals count the whole authorized result, not the first page', a
     assert.doesNotMatch(workerReply.reply, /101|Ukazuji/);
   }finally{env.sqlite.close();}
 });
+

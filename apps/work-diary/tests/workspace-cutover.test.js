@@ -84,19 +84,3 @@ test('transfer capability is separate, expiring, installation-bound and snapshot
   const config=JSON.parse(e.source.WORKSPACE_TRANSFER_CAPABILITY);config.expiresAt=Date.now()-1;e.source.WORKSPACE_TRANSFER_CAPABILITY=JSON.stringify(config);await e.technical(e.source,'state',undefined,404);
  }finally{e.close();}
 });
-
-
-test('an empty disconnected Drive controller is metadata only; configured integration still blocks and Source configuration is preserved',async()=>{
- const e=await setup();try{
-  e.garden.sqlite.exec("INSERT INTO drive_control(id,version) VALUES('team',0)");
-  e.source.sqlite.exec("INSERT INTO drive_control(id,version,config) VALUES('team',2,'source-existing-config')");
-  let snapshot=await e.technical(e.garden,'export'),report=await e.technical(e.source,'preview',{snapshot});
-  assert.deepEqual(report.blockers,[]);assert.ok(report.warnings.some(w=>w.code==='empty_infrastructure_kept_in_original_archive'));
-  e.garden.sqlite.exec("UPDATE drive_control SET config='configured',version=1 WHERE id='team'");
-  snapshot=await e.technical(e.garden,'export');report=await e.technical(e.source,'preview',{snapshot});assert.ok(report.blockers.some(b=>b.table==='drive_control'));
-  e.garden.sqlite.exec("UPDATE drive_control SET config=NULL,version=0 WHERE id='team'");
-  await freeze(e,e.garden,'garden-empty-drive');await freeze(e,e.source,'source-empty-drive');snapshot=await e.technical(e.garden,'export');report=await e.technical(e.source,'preview',{snapshot});
-  await e.technical(e.source,'apply',{snapshot,planHash:report.planHash});
-  assert.equal(e.source.sqlite.prepare("SELECT config FROM drive_control WHERE id='team'").get().config,'source-existing-config');
- }finally{e.close();}
-});

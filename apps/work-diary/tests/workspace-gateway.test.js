@@ -1,6 +1,18 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {workspaceGateway} from '../worker/workspace-gateway.js';
 const idA='inst-canonical-test-1234567890',idB='inst-entry-test-1234567890',key='a'.repeat(43),origin='https://canonical.test',entry='https://entry.test';
+test('Anonymous inquiry photo relay preserves its scoped upload token and original bytes',async()=>{
+ const f=fixture(),original=globalThis.fetch,bytes=new Uint8Array([255,216,255,219,1,2]);
+ globalThis.fetch=(url,options)=>workspaceGateway(new Request(url,options),f.env,f.ctx,async req=>{
+  assert.equal(req.headers.get('x-inquiry-upload'),'scoped-upload-capability');
+  assert.equal(req.headers.get('x-file-name'),'garden.jpg');
+  assert.equal(req.headers.get('oai-authenticated-user-id'),null);
+  assert.equal(req.headers.get('origin'),origin);
+  assert.deepEqual(new Uint8Array(await req.arrayBuffer()),bytes);
+  return Response.json({ok:true});
+ });
+ try{const response=await workspaceGateway(new Request(entry+'/api/inquiries/public/inquiry-id/photos',{method:'PUT',headers:{origin:entry,'content-type':'image/jpeg','x-inquiry-upload':'scoped-upload-capability','x-file-name':'garden.jpg','x-zavlahy-request':'1'},body:bytes}),f.proxy,f.ctx);assert.equal(response.status,200);}finally{globalThis.fetch=original;}
+});
 function fixture(){const nonces=new Set(),state={last:null},env={SHARED_WORKSPACE_GATEWAY:JSON.stringify({mode:'canonical',localId:idA,peerId:idB,key,canonicalOrigin:origin,entryOrigin:entry}),DB:{prepare:sql=>({async run(){return {meta:{changes:0}};},async first(){return {id:'workspace',state:'active'};},bind(...args){return {async run(){if(sql.startsWith('INSERT')){const seen=nonces.has(args[0]);nonces.add(args[0]);return {meta:{changes:seen?0:1}};}return {meta:{changes:0}};}};}})}},proxy={SHARED_WORKSPACE_GATEWAY:JSON.stringify({mode:'entry',localId:idB,peerId:idA,key,canonicalOrigin:origin})},ctx={waitUntil:p=>p.catch(()=>{})};return {env,proxy,ctx,state};}
 test('relay uses one canonical API with verified actor, unchanged body and opaque identity envelope',async()=>{const f=fixture(),original=globalThis.fetch;let saved;
  globalThis.fetch=async(url,options)=>{saved=new Request(url,options);assert.ok(!saved.headers.get('x-workspace-envelope').includes('worker'));assert.ok(!saved.headers.get('x-workspace-envelope').includes('cookie-secret'));return workspaceGateway(saved,f.env,f.ctx,async req=>{assert.equal(req.headers.get('oai-authenticated-user-id'),'worker-id');assert.equal(req.headers.get('cookie'),'__Host-zavlahy-access=cookie-secret');assert.equal(req.headers.get('origin'),origin);assert.equal(req.headers.get('x-work-discipline'),'garden');assert.equal(req.headers.get('x-workspace-client-version'),'shared-directory-v1');assert.equal(await req.text(),'{"name":"Contact"}');return Response.json({ok:true});});};
@@ -42,4 +54,10 @@ test('Signed Garden relay preserves explicit time-client support without inventi
   globalThis.fetch=(url,options)=>workspaceGateway(new Request(url,options),f.env,f.ctx,req=>{assert.equal(req.headers.get('x-work-time-client')||'',value);return Response.json({ok:true});});
   try{const r=await workspaceGateway(new Request(entry+'/api/jobs?state=active',{headers:{'oai-authenticated-user-id':'owner-id',...(value?{'x-work-time-client':value}:{})}}),f.proxy,f.ctx);assert.equal(r.status,200);}finally{globalThis.fetch=original;}
  }
+});
+
+test('Invoice PDF relay preserves the signed version condition, file name and original PDF bytes',async()=>{
+ const f=fixture(),original=globalThis.fetch,pdf=new TextEncoder().encode('%PDF-1.4 invoice');
+ globalThis.fetch=(url,options)=>workspaceGateway(new Request(url,options),f.env,f.ctx,async req=>{assert.equal(new URL(req.url).pathname,'/api/office-finance/invoice-id/invoice-file/file-id');assert.equal(req.headers.get('if-match'),'7');assert.equal(req.headers.get('x-file-name'),'faktura.pdf');assert.equal(req.headers.get('content-type'),'application/pdf');assert.deepEqual(new Uint8Array(await req.arrayBuffer()),pdf);return Response.json({ok:true});});
+ try{const r=await workspaceGateway(new Request(entry+'/api/office-finance/invoice-id/invoice-file/file-id',{method:'PUT',headers:{'oai-authenticated-user-id':'owner-id','if-match':'7','x-file-name':'faktura.pdf','content-type':'application/pdf','x-zavlahy-request':'1'},body:pdf}),f.proxy,f.ctx);assert.equal(r.status,200);}finally{globalThis.fetch=original;}
 });

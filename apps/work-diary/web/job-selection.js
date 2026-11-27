@@ -228,3 +228,4 @@ export function filterJobs(jobs, params, kinds = BUILTIN_JOB_KINDS){
   for(const job of rows){const phase = workPhase(job); if(counts[phase]!=null) counts[phase]++;}
   return {jobs:rows, total:rows.length, customers:groupByCustomer(rows).length, counts, phase:params.phase, kind:params.kind||'', kindLabel:kindById(kinds, params.kind)?.label||'zakázky'};
 }
+

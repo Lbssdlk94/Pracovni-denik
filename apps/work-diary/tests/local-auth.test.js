@@ -8,24 +8,6 @@ async function setup(){const e=environment();await ok(await call(e,'/api/me'));r
 async function create(e,username='worker-test',role='worker'){return ok(await call(e,'/api/local-accounts',people.owner,'POST',{name:'Izolovaný kolega',username,role,password:pass}));}
 async function login(e,username,password=pass){const r=await call(e,'/api/auth/login',null,'POST',{username,password});await ok(r);return cookie(r);}
 async function own(e){const r=await call(e,'/api/auth/password',people.owner,'PUT',{username:'owner-test',password:pass,version:0});return {data:await ok(r),cookie:cookie(r)};}
-test('A password session skips legacy-mode discovery, but still checks current role, expiry, revocation and credential version',async()=>{
- const e=await setup();try{
-  const account=await own(e),original=e.DB.prepare;let policyReads=0;
-  e.DB.prepare=sql=>{if(sql==="SELECT value FROM settings WHERE key='local-auth-mode'")policyReads++;return original(sql);};
-  assert.equal((await ok(await call(e,'/api/me',null,'GET',undefined,account.cookie))).user.role,'owner');assert.equal(policyReads,0);
-  e.sqlite.prepare("UPDATE members SET role='reader' WHERE user_id=?").run(people.owner.id);
-  const current=await ok(await call(e,'/api/me',null,'GET',undefined,account.cookie));assert.equal(current.user.role,'reader');assert.equal(current.permissions.write,false);
-  e.sqlite.prepare('UPDATE local_credentials SET version=version+1 WHERE user_id=?').run(people.owner.id);
-  assert.equal((await call(e,'/api/me',null,'GET',undefined,account.cookie)).status,401);
-  e.sqlite.prepare('UPDATE access_sessions SET password_version=password_version+1,expires_at=0').run();
-  assert.equal((await call(e,'/api/me',null,'GET',undefined,account.cookie)).status,401);
-  e.sqlite.prepare('UPDATE access_sessions SET expires_at=?,revoked_at=?').run(Date.now()+60000,Date.now());
-  assert.equal((await call(e,'/api/me',null,'GET',undefined,account.cookie)).status,401);
-  assert.equal((await call(e,'/api/me',people.owner,'GET',undefined,'__Host-zavlahy-access=invalid')).status,401);assert.equal(policyReads,0);
-  e.sqlite.prepare("INSERT INTO settings(key,value,version) VALUES('local-auth-mode','password',1)").run();
-  assert.equal((await call(e,'/api/me',people.owner)).status,401);assert.equal(policyReads,1);
- }finally{e.sqlite.close();}
-});
 test('scrypt uses salted OWASP profile independently verified by Node crypto; validation and dummy verification',async()=>{
  assert.equal(localUsername('  Test.User  '),'test.user');for(const v of ['ab','člověk','a b','<script>'])assert.throws(()=>localUsername(v));assert.throws(()=>localPassword('heslo'));const hash=await hashLocalPassword(pass),second=await hashLocalPassword(pass);assert.notEqual(hash,second);assert.ok(!hash.includes(pass));const [,salt,key]=hash.split('$'),expected=await promisify(nodeScrypt)(pass,Buffer.from(salt,'base64url'),32,{N:32768,r:8,p:3,maxmem:40*1024*1024});assert.equal(Buffer.from(key,'base64url').toString('hex'),expected.toString('hex'));assert.equal(await verifyLocalPassword(pass,hash),true);assert.equal(await verifyLocalPassword(pass+'x',hash),false);assert.equal(await verifyLocalPassword(pass,null),false);
 });

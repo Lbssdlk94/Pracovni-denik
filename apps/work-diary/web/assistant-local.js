@@ -1,11 +1,20 @@
 // Ministral 3B in the browser. The file is not part of the app. The prompt is
 // only the user's sentence. Company records stay on the existing assistant API.
+import {ASSISTANT_INTENT_IDS, modelReadCommand} from './assistant-intent.js';
 export const MODEL_BYTES = 2_147_023_008;
 export const MODEL_FILE = 'Ministral-3-3B-Instruct-2512-Q4_K_M.gguf';
 export const MODEL_URL = 'https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF/resolve/main/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf';
+// A phone can be wider than 760 px in landscape, so width alone is not enough.
+export function desktopCanRunMinistral(match){
+  const query = match || (typeof globalThis.matchMedia==='function' ? globalThis.matchMedia.bind(globalThis) : null);
+  if(typeof query!=='function') return false;
+  try{
+    return query('(min-width:761px)').matches===true && query('(hover:hover) and (pointer:fine)').matches===true;
+  }catch{return false;}
+}
 const RUNTIME = 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.13.0/esm/index.js';
 const RUNTIME_WASM = 'https://cdn.jsdelivr.net/npm/@wllama/wllama@3.13.0/esm/wasm-from-cdn.js';
-const SYSTEM = 'Jsi pracovní asistent deníku v prohlížeči. Nevymýšlej zákazníky, hodiny, ceny, materiál ani stav zakázek. Když uživatel chce údaj z deníku nebo změnu, odpověz jen jedním JSON objektem {"command":"krátký český příkaz"}. Příkaz napiš tak, jak by ho zadal člověk, servisní diktát nech beze změny. Hledání: {"command":"Najdi zákazníka Petřík"}. Nová zakázka: {"command":"Vytvoř zakázku servis u Petříka na zítra"}. Diktát práce: {"command":"Na zakázce jsme vyměnili 4 ventily a 2 postřikovače."} Závadu, další návštěvu, den realizace, dokončení, poslední fotku, výraz do slovníku a dotaz Ukaž slovník přepiš jako příkaz a nic neukládej. Protokol ani výsledek kontroly nevymýšlej. Když se jen ptá, co umíš, odpověz česky jednou větou a neříkej, že jsi něco uložil.';
+const SYSTEM = 'Jsi pracovní asistent deníku v prohlížeči. Nevymýšlej zákazníky, hodiny, ceny, materiál ani stav zakázek. Odpověz jen jedním JSON objektem {"intent":"jeden podporovaný záměr","command":"krátký český příkaz"}. Povolené záměry: '+ASSISTANT_INTENT_IDS.join(', ')+'. Neznámý záměr nevracej. Příkaz jen pojmenuje požadavek, nic neukládá. Když se uživatel jen ptá, co umíš, odpověz česky jednou větou.';
 
 export function extractLocalCommand(text){
   const source = String(text||'');
@@ -17,6 +26,20 @@ export function extractLocalCommand(text){
     const command = String(object?.command||'').trim();
     if(!command||command.length>180||command.includes('\n')) return null;
     return command;
+  }catch{return null;}
+}
+export function extractLocalUnderstanding(text){
+  const source = String(text||'');
+  const start = source.indexOf('{');
+  const end = source.lastIndexOf('}');
+  if(start<0||end<start) return null;
+  try{
+    const object = JSON.parse(source.slice(start, end+1));
+    const command = extractLocalCommand(source);
+    const read = modelReadCommand(object);
+    if(object?.intent && !ASSISTANT_INTENT_IDS.includes(object.intent)) return null;
+    if(!read && !command) return null;
+    return {intent:read?.intent||'', command:command||'', read};
   }catch{return null;}
 }
 

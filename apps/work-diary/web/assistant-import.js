@@ -1,6 +1,8 @@
+import {readCustomerProfiles} from './customer-import-model.js';
 import {foldCzech} from './assistant-commands.js';
 
-const CUSTOMER = {name:['jmeno','zakaznik','name','firma'], phone:['telefon','phone','tel','mobil'], email:['email','e mail','mail'], address:['adresa','address','ulice'], city:['mesto','city','obec']};
+const CUSTOMER = {name:['jmeno','zakaznik','name','firma'], phone:['telefon','phone','tel','mobil'], email:['email','e mail','mail'], address:['adresa','address','ulice'], city:['mesto','city','obec'], postalCode:['psc','zip','postal code']};
+export const CUSTOMER_IMPORT_LIMIT = 250;
 const MATERIAL = {name:['nazev','polozka','material','name'], unit:['jednotka','unit','mj'], price:['cena','price','castka'], sku:['kod','sku','cislo']};
 
 function parseRows(text, delimiter){
@@ -18,6 +20,7 @@ function parseRows(text, delimiter){
     else if(char==='\n'){row.push(cell.trim()); if(row.some(Boolean)) rows.push(row); row=[]; cell='';}
     else cell += char;
   }
+  if(quote) throw new Error('V tabulce chybí uzavírací uvozovka. Opravte CSV. Nic jsem neuložil.');
   row.push(cell.trim());
   if(row.some(Boolean)) rows.push(row);
   return rows;
@@ -36,9 +39,10 @@ export function parseSpreadsheet(text){
   const raw = String(text||'').replace(/^\uFEFF/, '').trim();
   if(!raw) return {error:'Soubor je prázdný. Nic jsem neuložil.'};
   if(raw.includes('\u0000')) return {error:'Soubor není textová tabulka. Uložte ho jako CSV. Nic jsem neuložil.'};
-  const rows = parseRows(raw, delimiterOf(raw.split(/\n/,1)[0]));
+  let rows;
+  try{rows = parseRows(raw, delimiterOf(raw.split(/\n/,1)[0]));}catch(error){return {error:error.message};}
   if(rows.length<2) return {error:'V souboru chybí data pod hlavičkou. První řádek má pojmenovat sloupce. Nic jsem neuložil.'};
-  if(rows.length-1>40) return {error:`Soubor má ${rows.length-1} řádků. Najednou vezmu nejvýše 40, ať se import nezastaví v půlce. Rozdělte ho. Nic jsem neuložil.`};
+  if(rows.length-1>5000) return {error:`Soubor má ${rows.length-1} řádků. Najednou vezmu nejvýše 5000 řádků (max. ${CUSTOMER_IMPORT_LIMIT} zákazníků). Rozdělte ho. Nic jsem neuložil.`};
   return {headers:rows[0].map(foldCzech), rows:rows.slice(1)};
 }
 function column(headers, aliases){
@@ -67,27 +71,10 @@ export function readImportSheet(text, hint=''){
   const materialColumns = column(table.headers, MATERIAL.name)>=0&&(column(table.headers, MATERIAL.unit)>=0||column(table.headers, MATERIAL.price)>=0);
   const kind = customerHint&&!materialHint?'customers':materialHint&&!customerHint?'materials':customerColumns&&!materialColumns?'customers':materialColumns&&!customerColumns?'materials':'';
   if(!kind) return {error:'Podle souboru nepoznám, jestli jsou to zákazníci, nebo materiál. Napište to k souboru. Nic jsem neuložil.'};
-  return kind==='customers'?readCustomers(table):readMaterials(table);
-}
-function readCustomers(table){
-  const name = column(table.headers, CUSTOMER.name);
-  if(name<0) return {error:'Nevidím sloupec se jménem zákazníka. Hlavička má mít například Jméno, Telefon, E-mail, Adresa, Město. Nic jsem neuložil.'};
-  const phone = column(table.headers, CUSTOMER.phone), email = column(table.headers, CUSTOMER.email), address = column(table.headers, CUSTOMER.address), city = column(table.headers, CUSTOMER.city);
-  const records = [], skipped = [];
-  for(const row of table.rows){
-    const item = {name:(row[name]||'').trim()};
-    if(!item.name){skipped.push('řádek bez jména'); continue;}
-    if(records.some(record=>sameName(record.name, item.name))){skipped.push(`${item.name}: v souboru je dvakrát`); continue;}
-    const mail = email<0?'':(row[email]||'').trim();
-    if(mail&&!/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(mail)){skipped.push(`${item.name}: e-mail není platný`); continue;}
-    const number = phone<0?'':(row[phone]||'').trim();
-    if(number&&!phoneOk(number)){skipped.push(`${item.name}: telefon není platný`); continue;}
-    records.push({name:item.name, email:mail, phone:number, address:address<0?'':(row[address]||'').trim(), city:city<0?'':(row[city]||'').trim()});
-  }
-  if(!records.length) return {error:'Žádný zákazník z tabulky nejde použít. '+(skipped.slice(0,5).join(' ')||'')+' Nic jsem neuložil.'};
-  return {kind:'customers', records, skipped};
+  return kind==='customers'?readCustomerProfiles(table):readMaterials(table);
 }
 function readMaterials(table){
+  if(table.rows.length>40)return {error:'U materiálu vezmu nejvýše 40 řádků. Rozdělte tabulku. Nic jsem neuložil.'};
   const name = column(table.headers, MATERIAL.name), unit = column(table.headers, MATERIAL.unit), price = column(table.headers, MATERIAL.price), sku = column(table.headers, MATERIAL.sku);
   if(name<0||unit<0||price<0) return {error:'U materiálu potřebuji sloupce Název, Jednotka a Cena. Chybějící cenu nedoplňuji. Nic jsem neuložil.'};
   const records = [], skipped = [];
@@ -100,4 +87,17 @@ function readMaterials(table){
   }
   if(!records.length) return {error:'Žádná položka z tabulky nejde použít. '+(skipped.slice(0,5).join(' ')||'')+' Nic jsem neuložil.'};
   return {kind:'materials', records, skipped};
+}
+
+// A match is a warning, never authority to merge or overwrite a contact.
+export function customerImportConflict(record, customers){
+  const key=value=>String(value||'').normalize('NFKC').trim().replace(/\s+/g,' ').toLocaleLowerCase('cs');
+  const phone=value=>String(value||'').replace(/[^0-9+]/g,'');
+  for(const customer of customers){
+    if(record.sourceRef&&customer.sourceRef===record.sourceRef)return 'stejné zdrojové ID už v evidenci je';
+    if(key(customer.name)===key(record.name)&&!(record.sourceRef&&customer.sourceRef&&record.sourceRef!==customer.sourceRef))return 'stejné jméno už v evidenci je';
+    if(record.email&&key(customer.email)===key(record.email))return 'e-mail už v evidenci je';
+    if(record.phone&&(customer.phones||[]).some(p=>phone(p.number)===phone(record.phone)))return 'telefon už v evidenci je';
+  }
+  return null;
 }

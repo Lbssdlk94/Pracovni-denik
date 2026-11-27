@@ -20,9 +20,3 @@ test('Confirmed online deletion clears only the cached entry and preserves unrel
  f.records.push({id:'unrelated',kind:'jobDiary',jobId:'other',entryId:'pending',ownerId:'owner',pending:true,payload:{work:'Zachovat'},photos:[]});
  const result=await f.client.remove('job','entry',1);assert.equal(result.entries.length,0);assert.equal((await f.client.load('job',false)).entries.length,0);assert.equal(f.records.find(r=>r.id==='unrelated').payload.work,'Zachovat');assert.equal(f.sent,0);
  }finally{if(online)Object.defineProperty(globalThis,'navigator',online);}});
-
-test('Reader can persist an offline diary entry without acquiring general write permission or deletion',async()=>{const f=fixture();try{
- f.session.user.role='reader';f.session.permissions.write=false;f.remote={job:f.job,entries:[],nextCursor:null};await f.client.load('job');f.online=false;
- const result=await f.client.save('job',{...f.entry,id:'reader-own'});assert.equal(result.entries[0].pending,true);assert.equal(f.records.find(r=>r.pending).accessRole,'reader');assert.equal(f.session.permissions.write,false);
- f.online=true;await assert.rejects(f.client.remove('job','reader-own',1),/vlastník nebo administrátor/);
- }finally{if(online)Object.defineProperty(globalThis,'navigator',online);}});

@@ -527,6 +527,8 @@ test('Spoken service work is stored only after confirmation and catalogue lines 
     const billed = await json(await call(env, '/api/assistant', people.owner, 'POST', {confirmId:fittings.body.confirm.id, concept}));
     assert.equal(billed.status, 200, JSON.stringify(billed.body));
     assert.match(billed.body.reply, /není zapsané ještě jednou/);
+    assert.equal(billed.body.cards?.[0]?.type, 'job');
+    assert.equal(billed.body.cards?.[0]?.id, 'job-service');
     const rows = JSON.parse(env.sqlite.prepare('SELECT work, material, material_items FROM service_reports WHERE job_id=?').get('job-service').material_items);
     assert.deepEqual(rows.map(item=>[item.itemId, item.quantity]).sort(), [['item-pe32',20],['item-rain',9],['item-tkus',2]]);
     assert.equal(env.sqlite.prepare('SELECT material FROM service_reports WHERE job_id=?').get('job-service').material, '');
@@ -563,6 +565,14 @@ test('A service note is not guessed onto a job, another company, or someone else
     assert.equal(ambiguous.body.confirm, null);
     assert.match(ambiguous.body.reply, /Severní zahrada/);
     assert.match(ambiguous.body.reply, /Jižní zahrada/);
+    assert.equal(ambiguous.body.cards?.length, 2);
+    assert.ok(ambiguous.body.cards.every(card=>card.type==='job' && card.pickLabel==='Použít tuhle'));
+    assert.equal(env.sqlite.prepare('SELECT count(*) n FROM service_reports').get().n, 0);
+    const held = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Na zakázce jsme vyměnili 4 ventily a nastavili třetí sekci.', context:{jobId:'job-north'}}));
+    assert.equal(held.body.concept?.jobId, 'job-north');
+    assert.match(held.body.reply, /Nic se nezapíše/);
+    assert.doesNotMatch(held.body.reply, /Novák ·/);
+    assert.ok(held.body.confirm?.id);
     assert.equal(env.sqlite.prepare('SELECT count(*) n FROM service_reports').get().n, 0);
     const named = await json(await call(env, '/api/assistant', people.owner, 'POST', {text:'Zakázka Severní zahrada', context:ambiguous.body.context}));
     assert.equal(named.status, 200, JSON.stringify(named.body));
@@ -834,10 +844,3 @@ test('A second worker does not overwrite a different protocol and a chosen photo
     assert.equal(env.sqlite.prepare('SELECT work FROM service_reports WHERE job_id=?').get('job-shared').work, kept);
   }finally{env.sqlite.close();}
 });
-
-
-
-
-
-
-
