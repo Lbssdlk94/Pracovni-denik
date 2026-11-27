@@ -7,6 +7,9 @@ const types={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=
 for(const name of await readdir(path.join(root,'web'))){let data=await readFile(path.join(root,'web',name));const ext=path.extname(name);
 if(ext==='.css'||ext==='.js'&&!['leaflet.js','jspdf.umd.min.js'].includes(name)){const result=await transform(data.toString('utf8'),{loader:ext==='.css'?'css':'js',minify:true,keepNames:ext==='.js',target:'es2022',legalComments:'inline'});data=Buffer.from(result.code);}
 assets['/'+name]={type:types[ext]||'application/octet-stream',data:data.toString('base64'),etag:'"'+createHash('sha256').update(data).digest('hex')+'"'};}
+const appBundle=await build({entryPoints:[path.join(root,'web/app.js')],bundle:true,write:false,format:'esm',platform:'browser',target:'es2022',minify:true,keepNames:true,legalComments:'inline'});
+const appData=appBundle.outputFiles[0].contents;
+assets['/app.js']={type:types['.js'],data:Buffer.from(appData).toString('base64'),etag:'"'+createHash('sha256').update(appData).digest('hex')+'"'};
 const staticAssets=(await readFile(path.join(root,'worker/static-assets.js'),'utf8')).replace('export function staticAssetResponse','function staticAssetResponse');
 const webPush=(await readFile(path.join(root,'worker/web-push.js'),'utf8')).replaceAll('export const ','const ').replaceAll('export async function ','async function ').replaceAll('export function ','function ').replaceAll('export class ','class ');
 const nativePush=(await readFile(path.join(root,'worker/apns.js'),'utf8')).replaceAll('export function ','function ').replaceAll('export async function ','async function ');
