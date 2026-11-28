@@ -120,6 +120,9 @@ final class NativeOfficeUITests: XCTestCase {
         XCTAssertTrue(title.waitForExistence(timeout: 8)); title.tap(); title.typeText("Spojky")
         if app.keyboards.buttons["Return"].exists { app.keyboards.buttons["Return"].tap() }
         tap("Uložit", in: app)
+        let purchase = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Spojky")).firstMatch
+        XCTAssertTrue(purchase.waitForExistence(timeout: 10))
+        purchase.tap()
         XCTAssertTrue(app.staticTexts["Spojky"].firstMatch.waitForExistence(timeout: 10))
         XCTAssertEqual(app.webViews.count, 0)
     }
