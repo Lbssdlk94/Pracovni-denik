@@ -56,11 +56,18 @@ struct APIOfficeEditor: View {
                 Group { if adding { createFields } else { actionFields } }.disabled(!saved.isNull)
                 if invoice || action == "invoice" { invoiceFields.disabled(!saved.isNull) }
                 if !problem.isEmpty { Text(problem).foregroundStyle(.red) }
-                Button { Task { await save() } } label: {
-                    if busy { ProgressView() } else { Text(!saved.isNull ? "Znovu přiložit PDF" : adding ? "Uložit" : "Potvrdit") }
-                }.disabled(busy || !store.online || (!conflicts.isEmpty && action == "approve" && !ack))
             }.navigationTitle(title).navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Zavřít") { dismiss() }.disabled(busy) } }
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Zavřít") { dismiss() }.disabled(busy)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button { Task { await save() } } label: {
+                        if busy { ProgressView() }
+                        else { Text(!saved.isNull ? "Přiložit PDF" : adding ? "Uložit" : "Potvrdit") }
+                    }.disabled(busy || !store.online || (!conflicts.isEmpty && action == "approve" && !ack))
+                }
+            }
             .fileImporter(isPresented: $choosingPDF, allowedContentTypes: [.pdf]) { result in
                 Task { await readPDF(result) }
             }
